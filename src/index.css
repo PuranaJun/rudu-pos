@@ -1,0 +1,82 @@
+@import 'tailwindcss';
+
+/* Design tokens. Outdoor, direct sunlight: high contrast, no grey-on-grey. */
+@theme {
+  --color-paper: #faf6ee; /* warm off-white — app background */
+  --color-paper-sunk: #f0e9db; /* recessed surfaces */
+  --color-ink: #1a1512; /* body text — near black on warm paper */
+  --color-ink-soft: #4a4038; /* the lightest text allowed; still ~8:1 */
+  --color-line: #d9cdb8; /* hairlines */
+  --color-brand: #8c2f1f; /* red tea */
+  --color-brand-2: #1f5c4a; /* white tea / go */
+
+  --font-sans:
+    'Noto Sans Thai', 'IBM Plex Sans Thai', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    sans-serif;
+
+  /* Touch targets: wet hands, ice, condensation. */
+  --spacing-touch: 3rem; /* 48px — absolute minimum */
+  --spacing-touch-lg: 3.5rem; /* 56px — aim for this on the sell screen */
+}
+
+html,
+body,
+#root {
+  height: 100dvh;
+  margin: 0;
+}
+
+html {
+  /* Stop iOS from resizing text when the phone is turned sideways. */
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background-color: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 16px; /* body text never below 16px */
+  line-height: 1.45;
+  /* No rubber-band scrolling on the sell screen. */
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Buttons: kill the 300ms double-tap-zoom delay, and stop a wet mis-tap
+   from selecting the label text. */
+button,
+[role='button'],
+a {
+  touch-action: manipulation;
+}
+
+button,
+[role='button'] {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* Bottom bar: primary actions live in the lower half, clear of the home bar. */
+@utility safe-bottom {
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+}
+
+@utility safe-top {
+  padding-top: max(0.75rem, env(safe-area-inset-top));
+}
+
+@utility safe-x {
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+/* No mains power, 8-hour day: honour the OS setting and keep motion cheap. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

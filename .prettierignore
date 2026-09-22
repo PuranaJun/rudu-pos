@@ -1,0 +1,9 @@
+dist
+dev-dist
+coverage
+node_modules
+package-lock.json
+
+# Spec documents — hand-formatted, prettier must not touch them
+*.md
+docs/
