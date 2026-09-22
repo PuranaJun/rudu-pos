@@ -39,8 +39,14 @@ export default defineConfig({
       workbox: {
         // The shell must cold-start in airplane mode.
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
-        navigateFallback: 'index.html',
+        navigateFallback: '/index.html',
         cleanupOutdatedCaches: true,
+        // Take control as soon as the first install finishes, so the very
+        // first launch from the home screen is already offline-capable.
+        // Updates still wait (registerType is 'prompt') and can never swap
+        // the app out mid-sale.
+        clientsClaim: true,
+        skipWaiting: false,
       },
       devOptions: { enabled: false },
     }),
