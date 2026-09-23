@@ -25,7 +25,7 @@ import type {
 } from '../db/types.ts';
 
 /** Bump to force a reseed of a database that was seeded by an older build. */
-export const SEED_VERSION = 3;
+export const SEED_VERSION = 4;
 export const SEED_VERSION_KEY = 'seed_version';
 
 const unsynced = { synced_at: null } as const;
@@ -40,6 +40,7 @@ export const PRODUCTS: Product[] = [
     name_short_th: 'มะขามแดง',
     name_en: 'Red tamarind',
     base_price: toSatang(40),
+    kind: 'DRINK',
     advisory_th: null,
     is_active: true,
     sort_order: 1,
@@ -51,6 +52,7 @@ export const PRODUCTS: Product[] = [
     name_short_th: 'สาลี่ขาว',
     name_en: 'White pear, Chinese herbs',
     base_price: toSatang(59),
+    kind: 'DRINK',
     advisory_th: 'มีคาเฟอีน · สตรีมีครรภ์แนะนำเลี่ยง',
     is_active: true,
     sort_order: 2,
@@ -62,6 +64,7 @@ export const PRODUCTS: Product[] = [
     name_short_th: 'ขวดมะขาม 1L',
     name_en: 'Tamarind bottle 1L',
     base_price: toSatang(99),
+    kind: 'BOTTLE',
     advisory_th: null,
     is_active: true,
     sort_order: 3,

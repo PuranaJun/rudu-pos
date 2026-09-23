@@ -14,6 +14,11 @@
 import type { Satang } from '../lib/money.ts';
 
 export type Unit = 'ML' | 'G' | 'PC';
+/**
+ * A cup or a bottle. Not cosmetic: bottles are excluded from PROMO_TWO_CUP
+ * (CLAUDE.md §4), and nothing else on the row distinguishes them.
+ */
+export type ProductKind = 'DRINK' | 'BOTTLE';
 export type Temp = 'ICED' | 'HOT';
 export type Lifecycle = 'SIMPLE' | 'STEEP' | 'SOAK_BLANCH' | 'SLAB_CUT';
 export type ModifierKind = 'PAID' | 'PREP';
@@ -50,6 +55,7 @@ export interface Product extends Synced {
   name_short_th: string;
   name_en: string;
   base_price: Satang;
+  kind: ProductKind;
   advisory_th: string | null;
   is_active: boolean;
   sort_order: number;
@@ -243,4 +249,24 @@ export interface Setting {
   key: string;
   value: SettingValue;
   synced_at: string | null;
+}
+
+/**
+ * The cart, persisted the moment a line is added rather than at payment, so a
+ * flat battery or a force-quit mid-service loses nothing (CLAUDE.md §1).
+ * Converted to sale_line at payment and then cleared.
+ */
+export interface CartLine extends Synced {
+  id: string;
+  variant_id: string;
+  qty: number;
+  /** Set when the operator rang past the available stock and confirmed it. */
+  sold_out_override: boolean;
+  added_at: string;
+}
+
+export interface CartLineMod extends Synced {
+  id: string;
+  cart_line_id: string;
+  modifier_id: string;
 }

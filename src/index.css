@@ -10,6 +10,15 @@
   --color-brand: #8c2f1f; /* red tea */
   --color-brand-2: #1f5c4a; /* white tea / go */
 
+  /* Menu buttons. Assigned by menu order, not by product id, so a third drink
+     gets the next colour without a code change. All carry white text at 5:1
+     or better in direct sunlight. */
+  --color-drink-1: #96271a; /* deep red   — มะขามแดง */
+  --color-drink-2: #99530a; /* warm amber — สาลี่ขาว */
+  --color-drink-3: #1f5c4a; /* reserved for the third drink */
+  --color-bottle: #33302c; /* bottles are not a drink button */
+  --color-soldout: #6b6259; /* still 5.5:1 on white — never grey-on-grey */
+
   --font-sans:
     'Noto Sans Thai', 'IBM Plex Sans Thai', -apple-system, BlinkMacSystemFont, 'Segoe UI',
     sans-serif;
@@ -69,6 +78,11 @@ button,
 @utility safe-x {
   padding-left: env(safe-area-inset-left);
   padding-right: env(safe-area-inset-right);
+}
+
+/* Nothing animates for longer than 100ms: the operator is mid-pour. */
+button {
+  transition-duration: 80ms;
 }
 
 /* No mains power, 8-hour day: honour the OS setting and keep motion cheap. */

@@ -90,7 +90,7 @@ async function writeSeed(db: RuduPosDB): Promise<void> {
  * BOM quantities the owner has edited are left alone.
  */
 async function upgradeCatalog(db: RuduPosDB, from: number): Promise<void> {
-  await db.transaction('rw', [db.component, db.modifier, db.setting], async () => {
+  await db.transaction('rw', [db.product, db.component, db.modifier, db.setting], async () => {
     if (from < 2) {
       // v2 gave components a role, so PREP_LESS_SWEET can find the concentrate
       // of a variant, and gave modifiers a packaging item to remove.
@@ -114,6 +114,14 @@ async function upgradeCatalog(db: RuduPosDB, from: number): Promise<void> {
         await db.modifier.update(seeded.id, {
           overrides_component_role: seeded.overrides_component_role,
         });
+      }
+    }
+
+    if (from < 4) {
+      // v4 told drinks from bottles, which PROMO_TWO_CUP needs in order to
+      // exclude the bottle.
+      for (const seeded of PRODUCTS) {
+        await db.product.update(seeded.id, { kind: seeded.kind });
       }
     }
 

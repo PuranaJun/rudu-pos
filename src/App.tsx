@@ -1,5 +1,5 @@
-import SplashScreen from './screens/SplashScreen.tsx';
+import SellScreen from './screens/SellScreen.tsx';
 
 export default function App() {
-  return <SplashScreen />;
+  return <SellScreen />;
 }

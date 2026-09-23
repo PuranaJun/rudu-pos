@@ -1,6 +1,8 @@
 import Dexie, { type Table } from 'dexie';
 import type {
   Bom,
+  CartLine,
+  CartLineMod,
   CashSession,
   Component,
   ComponentBatch,
@@ -48,6 +50,10 @@ export class RuduPosDB extends Dexie {
   sale_line_mod!: Table<SaleLineMod, string>;
   cash_session!: Table<CashSession, string>;
 
+  // The open cart. Persisted per line, cleared at payment.
+  cart_line!: Table<CartLine, string>;
+  cart_line_mod!: Table<CartLineMod, string>;
+
   setting!: Table<Setting, string>;
 
   constructor(name: string = DB_NAME) {
@@ -73,6 +79,11 @@ export class RuduPosDB extends Dexie {
       cash_session: 'id, opened_at, closed_at, operator_id',
 
       setting: 'key',
+    });
+
+    this.version(2).stores({
+      cart_line: 'id, variant_id, added_at',
+      cart_line_mod: 'id, cart_line_id, modifier_id',
     });
   }
 }
