@@ -25,7 +25,7 @@ import type {
 } from '../db/types.ts';
 
 /** Bump to force a reseed of a database that was seeded by an older build. */
-export const SEED_VERSION = 5;
+export const SEED_VERSION = 6;
 export const SEED_VERSION_KEY = 'seed_version';
 
 const unsynced = { synced_at: null } as const;
@@ -568,6 +568,13 @@ export const SETTINGS: Setting[] = [
   { key: 'branding_line_th', value: 'ชาต้มเอง วันต่อวัน', synced_at: null },
   { key: 'promptpay_qr_image', value: null, synced_at: null },
   { key: 'operators', value: ['เจ้าของ'], synced_at: null },
+  // Offered as one-tap choices when voiding. Editable: the shop knows better
+  // than the code why bills actually get cancelled.
+  {
+    key: 'void_reasons',
+    value: ['ลูกค้าเปลี่ยนใจ', 'กดผิด', 'ทำหก', 'ชำระเงินผิดวิธี'],
+    synced_at: null,
+  },
   { key: 'prep_reminder_red_tea', value: '21:00', synced_at: null },
   { key: 'prep_reminder_white_tea', value: '19:00', synced_at: null },
 ];

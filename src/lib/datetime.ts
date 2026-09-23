@@ -22,3 +22,12 @@ export function bangkokDate(iso: string): string {
     day: '2-digit',
   }).format(new Date(iso));
 }
+
+/** Clock time in Asia/Bangkok, for the sales list. */
+export function bangkokTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString('th-TH', {
+    timeZone: BANGKOK,
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}

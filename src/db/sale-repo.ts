@@ -247,3 +247,53 @@ export async function completeSale(
     },
   );
 }
+
+export interface SaleSummary {
+  id: string;
+  createdAt: string;
+  /** "มะขามแดง × 2 · สาลี่ขาว" — short names only, never the full ones. */
+  items: string;
+  totalNet: number;
+  paymentMethod: PaymentMethod;
+  isVoided: boolean;
+  voidReason: string | null;
+}
+
+/**
+ * The day's sales, newest first, voided ones included.
+ *
+ * A voided sale stays in the list struck through with its reason. It is never
+ * deleted and never edited — that is the whole point of voiding rather than
+ * correcting (CLAUDE.md §10).
+ */
+export async function loadSalesForDate(
+  catalog: CostCatalog,
+  businessDate: string,
+  db: RuduPosDB = defaultDb,
+): Promise<SaleSummary[]> {
+  const sales = await db.sale.where('business_date').equals(businessDate).toArray();
+  if (sales.length === 0) return [];
+
+  const saleIds = new Set(sales.map((sale) => sale.id));
+  const lines = (await db.sale_line.toArray()).filter((line) => saleIds.has(line.sale_id));
+
+  return sales
+    .sort((a, b) => b.created_at.localeCompare(a.created_at))
+    .map((sale) => ({
+      id: sale.id,
+      createdAt: sale.created_at,
+      items: lines
+        .filter((line) => line.sale_id === sale.id)
+        .map((line) => {
+          const variant = catalog.variants.get(line.variant_id);
+          const product = variant ? catalog.products.get(variant.product_id) : undefined;
+          const name = product?.name_short_th ?? line.variant_id;
+          return line.qty > 1 ? `${name} × ${line.qty}` : name;
+        })
+        .join(' · '),
+      totalNet: sale.total_net,
+      paymentMethod: sale.payment_method,
+      isVoided: sale.is_voided,
+      voidReason: sale.void_reason,
+    }));
+}

@@ -4,6 +4,7 @@ import CartLineRow from '../components/CartLineRow.tsx';
 import CashTenderPad from '../components/CashTenderPad.tsx';
 import PromptPayPanel from '../components/PromptPayPanel.tsx';
 import ReceiptSheet from '../components/ReceiptSheet.tsx';
+import SalesListScreen from './SalesListScreen.tsx';
 import VersionStamp from '../components/VersionStamp.tsx';
 import { formatTHB } from '../lib/money.ts';
 import { useWakeLock } from '../lib/useWakeLock.ts';
@@ -18,6 +19,7 @@ import {
   useOperator,
   useSettings,
   useStockSnapshot,
+  useTodaySales,
   useTodayTotals,
 } from '../db/hooks.ts';
 import {
@@ -29,6 +31,7 @@ import {
   toggleModifier,
 } from '../db/cart-repo.ts';
 import { completeSale, priceCart, type Receipt } from '../db/sale-repo.ts';
+import { voidSale } from '../db/stock-repo.ts';
 import type { PaymentMethod, Product } from '../db/types.ts';
 
 const MENU_COLORS = ['--color-drink-1', '--color-drink-2', '--color-drink-3'];
@@ -49,6 +52,7 @@ export default function SellScreen() {
   const today = useTodayTotals();
   const operatorId = useOperator();
   const deviceId = useDeviceId();
+  const sales = useTodaySales(catalog);
 
   // The screen must not sleep between pours.
   useWakeLock();
@@ -59,6 +63,7 @@ export default function SellScreen() {
   const [done, setDone] = useState<{ receipt: Receipt; shortfalls: number } | null>(null);
   const [showReceipt, setShowReceipt] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showSales, setShowSales] = useState(false);
 
   if (!catalog || !stock || !cart || !settings) {
     return (
@@ -162,12 +167,17 @@ export default function SellScreen() {
   return (
     <div className="safe-x text-ink flex h-full flex-col bg-white">
       {/* Today, live. */}
-      <header className="safe-top border-line flex items-baseline justify-between gap-3 border-b px-4 pb-2">
-        <p className="text-4xl font-bold tabular-nums">
+      <button
+        type="button"
+        onClick={() => setShowSales(true)}
+        aria-label="รายการขายวันนี้"
+        className="safe-top border-line flex w-full items-baseline justify-between gap-3 border-b px-4 pb-2 text-left"
+      >
+        <span className="text-4xl font-bold tabular-nums">
           {today.units} <span className="text-2xl font-bold">แก้ว</span>
-        </p>
-        <p className="text-4xl font-bold tabular-nums">{formatTHB(today.revenue)}</p>
-      </header>
+        </span>
+        <span className="text-4xl font-bold tabular-nums">{formatTHB(today.revenue)}</span>
+      </button>
 
       {/* The menu. */}
       <div className="flex shrink-0 flex-col gap-2 p-2">
@@ -320,6 +330,20 @@ export default function SellScreen() {
           <VersionStamp />
         </div>
       </footer>
+
+      {showSales ? (
+        <SalesListScreen
+          sales={sales ?? []}
+          totals={today}
+          voidReasons={settings.voidReasons}
+          onVoid={(saleId, reason) => {
+            void voidSale(saleId, reason).catch((cause: unknown) =>
+              setError(`ยกเลิกไม่สำเร็จ: ${String(cause)}`),
+            );
+          }}
+          onClose={() => setShowSales(false)}
+        />
+      ) : null}
 
       {showReceipt && done ? (
         <ReceiptSheet receipt={done.receipt} onClose={() => setShowReceipt(false)} />

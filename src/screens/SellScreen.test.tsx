@@ -6,7 +6,7 @@
  * — a mocked store would prove nothing about that path.
  */
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import SellScreen from './SellScreen.tsx';
 import { db } from '../db/database.ts';
@@ -119,7 +119,7 @@ describe('ringing a sale', () => {
     await user.click(await screen.findByLabelText('ลดจำนวน'));
 
     await waitFor(async () => expect(await loadCart(db)).toHaveLength(0));
-    expect(screen.getByText('ยังไม่มีรายการ')).toBeInTheDocument();
+    expect(await screen.findByText('ยังไม่มีรายการ')).toBeInTheDocument();
   });
 
   it('rings pear as ICED and switches to HOT in one tap on the line', async () => {
@@ -390,5 +390,161 @@ describe('an empty cart', () => {
     render(<SellScreen />);
     expect(await screen.findByRole('button', { name: 'เงินสด' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'QR' })).toBeDisabled();
+  });
+});
+
+describe('crash safety', () => {
+  /** The closest jsdom gets to a hard reload: everything React held is gone. */
+  async function reload() {
+    cleanup();
+    render(<SellScreen />);
+    await screen.findByRole('button', { name: /มะขามแดง/ });
+  }
+
+  it('survives a reload with an empty cart', async () => {
+    render(<SellScreen />);
+    await reload();
+
+    expect(screen.getByText('ยังไม่มีรายการ')).toBeInTheDocument();
+    expect(await loadCart(db)).toHaveLength(0);
+  });
+
+  it('survives a reload with one line', async () => {
+    const user = userEvent.setup();
+    render(<SellScreen />);
+
+    await user.click(await tamarindButton());
+    await user.click(await tamarindButton());
+    await waitFor(async () => expect((await loadCart(db))[0]?.line.qty).toBe(2));
+
+    await reload();
+
+    expect(await screen.findByText('2')).toBeInTheDocument();
+    expect((await loadCart(db))[0]?.line.qty).toBe(2);
+  });
+
+  it('survives a reload with modifiers on the line', async () => {
+    const user = userEvent.setup();
+    render(<SellScreen />);
+
+    await user.click(await tamarindButton());
+    await user.click(await screen.findByLabelText('เพิ่มท็อปปิ้ง'));
+    await user.click(await screen.findByRole('button', { name: /บ๊วยเค็ม/ }));
+    await waitFor(async () => {
+      expect((await loadCart(db))[0]?.modifierIds).toEqual(['MOD_SALTED_PLUM']);
+    });
+
+    await reload();
+
+    // The modifier is still on the line, and so is its spoken advisory.
+    expect(await screen.findByText(/บ๊วยเค็ม/)).toBeInTheDocument();
+    expect(await screen.findByRole('alert')).toHaveTextContent('ระวังสำลัก');
+    expect((await loadCart(db))[0]?.modifierIds).toEqual(['MOD_SALTED_PLUM']);
+  });
+
+  it('survives a reload with a line given away', async () => {
+    const user = userEvent.setup();
+    render(<SellScreen />);
+
+    await user.click(await tamarindButton());
+    await user.click(await screen.findByLabelText('ลดราคา'));
+    await user.click(screen.getByRole('button', { name: 'แลกแสตมป์' }));
+    await waitFor(async () => {
+      expect((await loadCart(db))[0]?.line.manual_discount_reason).toBe('LOYALTY_REDEEM');
+    });
+
+    await reload();
+
+    expect(await screen.findByText(/ฟรี — แลกแสตมป์/)).toBeInTheDocument();
+  });
+
+  it('survives a reload on the payment screen, and does not resume a half tender', async () => {
+    const user = userEvent.setup();
+    render(<SellScreen />);
+
+    await user.click(await tamarindButton());
+    await user.click(await screen.findByRole('button', { name: 'เงินสด' }));
+    await user.click(await screen.findByRole('button', { name: '฿100' }));
+    expect(await screen.findByRole('button', { name: /ทอน/ })).toBeInTheDocument();
+
+    await reload();
+
+    // Back on the sell screen with the cart intact: a tender half entered
+    // before the phone died is not something to carry forward.
+    expect(screen.getByRole('button', { name: 'เงินสด' })).toBeEnabled();
+    expect(screen.queryByRole('button', { name: /ทอน/ })).not.toBeInTheDocument();
+    expect(await loadCart(db)).toHaveLength(1);
+    expect(await db.sale.count()).toBe(0);
+  });
+
+  it('is empty again after a reload that follows a completed sale', async () => {
+    const user = userEvent.setup();
+    render(<SellScreen />);
+
+    await user.click(await tamarindButton());
+    await user.click(await screen.findByRole('button', { name: 'เงินสด' }));
+    await user.click(await screen.findByRole('button', { name: 'พอดี' }));
+    await waitFor(async () => expect(await db.sale.count()).toBe(1));
+
+    await reload();
+
+    expect(screen.getByText('ยังไม่มีรายการ')).toBeInTheDocument();
+  });
+});
+
+describe('the day’s sales', () => {
+  it('lists them newest first with time, items, total and method', async () => {
+    const user = userEvent.setup();
+    render(<SellScreen />);
+
+    await user.click(await tamarindButton());
+    await user.click(await screen.findByRole('button', { name: 'เงินสด' }));
+    await user.click(await screen.findByRole('button', { name: 'พอดี' }));
+    await waitFor(async () => expect(await db.sale.count()).toBe(1));
+
+    await user.click(screen.getByLabelText('รายการขายวันนี้'));
+
+    const list = await screen.findByRole('dialog', { name: 'รายการขายวันนี้' });
+    expect(within(list).getByText('มะขามแดง')).toBeInTheDocument();
+    expect(within(list).getByText('เงินสด')).toBeInTheDocument();
+  });
+
+  it('voids with a reason and puts the stock back', async () => {
+    const user = userEvent.setup();
+    render(<SellScreen />);
+
+    // What the tamarind button says before anything is sold.
+    const before = (await tamarindButton()).textContent ?? '';
+
+    await user.click(await tamarindButton());
+    await user.click(await screen.findByRole('button', { name: 'เงินสด' }));
+    await user.click(await screen.findByRole('button', { name: 'พอดี' }));
+    await waitFor(async () => expect(await db.sale.count()).toBe(1));
+
+    await user.click(screen.getByLabelText('รายการขายวันนี้'));
+    await user.click(await screen.findByRole('button', { name: /ยกเลิกบิล/ }));
+
+    // A void cannot happen without a reason being chosen.
+    expect(await screen.findByText('ยกเลิกเพราะอะไร?')).toBeInTheDocument();
+    expect(await db.sale.get((await db.sale.toArray())[0]!.id)).toMatchObject({
+      is_voided: false,
+    });
+
+    await user.click(screen.getByRole('button', { name: 'ลูกค้าเปลี่ยนใจ' }));
+
+    await waitFor(async () => {
+      expect((await db.sale.toArray())[0]?.is_voided).toBe(true);
+    });
+
+    expect(await screen.findByText(/ยกเลิกแล้ว — ลูกค้าเปลี่ยนใจ/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'กลับไปขาย' }));
+
+    // Available cups is back where it started, and so is the day's revenue.
+    await waitFor(async () => {
+      expect((await tamarindButton()).textContent).toBe(before);
+    });
+    const movements = await db.stock_movement.where('reason').equals('VOID_REVERSAL').toArray();
+    expect(movements.length).toBeGreaterThan(0);
   });
 });

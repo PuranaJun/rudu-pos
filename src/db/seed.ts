@@ -125,8 +125,9 @@ async function upgradeCatalog(db: RuduPosDB, from: number): Promise<void> {
       }
     }
 
-    if (from < 5) {
-      // v5 moved the rainy-day drink out of the code and into a setting.
+    if (from < 6) {
+      // v5 moved the rainy-day drink into a setting; v6 added the void
+      // reasons. Both are new rows, and this inserts whatever is missing.
       await addMissingSettings(db);
     }
 

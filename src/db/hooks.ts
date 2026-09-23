@@ -13,10 +13,11 @@ import { loadCart, type CartItem } from './cart-repo.ts';
 import { loadStockSnapshot } from './stock-repo.ts';
 import type { CostCatalog } from '../domain/cost.ts';
 import type { StockSnapshot } from '../domain/stock.ts';
-import type { Satang } from '../lib/money.ts';
 import { bangkokDate } from '../lib/datetime.ts';
 import { DEVICE_ID_KEY } from './device.ts';
 import { loadSettings, type PosSettings } from './settings-repo.ts';
+import { loadSalesForDate, type SaleSummary } from './sale-repo.ts';
+import { dayTotals, type DayTotals } from '../domain/reporting.ts';
 
 export function useCostCatalog(): CostCatalog | undefined {
   return useLiveQuery(() => loadCostCatalog(db), []);
@@ -34,34 +35,48 @@ export function useCart(): CartItem[] | undefined {
   return useLiveQuery(() => loadCart(db), []);
 }
 
-export interface TodayTotals {
-  units: number;
-  revenue: Satang;
-}
+const NO_SALES: DayTotals = {
+  units: 0,
+  revenue: 0,
+  cogs: 0,
+  grossProfit: 0,
+  discountsByReason: [],
+  totalDiscount: 0,
+  saleCount: 0,
+  voidedCount: 0,
+};
 
 /**
- * Today's takings, keyed on the Asia/Bangkok business date.
- *
- * Voided sales are excluded, and so are zero-price loyalty lines — they count
- * as a unit and land in COGS, but never in revenue (CLAUDE.md §4).
+ * Today's numbers, keyed on the Asia/Bangkok business date. Never the UTC
+ * date: a 06:00 Bangkok sale is the previous UTC day (CLAUDE.md §8).
  */
-export function useTodayTotals(businessDate = bangkokDate(new Date().toISOString())): TodayTotals {
+export function useTodayTotals(businessDate = bangkokDate(new Date().toISOString())): DayTotals {
   const totals = useLiveQuery(async () => {
-    const sales = (await db.sale.where('business_date').equals(businessDate).toArray()).filter(
-      (sale) => !sale.is_voided,
-    );
-    if (sales.length === 0) return { units: 0, revenue: 0 };
+    const sales = await db.sale.where('business_date').equals(businessDate).toArray();
+    if (sales.length === 0) return NO_SALES;
 
     const saleIds = new Set(sales.map((sale) => sale.id));
     const lines = (await db.sale_line.toArray()).filter((line) => saleIds.has(line.sale_id));
+    const lineIds = new Set(lines.map((line) => line.id));
+    const discounts = (await db.sale_line_discount.toArray()).filter((discount) =>
+      lineIds.has(discount.sale_line_id),
+    );
 
-    return {
-      units: lines.reduce((total, line) => total + line.qty, 0),
-      revenue: sales.reduce((total, sale) => total + sale.total_net, 0),
-    };
+    return dayTotals(sales, lines, discounts);
   }, [businessDate]);
 
-  return totals ?? { units: 0, revenue: 0 };
+  return totals ?? NO_SALES;
+}
+
+/** The day's sales for the list, newest first, voided ones included. */
+export function useTodaySales(
+  catalog: CostCatalog | undefined,
+  businessDate = bangkokDate(new Date().toISOString()),
+): SaleSummary[] | undefined {
+  return useLiveQuery(
+    async () => (catalog ? loadSalesForDate(catalog, businessDate, db) : []),
+    [catalog, businessDate],
+  );
 }
 
 /** This install's id, provisioned at startup by ensureDeviceId. */

@@ -22,6 +22,8 @@ export interface PosSettings extends PromotionSettings {
   promptPayQrImage: string | null;
   vatRegistered: boolean;
   operators: string[];
+  /** One-tap choices when voiding. A void always carries one. */
+  voidReasons: string[];
 }
 
 const FALLBACK: PosSettings = {
@@ -39,6 +41,7 @@ const FALLBACK: PosSettings = {
   promptPayQrImage: null,
   vatRegistered: false,
   operators: [],
+  voidReasons: ['ยกเลิก'],
 };
 
 export async function loadSettings(db: RuduPosDB = defaultDb): Promise<PosSettings> {
@@ -79,6 +82,10 @@ export async function loadSettings(db: RuduPosDB = defaultDb): Promise<PosSettin
     operators: (() => {
       const value = values.get('operators');
       return Array.isArray(value) ? value.map(String) : FALLBACK.operators;
+    })(),
+    voidReasons: (() => {
+      const value = values.get('void_reasons');
+      return Array.isArray(value) && value.length > 0 ? value.map(String) : FALLBACK.voidReasons;
     })(),
   };
 }
