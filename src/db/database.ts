@@ -17,7 +17,7 @@ import type {
   WasteEvent,
 } from './types.ts';
 
-export const DB_NAME = 'rudu-pos';
+export const DB_NAME = 'RuduPosDB';
 
 /**
  * Index rules worth remembering when adding tables:
