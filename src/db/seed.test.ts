@@ -185,6 +185,7 @@ describe('upgrading a database seeded by an older build', () => {
     }
     for (const modifier of await db.modifier.toArray()) {
       delete (modifier as Partial<typeof modifier>).removes_packaging_item_id;
+      delete (modifier as Partial<typeof modifier>).overrides_component_role;
       // v1 priced "no ice" as a hardcoded -1.00 instead of removing the item.
       await db.modifier.put({
         ...modifier,
@@ -205,6 +206,18 @@ describe('upgrading a database seeded by an older build', () => {
     expect((await db.component.get('COMP_JELLY_CHRYS'))?.role).toBe('SOLID');
     expect((await db.modifier.get('PREP_NO_ICE'))?.removes_packaging_item_id).toBe('PKGI_ICE');
     expect((await db.modifier.get('MOD_BASIL_SEED'))?.removes_packaging_item_id).toBeNull();
+  });
+
+  it('backfills the role override v3 added, so "less sweet" keeps working', async () => {
+    await rollBackToV1();
+    expect((await db.modifier.get('PREP_LESS_SWEET'))?.overrides_component_role).toBeUndefined();
+
+    await ensureSeeded(db);
+
+    expect((await db.modifier.get('PREP_LESS_SWEET'))?.overrides_component_role).toBe(
+      'CONCENTRATE',
+    );
+    expect((await db.modifier.get('PREP_NO_ICE'))?.overrides_component_role).toBeNull();
   });
 
   it('drops the hardcoded no-ice discount now that the item is removed instead', async () => {

@@ -25,7 +25,7 @@ import type {
 } from '../db/types.ts';
 
 /** Bump to force a reseed of a database that was seeded by an older build. */
-export const SEED_VERSION = 2;
+export const SEED_VERSION = 3;
 export const SEED_VERSION_KEY = 'seed_version';
 
 const unsynced = { synced_at: null } as const;
@@ -429,6 +429,7 @@ export const MODIFIERS: Modifier[] = [
     applies_to_variant_ids: ['VAR_TAMARIND_ICED'],
     component_id: 'COMP_BASIL_SEED',
     qty_per_cup: 35,
+    overrides_component_role: null,
     cost_delta: 0,
     removes_packaging_item_id: null,
     advisory_th: null,
@@ -444,6 +445,7 @@ export const MODIFIERS: Modifier[] = [
     applies_to_variant_ids: ['VAR_TAMARIND_ICED'],
     component_id: null,
     qty_per_cup: null,
+    overrides_component_role: null,
     cost_delta: toSatang(1.25),
     removes_packaging_item_id: null,
     advisory_th: 'มีเมล็ด ระวังสำลัก',
@@ -460,6 +462,7 @@ export const MODIFIERS: Modifier[] = [
     applies_to_variant_ids: ['VAR_PEAR_ICED'],
     component_id: 'COMP_PEACH_GUM',
     qty_per_cup: 20,
+    overrides_component_role: null,
     cost_delta: 0,
     removes_packaging_item_id: null,
     advisory_th: null,
@@ -477,6 +480,7 @@ export const MODIFIERS: Modifier[] = [
     applies_to_variant_ids: ['VAR_TAMARIND_ICED', 'VAR_PEAR_ICED', 'VAR_PEAR_HOT'],
     component_id: null,
     qty_per_cup: 35,
+    overrides_component_role: 'CONCENTRATE',
     cost_delta: 0,
     removes_packaging_item_id: null,
     advisory_th: 'ลดหัวเชื้อเหลือ 35 ml เพิ่มน้ำเจือจาง',
@@ -492,6 +496,7 @@ export const MODIFIERS: Modifier[] = [
     applies_to_variant_ids: ['VAR_TAMARIND_ICED', 'VAR_PEAR_ICED'],
     component_id: null,
     qty_per_cup: null,
+    overrides_component_role: null,
     cost_delta: 0,
     removes_packaging_item_id: 'PKGI_ICE',
     advisory_th: null,
@@ -509,6 +514,7 @@ export const MODIFIERS: Modifier[] = [
     applies_to_variant_ids: ['VAR_TAMARIND_ICED', 'VAR_PEAR_ICED', 'VAR_PEAR_HOT'],
     component_id: null,
     qty_per_cup: null,
+    overrides_component_role: null,
     cost_delta: 0,
     removes_packaging_item_id: null,
     advisory_th: null,
@@ -529,6 +535,7 @@ export const MODIFIERS: Modifier[] = [
     ],
     component_id: null,
     qty_per_cup: null,
+    overrides_component_role: null,
     cost_delta: 0,
     removes_packaging_item_id: null,
     advisory_th: null,

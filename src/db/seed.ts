@@ -107,6 +107,16 @@ async function upgradeCatalog(db: RuduPosDB, from: number): Promise<void> {
       }
     }
 
+    if (from < 3) {
+      // v3 let a modifier replace a component by role, so PREP_LESS_SWEET no
+      // longer has to be recognised by its id in the engine.
+      for (const seeded of MODIFIERS) {
+        await db.modifier.update(seeded.id, {
+          overrides_component_role: seeded.overrides_component_role,
+        });
+      }
+    }
+
     await markSeeded(db);
   });
 }

@@ -30,9 +30,6 @@ export type PaymentMethod = 'CASH' | 'PROMPTPAY';
 export type BatchState =
   'STEEPING' | 'SOAKING' | 'BLANCHED' | 'SLAB' | 'CUT' | 'READY' | 'EXPIRED' | 'DISCARDED';
 
-/** The states a batch can be sold from (CLAUDE.md §2.3). A SLAB is not one. */
-export const SELLABLE_STATES: readonly BatchState[] = ['BLANCHED', 'CUT', 'READY'];
-
 export type StockMovementReason =
   'SALE' | 'PRODUCTION' | 'WASTE' | 'ADJUSTMENT' | 'OVERRIDE' | 'VOID_REVERSAL';
 
@@ -132,6 +129,13 @@ export interface Modifier extends Synced {
   /** Only used by modifiers with no component of their own (salted plum). */
   cost_delta: Satang;
   /**
+   * Replaces the per-cup quantity of every BOM component with this role, using
+   * `qty_per_cup` — how `PREP_LESS_SWEET` cuts the concentrate to 35 ml without
+   * the engine having to know which component is the concentrate of which
+   * drink, or that the modifier is called PREP_LESS_SWEET.
+   */
+  overrides_component_role: ComponentRole | null;
+  /**
    * Drops one item from the variant's packaging set — how `PREP_NO_ICE` works.
    * Removing the item rather than subtracting a fixed amount keeps it correct
    * when the price of ice changes in settings.
@@ -202,6 +206,12 @@ export interface StockMovement extends Synced {
   /** Negative consumes, positive restores. The ledger, never a counter. */
   qty_delta: number;
   reason: StockMovementReason;
+  /**
+   * The movement this one undoes, set on VOID_REVERSAL rows. Without the link
+   * a second void re-inverts the original SALE rows and credits the stock
+   * twice, which no later report could detect.
+   */
+  reverses_movement_id: string | null;
   /** Not in §8, but PRODUCTION and WASTE rows have no sale to date them by. */
   created_at: string;
 }

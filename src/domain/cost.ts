@@ -20,6 +20,7 @@ import type {
   Product,
   Variant,
 } from '../db/types.ts';
+import { recipeFor, resolveModifiers } from './recipe.ts';
 
 /** The catalog rows the engine needs, exactly as they come out of the tables. */
 export interface CatalogRows {
@@ -75,37 +76,20 @@ export function materialCost(
   variantId: string,
   modifierIds: readonly string[] = [],
 ): Satang {
-  const bom = catalog.bomByVariant.get(variantId) ?? [];
-  const modifiers = resolveModifiers(catalog, modifierIds);
-
-  // "Less sweet" is 35 ml of concentrate instead of 50, made up with dilution
-  // water. The concentrate is whichever BOM component carries that role, so a
-  // third drink with a different concentrate works without a code change.
-  const lessSweet = modifiers.find(
-    (mod) => mod.id === 'PREP_LESS_SWEET' && mod.qty_per_cup !== null,
-  );
-
   let total = 0;
 
-  for (const row of bom) {
-    const component = requireComponent(catalog, row.component_id);
-    const qty =
-      lessSweet && component.role === 'CONCENTRATE'
-        ? (lessSweet.qty_per_cup ?? row.qty_per_cup)
-        : row.qty_per_cup;
-    total += costOf(qty, component.cost_per_unit);
+  // Everything the cup physically contains, including modifier components and
+  // any role override such as "less sweet". The stock engine deducts from this
+  // same list, so cost and stock cannot drift apart.
+  for (const line of recipeFor(catalog, variantId, modifierIds)) {
+    total += costOf(line.qty, line.component.cost_per_unit);
   }
 
-  for (const mod of modifiers) {
-    if (mod.component_id !== null) {
-      // The cost comes from the component, never from cost_delta as well, or
-      // the basil seed is paid for twice.
-      const component = requireComponent(catalog, mod.component_id);
-      total += costOf(mod.qty_per_cup ?? 0, component.cost_per_unit);
-    } else {
-      // Salted plum has no component of its own — it is counted, not weighed.
-      total += mod.cost_delta;
-    }
+  // A modifier with no component of its own is a flat cost: salted plum is
+  // counted, not weighed. Modifiers that do bring a component are already
+  // priced through that component above, and must not be charged twice.
+  for (const mod of resolveModifiers(catalog, modifierIds)) {
+    if (mod.component_id === null) total += mod.cost_delta;
   }
 
   return total;
@@ -200,26 +184,8 @@ function byId<T extends { id: string }>(rows: readonly T[]): ReadonlyMap<string,
   return new Map(rows.map((row) => [row.id, row]));
 }
 
-function resolveModifiers(catalog: CostCatalog, modifierIds: readonly string[]): Modifier[] {
-  return modifierIds.map((id) => {
-    const mod = catalog.modifiers.get(id);
-    if (!mod) throw new Error(`modifier ${id} not in the catalog`);
-    return mod;
-  });
-}
-
 function requireVariant(catalog: CostCatalog, variantId: string): Variant {
   const variant = catalog.variants.get(variantId);
   if (!variant) throw new Error(`variant ${variantId} not in the catalog`);
   return variant;
-}
-
-/**
- * A BOM row pointing at a component that no longer exists is a data fault that
- * would quietly understate cost. Fail loudly instead.
- */
-function requireComponent(catalog: CostCatalog, componentId: string): Component {
-  const component = catalog.components.get(componentId);
-  if (!component) throw new Error(`component ${componentId} not in the catalog`);
-  return component;
 }
