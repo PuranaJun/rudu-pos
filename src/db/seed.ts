@@ -14,29 +14,44 @@ import {
 } from '../data/seed.ts';
 
 /**
- * Load the catalog into an empty database, once.
+ * Load the catalog into an empty database, or bring an older one up to the
+ * current shape.
  *
  * Guarded by the `seed_version` setting: after the first run the database owns
- * the catalog and src/data/seed.ts is never read again, so an edit the owner
- * makes in settings is not silently reverted by the next launch.
+ * the catalog and src/data/seed.ts is never read again as data, so a price the
+ * owner edits in settings is not silently reverted by the next launch. An
+ * upgrade only backfills columns that did not exist before — it never restores
+ * a value the owner has changed.
+ *
+ * Returns true when it wrote anything.
  */
 export async function ensureSeeded(db: RuduPosDB = defaultDb): Promise<boolean> {
-  const marker = await db.setting.get(SEED_VERSION_KEY);
-  if (marker) return false;
+  const stored = await storedSeedVersion(db);
 
-  await writeSeed(db);
+  if (stored >= SEED_VERSION) return false;
+
+  if (stored === 0) {
+    await writeSeed(db);
+  } else {
+    await upgradeCatalog(db, stored);
+  }
   return true;
 }
 
 /**
  * Wipe the catalog and the trading history and start over. Development only —
- * it is wired to a long-press in a DEV build and has no production path.
+ * it is wired to a long press in a DEV build and has no production path.
  */
 export async function resetAndReseed(db: RuduPosDB = defaultDb): Promise<void> {
   await db.transaction('rw', db.tables, async () => {
     await Promise.all(db.tables.map((table) => table.clear()));
   });
   await writeSeed(db);
+}
+
+async function storedSeedVersion(db: RuduPosDB): Promise<number> {
+  const marker = await db.setting.get(SEED_VERSION_KEY);
+  return typeof marker?.value === 'number' ? marker.value : 0;
 }
 
 async function writeSeed(db: RuduPosDB): Promise<void> {
@@ -64,7 +79,38 @@ async function writeSeed(db: RuduPosDB): Promise<void> {
 
       // Written last: if anything above throws, the transaction rolls back and
       // the next launch sees an unseeded database rather than a half-seeded one.
-      await db.setting.put({ key: SEED_VERSION_KEY, value: SEED_VERSION, synced_at: null });
+      await markSeeded(db);
     },
   );
+}
+
+/**
+ * Bring a database seeded by an older build up to the current shape. Each
+ * migration touches only the columns that step changed, so prices, costs and
+ * BOM quantities the owner has edited are left alone.
+ */
+async function upgradeCatalog(db: RuduPosDB, from: number): Promise<void> {
+  await db.transaction('rw', [db.component, db.modifier, db.setting], async () => {
+    if (from < 2) {
+      // v2 gave components a role, so PREP_LESS_SWEET can find the concentrate
+      // of a variant, and gave modifiers a packaging item to remove.
+      for (const seeded of COMPONENTS) {
+        await db.component.update(seeded.id, { role: seeded.role });
+      }
+      for (const seeded of MODIFIERS) {
+        // cost_delta moves with it: PREP_NO_ICE carried a hardcoded -1.00
+        // before, which would double count now that it removes the ice item.
+        await db.modifier.update(seeded.id, {
+          removes_packaging_item_id: seeded.removes_packaging_item_id,
+          cost_delta: seeded.cost_delta,
+        });
+      }
+    }
+
+    await markSeeded(db);
+  });
+}
+
+async function markSeeded(db: RuduPosDB): Promise<void> {
+  await db.setting.put({ key: SEED_VERSION_KEY, value: SEED_VERSION, synced_at: null });
 }

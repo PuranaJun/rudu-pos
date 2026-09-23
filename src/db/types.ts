@@ -17,6 +17,14 @@ export type Unit = 'ML' | 'G' | 'PC';
 export type Temp = 'ICED' | 'HOT';
 export type Lifecycle = 'SIMPLE' | 'STEEP' | 'SOAK_BLANCH' | 'SLAB_CUT';
 export type ModifierKind = 'PAID' | 'PREP';
+
+/**
+ * What a component does in a cup. Data, not a name convention: `PREP_LESS_SWEET`
+ * has to find "the concentrate" of whichever variant it is applied to, and
+ * `PREP_NO_SOLIDS` has to find the solids. Neither can be derived from an id
+ * without compiling recipe knowledge into the code (CLAUDE.md §2.1.7).
+ */
+export type ComponentRole = 'TEA_BASE' | 'CONCENTRATE' | 'SOLID' | 'GARNISH';
 export type PaymentMethod = 'CASH' | 'PROMPTPAY';
 
 export type BatchState =
@@ -80,6 +88,7 @@ export interface Component extends Synced {
   /** THB per `unit`. A float, deliberately — never per cup (CLAUDE.md §3). */
   cost_per_unit: number;
   lifecycle: Lifecycle;
+  role: ComponentRole;
   recipe_note_th: string | null;
   is_batch_tracked: boolean;
   sort_order: number;
@@ -122,6 +131,12 @@ export interface Modifier extends Synced {
   qty_per_cup: number | null;
   /** Only used by modifiers with no component of their own (salted plum). */
   cost_delta: Satang;
+  /**
+   * Drops one item from the variant's packaging set — how `PREP_NO_ICE` works.
+   * Removing the item rather than subtracting a fixed amount keeps it correct
+   * when the price of ice changes in settings.
+   */
+  removes_packaging_item_id: string | null;
   advisory_th: string | null;
   sort_order: number;
 }

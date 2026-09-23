@@ -25,7 +25,7 @@ import type {
 } from '../db/types.ts';
 
 /** Bump to force a reseed of a database that was seeded by an older build. */
-export const SEED_VERSION = 1;
+export const SEED_VERSION = 2;
 export const SEED_VERSION_KEY = 'seed_version';
 
 const unsynced = { synced_at: null } as const;
@@ -140,6 +140,7 @@ export const COMPONENTS: Component[] = [
     lead_time_hours: 10,
     cost_per_unit: 0.004,
     lifecycle: 'STEEP',
+    role: 'TEA_BASE',
     recipe_note_th:
       'ชาแดง 50 g ในถุงกรอง + น้ำดื่ม 5.25 L · แช่ตู้เย็น ≤4°C 10 ชม. · ยกถุงขึ้น บีบเบา ๆ ครั้งเดียว',
     is_batch_tracked: true,
@@ -157,6 +158,7 @@ export const COMPONENTS: Component[] = [
     lead_time_hours: 13,
     cost_per_unit: 0.0078,
     lifecycle: 'STEEP',
+    role: 'TEA_BASE',
     recipe_note_th: 'ชาขาวโซ่วเหมย 52 g + น้ำดื่ม 4.3 L · แช่ ≤4°C 12–14 ชม.',
     is_batch_tracked: true,
     sort_order: 2,
@@ -173,6 +175,7 @@ export const COMPONENTS: Component[] = [
     lead_time_hours: 0,
     cost_per_unit: 0.0482,
     lifecycle: 'SIMPLE',
+    role: 'CONCENTRATE',
     recipe_note_th:
       'มะขามเปียก 720 g · น้ำตาลกรวด 1,350 g · น้ำตาลมะพร้าว 225 g · เกลือ 38 g · แช่มะขามในน้ำร้อน 1.2 L ขยำ กรอง 3 ครั้ง ละลายน้ำตาล เติมให้ครบ 3.0 L แช่เย็นเร็ว',
     is_batch_tracked: true,
@@ -190,6 +193,7 @@ export const COMPONENTS: Component[] = [
     lead_time_hours: 0,
     cost_per_unit: 0.0954,
     lifecycle: 'SIMPLE',
+    role: 'CONCENTRATE',
     recipe_note_th:
       'สาลี่ 3.24 kg (ต้มแล้วทิ้ง) · พุทราจีนแห้ง 105 g · เก๋ากี้ 38 g · น้ำตาลกรวด 645 g · เกลือ 8 g · ต้ม 95–97°C 15 นาที ยกตะกร้าทิ้ง เติมให้ครบ 3.0 L',
     is_batch_tracked: true,
@@ -207,6 +211,7 @@ export const COMPONENTS: Component[] = [
     lead_time_hours: 40 / 60,
     cost_per_unit: 0.0136667,
     lifecycle: 'SLAB_CUT',
+    role: 'SOLID',
     recipe_note_th:
       'เก๊กฮวยแห้ง 12 g · ผงวุ้น 10 g · น้ำตาลกรวด 60 g · น้ำ 1.1 L · แช่ดอกไม้นอกเตา 5 นาที กรอง พักผงวุ้น 5 นาที ต้มเดือด 2 นาทีเต็ม เทถาดหนา 1.5 cm',
     is_batch_tracked: true,
@@ -224,6 +229,7 @@ export const COMPONENTS: Component[] = [
     lead_time_hours: 40 / 60,
     cost_per_unit: 0.0226667,
     lifecycle: 'SLAB_CUT',
+    role: 'SOLID',
     recipe_note_th:
       'ใช้ชาขาว 500 ml · น้ำ 500 ml · ผงวุ้น 10 g · น้ำตาลกรวด 70 g · เก๋ากี้แช่ 40 g · ต้มวุ้นในน้ำเปล่าเท่านั้น ลด 60°C ใส่ชาเย็น ลด 50°C ใส่เก๋ากี้ เทถาดทันที',
     is_batch_tracked: true,
@@ -241,6 +247,7 @@ export const COMPONENTS: Component[] = [
     lead_time_hours: 0,
     cost_per_unit: 0.07,
     lifecycle: 'SIMPLE',
+    role: 'SOLID',
     recipe_note_th: 'หั่นเช้าวันขาย ห้ามค้างคืน',
     is_batch_tracked: true,
     sort_order: 7,
@@ -257,6 +264,7 @@ export const COMPONENTS: Component[] = [
     lead_time_hours: 11,
     cost_per_unit: 0.04,
     lifecycle: 'SOAK_BLANCH',
+    role: 'SOLID',
     recipe_note_th:
       'แช่ 10–12 ชม. ≤4°C → เขี่ยเปลือกไม้ออก → ล้าง → ลวก 3 นาที → แช่น้ำแข็ง → เก็บจมน้ำ เปลี่ยนน้ำทุกวัน',
     is_batch_tracked: true,
@@ -274,6 +282,7 @@ export const COMPONENTS: Component[] = [
     lead_time_hours: 0,
     cost_per_unit: 0.0214286,
     lifecycle: 'SIMPLE',
+    role: 'SOLID',
     recipe_note_th: 'แช่พองเช้าวันขาย',
     is_batch_tracked: true,
     sort_order: 9,
@@ -292,6 +301,7 @@ export const COMPONENTS: Component[] = [
     lead_time_hours: 0,
     cost_per_unit: 0.03,
     lifecycle: 'SIMPLE',
+    role: 'GARNISH',
     recipe_note_th: null,
     is_batch_tracked: false,
     sort_order: 10,
@@ -420,6 +430,7 @@ export const MODIFIERS: Modifier[] = [
     component_id: 'COMP_BASIL_SEED',
     qty_per_cup: 35,
     cost_delta: 0,
+    removes_packaging_item_id: null,
     advisory_th: null,
     sort_order: 1,
   },
@@ -434,6 +445,7 @@ export const MODIFIERS: Modifier[] = [
     component_id: null,
     qty_per_cup: null,
     cost_delta: toSatang(1.25),
+    removes_packaging_item_id: null,
     advisory_th: 'มีเมล็ด ระวังสำลัก',
     sort_order: 2,
   },
@@ -449,6 +461,7 @@ export const MODIFIERS: Modifier[] = [
     component_id: 'COMP_PEACH_GUM',
     qty_per_cup: 20,
     cost_delta: 0,
+    removes_packaging_item_id: null,
     advisory_th: null,
     sort_order: 3,
   },
@@ -465,6 +478,7 @@ export const MODIFIERS: Modifier[] = [
     component_id: null,
     qty_per_cup: 35,
     cost_delta: 0,
+    removes_packaging_item_id: null,
     advisory_th: 'ลดหัวเชื้อเหลือ 35 ml เพิ่มน้ำเจือจาง',
     sort_order: 4,
   },
@@ -478,7 +492,8 @@ export const MODIFIERS: Modifier[] = [
     applies_to_variant_ids: ['VAR_TAMARIND_ICED', 'VAR_PEAR_ICED'],
     component_id: null,
     qty_per_cup: null,
-    cost_delta: -toSatang(1.0),
+    cost_delta: 0,
+    removes_packaging_item_id: 'PKGI_ICE',
     advisory_th: null,
     sort_order: 5,
   },
@@ -495,6 +510,7 @@ export const MODIFIERS: Modifier[] = [
     component_id: null,
     qty_per_cup: null,
     cost_delta: 0,
+    removes_packaging_item_id: null,
     advisory_th: null,
     sort_order: 6,
   },
@@ -514,6 +530,7 @@ export const MODIFIERS: Modifier[] = [
     component_id: null,
     qty_per_cup: null,
     cost_delta: 0,
+    removes_packaging_item_id: null,
     advisory_th: null,
     sort_order: 7,
   },

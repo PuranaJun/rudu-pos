@@ -174,3 +174,60 @@ describe('resetAndReseed', () => {
     expect((await db.product.get('DRINK_PEAR'))?.base_price).toBe(5900);
   });
 });
+
+describe('upgrading a database seeded by an older build', () => {
+  /** Roll the seeded catalog back to how v1 stored it. */
+  async function rollBackToV1(): Promise<void> {
+    await ensureSeeded(db);
+    for (const component of await db.component.toArray()) {
+      delete (component as Partial<typeof component>).role;
+      await db.component.put(component);
+    }
+    for (const modifier of await db.modifier.toArray()) {
+      delete (modifier as Partial<typeof modifier>).removes_packaging_item_id;
+      // v1 priced "no ice" as a hardcoded -1.00 instead of removing the item.
+      await db.modifier.put({
+        ...modifier,
+        cost_delta: modifier.id === 'PREP_NO_ICE' ? -100 : modifier.cost_delta,
+      });
+    }
+    await db.setting.put({ key: SEED_VERSION_KEY, value: 1, synced_at: null });
+  }
+
+  it('backfills the columns v2 added', async () => {
+    await rollBackToV1();
+    expect((await db.component.get('COMP_CONC_PEAR'))?.role).toBeUndefined();
+
+    expect(await ensureSeeded(db)).toBe(true);
+
+    expect((await db.component.get('COMP_CONC_PEAR'))?.role).toBe('CONCENTRATE');
+    expect((await db.component.get('COMP_TEA_RED'))?.role).toBe('TEA_BASE');
+    expect((await db.component.get('COMP_JELLY_CHRYS'))?.role).toBe('SOLID');
+    expect((await db.modifier.get('PREP_NO_ICE'))?.removes_packaging_item_id).toBe('PKGI_ICE');
+    expect((await db.modifier.get('MOD_BASIL_SEED'))?.removes_packaging_item_id).toBeNull();
+  });
+
+  it('drops the hardcoded no-ice discount now that the item is removed instead', async () => {
+    await rollBackToV1();
+    await ensureSeeded(db);
+
+    expect((await db.modifier.get('PREP_NO_ICE'))?.cost_delta).toBe(0);
+  });
+
+  it('leaves owner edits alone while upgrading', async () => {
+    await rollBackToV1();
+    await db.component.update('COMP_CONC_PEAR', { cost_per_unit: 0.12 });
+    await db.product.update('DRINK_PEAR', { base_price: 6500 });
+
+    await ensureSeeded(db);
+
+    expect((await db.component.get('COMP_CONC_PEAR'))?.cost_per_unit).toBe(0.12);
+    expect((await db.product.get('DRINK_PEAR'))?.base_price).toBe(6500);
+  });
+
+  it('does not run again once it has upgraded', async () => {
+    await rollBackToV1();
+    expect(await ensureSeeded(db)).toBe(true);
+    expect(await ensureSeeded(db)).toBe(false);
+  });
+});
