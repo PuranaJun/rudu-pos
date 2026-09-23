@@ -25,7 +25,7 @@ import type {
 } from '../db/types.ts';
 
 /** Bump to force a reseed of a database that was seeded by an older build. */
-export const SEED_VERSION = 4;
+export const SEED_VERSION = 5;
 export const SEED_VERSION_KEY = 'seed_version';
 
 const unsynced = { synced_at: null } as const;
@@ -559,6 +559,9 @@ export const SETTINGS: Setting[] = [
   { key: 'promo_two_cup_amount', value: toSatang(10), synced_at: null },
   { key: 'promo_rainy_day_enabled', value: false, synced_at: null },
   { key: 'promo_rainy_day_amount', value: toSatang(5), synced_at: null },
+  // Which drink the rainy-day price applies to. A setting, not a constant, so
+  // the seasonal third drink can take it without a code change.
+  { key: 'promo_rainy_day_variant_id', value: 'VAR_PEAR_HOT', synced_at: null },
   { key: 'loyalty_stamps_required', value: 10, synced_at: null },
   { key: 'vat_registered', value: false, synced_at: null },
   { key: 'annual_revenue_warn_threshold', value: toSatang(1_800_000), synced_at: null },

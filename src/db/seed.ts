@@ -125,8 +125,24 @@ async function upgradeCatalog(db: RuduPosDB, from: number): Promise<void> {
       }
     }
 
+    if (from < 5) {
+      // v5 moved the rainy-day drink out of the code and into a setting.
+      await addMissingSettings(db);
+    }
+
     await markSeeded(db);
   });
+}
+
+/**
+ * Insert settings rows this build expects and an older one never wrote.
+ * Existing rows are left exactly as they are — the owner may have edited them.
+ */
+async function addMissingSettings(db: RuduPosDB): Promise<void> {
+  for (const seeded of SETTINGS) {
+    const existing = await db.setting.get(seeded.key);
+    if (!existing) await db.setting.put(seeded);
+  }
 }
 
 async function markSeeded(db: RuduPosDB): Promise<void> {

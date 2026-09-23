@@ -2,17 +2,22 @@
  * Completing a sale.
  *
  * Everything lands in one Dexie transaction: the sale, its lines, its
- * modifiers, every stock movement, and the emptying of the cart. A phone that
- * dies halfway through leaves no sale with undeducted stock and no deducted
- * stock without a sale.
- *
- * Step 5 adds the tender pad, the automatic promotions and the discount
- * reasons on top of this; what is here is the commit itself.
+ * modifiers, its discounts, every stock movement, and the emptying of the
+ * cart. A phone that dies halfway through leaves no sale with undeducted stock
+ * and no deducted stock without a sale.
  */
 import type { RuduPosDB } from './database.ts';
 import { db as defaultDb } from './database.ts';
-import type { PaymentMethod, Sale, SaleLine, SaleLineMod } from './types.ts';
+import type {
+  DiscountReason,
+  PaymentMethod,
+  Sale,
+  SaleLine,
+  SaleLineDiscount,
+  SaleLineMod,
+} from './types.ts';
 import { lineCost, unitPrice, type CostCatalog } from '../domain/cost.ts';
+import { applyPromotions, type PricedCart, type PromotionSettings } from '../domain/promotions.ts';
 import { deductForSale, type Shortfall } from '../domain/stock.ts';
 import { loadStockSnapshot } from './stock-repo.ts';
 import { bangkokDate } from '../lib/datetime.ts';
@@ -23,6 +28,29 @@ export interface CompletedSale {
   saleId: string;
   /** Components the sale could not source from any batch. Warn, never block. */
   shortfalls: Shortfall[];
+  receipt: Receipt;
+}
+
+export interface ReceiptLine {
+  name: string;
+  qty: number;
+  unitPrice: number;
+  net: number;
+  modifiers: string[];
+  discounts: { label: string; amount: number }[];
+}
+
+export interface Receipt {
+  saleId: string;
+  createdAt: string;
+  brandingLineTh: string;
+  lines: ReceiptLine[];
+  totalGross: number;
+  totalDiscount: number;
+  totalNet: number;
+  paymentMethod: PaymentMethod;
+  cashReceived: number | null;
+  cashChange: number | null;
 }
 
 export interface PaymentDetails {
@@ -31,11 +59,35 @@ export interface PaymentDetails {
   cashReceived: number | null;
   operatorId: string;
   deviceId: string;
+  brandingLineTh: string;
+}
+
+/**
+ * Price a cart the way the sale will be written, so the sell screen and the
+ * tender pad can never show a different number from the one recorded.
+ */
+export function priceCart(
+  catalog: CostCatalog,
+  settings: PromotionSettings,
+  cart: readonly CartItem[],
+): PricedCart {
+  return applyPromotions(
+    catalog,
+    settings,
+    cart.map((item) => ({
+      lineId: item.line.id,
+      variantId: item.line.variant_id,
+      qty: item.line.qty,
+      unitPrice: unitPrice(catalog, item.line.variant_id, item.modifierIds),
+      manualReason: item.line.manual_discount_reason ?? null,
+    })),
+  );
 }
 
 export async function completeSale(
   catalog: CostCatalog,
   cart: readonly CartItem[],
+  priced: PricedCart,
   payment: PaymentDetails,
   db: RuduPosDB = defaultDb,
   now: string = nowIso(),
@@ -50,6 +102,7 @@ export async function completeSale(
       db.sale,
       db.sale_line,
       db.sale_line_mod,
+      db.sale_line_discount,
       db.component_batch,
       db.stock_movement,
       db.cart_line,
@@ -58,34 +111,53 @@ export async function completeSale(
     async () => {
       const lines: SaleLine[] = [];
       const lineMods: SaleLineMod[] = [];
+      const lineDiscounts: SaleLineDiscount[] = [];
+      const receiptLines: ReceiptLine[] = [];
 
-      let gross = 0;
       let cost = 0;
 
       for (const item of cart) {
         const { variant_id: variantId, qty } = item.line;
+        const pricedLine = priced.lines.find((line) => line.lineId === item.line.id);
+        if (!pricedLine) throw new Error(`cart line ${item.line.id} was not priced`);
 
-        // Snapshot both: a price or a recipe edited next month must never
-        // rewrite what this sale cost (CLAUDE.md §2.1.8).
-        const price = unitPrice(catalog, variantId, item.modifierIds);
+        // Both snapshotted: a price or a recipe edited next month must never
+        // rewrite what this sale charged or cost (CLAUDE.md §2.1.8).
         const unitCost = lineCost(catalog, variantId, item.modifierIds);
+        const discount = pricedLine.gross - pricedLine.net;
 
         const line: SaleLine = {
           id: newId(),
           sale_id: saleId,
           variant_id: variantId,
           qty,
-          unit_price: price,
-          line_discount: 0,
-          discount_reason: null,
+          unit_price: pricedLine.unitPrice,
+          line_discount: discount,
+          // One reason fits the column; more than one lives in the child rows.
+          discount_reason:
+            pricedLine.discounts.length === 1
+              ? (pricedLine.discounts[0]!.reason as DiscountReason)
+              : null,
           unit_cost: unitCost,
           synced_at: null,
         };
         lines.push(line);
 
+        for (const applied of pricedLine.discounts) {
+          lineDiscounts.push({
+            id: newId(),
+            sale_line_id: line.id,
+            reason: applied.reason,
+            amount: applied.amount,
+            synced_at: null,
+          });
+        }
+
+        const modifierNames: string[] = [];
         for (const modifierId of item.modifierIds) {
           const modifier = catalog.modifiers.get(modifierId);
           if (!modifier) continue;
+          modifierNames.push(modifier.name_th);
           lineMods.push({
             id: newId(),
             sale_line_id: line.id,
@@ -96,8 +168,23 @@ export async function completeSale(
           });
         }
 
-        gross += price * qty;
+        // A given-away cup still lands in COGS, which is the point of tracking
+        // it at all (CLAUDE.md §4).
         cost += unitCost * qty;
+
+        const variant = catalog.variants.get(variantId);
+        const product = variant ? catalog.products.get(variant.product_id) : undefined;
+        receiptLines.push({
+          name: product?.name_short_th ?? variantId,
+          qty,
+          unitPrice: pricedLine.unitPrice,
+          net: pricedLine.net,
+          modifiers: modifierNames,
+          discounts: pricedLine.discounts.map((applied) => ({
+            label: applied.reason,
+            amount: applied.amount,
+          })),
+        });
       }
 
       const snapshot = await loadStockSnapshot(db);
@@ -119,13 +206,13 @@ export async function completeSale(
         created_at: now,
         business_date: bangkokDate(now),
         operator_id: payment.operatorId,
-        total_gross: gross,
-        total_discount: 0,
-        total_net: gross,
+        total_gross: priced.totalGross,
+        total_discount: priced.totalDiscount,
+        total_net: priced.totalNet,
         total_cost: cost,
         payment_method: payment.method,
         cash_received: received,
-        cash_change: received === null ? null : received - gross,
+        cash_change: received === null ? null : received - priced.totalNet,
         is_voided: false,
         void_reason: null,
         device_id: payment.deviceId,
@@ -135,12 +222,28 @@ export async function completeSale(
       await db.sale.add(sale);
       await db.sale_line.bulkAdd(lines);
       if (lineMods.length > 0) await db.sale_line_mod.bulkAdd(lineMods);
+      if (lineDiscounts.length > 0) await db.sale_line_discount.bulkAdd(lineDiscounts);
       await db.stock_movement.bulkAdd(deduction.movements);
 
       await db.cart_line_mod.clear();
       await db.cart_line.clear();
 
-      return { saleId, shortfalls: deduction.shortfalls };
+      return {
+        saleId,
+        shortfalls: deduction.shortfalls,
+        receipt: {
+          saleId,
+          createdAt: now,
+          brandingLineTh: payment.brandingLineTh,
+          lines: receiptLines,
+          totalGross: priced.totalGross,
+          totalDiscount: priced.totalDiscount,
+          totalNet: priced.totalNet,
+          paymentMethod: payment.method,
+          cashReceived: sale.cash_received,
+          cashChange: sale.cash_change,
+        },
+      };
     },
   );
 }

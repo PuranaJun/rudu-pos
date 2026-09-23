@@ -10,7 +10,7 @@
  */
 import type { RuduPosDB } from './database.ts';
 import { db as defaultDb } from './database.ts';
-import type { CartLine, CartLineMod } from './types.ts';
+import type { CartLine, CartLineMod, DiscountReason } from './types.ts';
 import { newId, nowIso } from '../lib/id.ts';
 
 export interface CartItem {
@@ -24,7 +24,8 @@ export async function loadCart(db: RuduPosDB = defaultDb): Promise<CartItem[]> {
   return lines
     .sort((a, b) => a.added_at.localeCompare(b.added_at) || a.id.localeCompare(b.id))
     .map((line) => ({
-      line,
+      // A cart written by an older build has no reason column at all.
+      line: { ...line, manual_discount_reason: line.manual_discount_reason ?? null },
       modifierIds: mods.filter((mod) => mod.cart_line_id === line.id).map((mod) => mod.modifier_id),
     }));
 }
@@ -63,6 +64,7 @@ export async function addDrink(
       variant_id: variantId,
       qty: 1,
       sold_out_override: options.soldOutOverride ?? false,
+      manual_discount_reason: null,
       added_at: nowIso(),
       synced_at: null,
     };
@@ -144,6 +146,21 @@ export async function toggleModifier(
     };
     await db.cart_line_mod.add(mod);
   });
+}
+
+/**
+ * Give a line away, or take the giveaway back.
+ *
+ * The reason is the argument: there is no way through this function to zero a
+ * line without saying why, because a discount with no reason makes shrinkage
+ * and generosity look identical in the day's report (CLAUDE.md §4).
+ */
+export async function setLineDiscountReason(
+  lineId: string,
+  reason: DiscountReason | null,
+  db: RuduPosDB = defaultDb,
+): Promise<void> {
+  await db.cart_line.update(lineId, { manual_discount_reason: reason });
 }
 
 export async function clearCart(db: RuduPosDB = defaultDb): Promise<void> {

@@ -55,6 +55,8 @@ beforeEach(async () => {
   await clearCart(db);
   await db.sale.clear();
   await db.sale_line.clear();
+  await db.sale_line_mod.clear();
+  await db.sale_line_discount.clear();
 });
 
 async function tamarindButton() {
@@ -196,36 +198,197 @@ describe('sold out', () => {
   });
 });
 
-describe('payment', () => {
-  it('writes the sale, deducts the stock and empties the cart', async () => {
+describe('the two-cup discount', () => {
+  it('applies by itself when the cart qualifies — the operator never asks', async () => {
+    const user = userEvent.setup();
+    render(<SellScreen />);
+
+    const tamarind = await tamarindButton();
+    await user.click(tamarind);
+    await user.click(tamarind);
+
+    // 80 less 10 for the pair.
+    expect(await screen.findByText('฿70')).toBeInTheDocument();
+    expect(screen.getByText(/ส่วนลด 2 แก้ว/)).toBeInTheDocument();
+  });
+
+  it('gives nothing on a drink plus a bottle', async () => {
     const user = userEvent.setup();
     render(<SellScreen />);
 
     await user.click(await tamarindButton());
-    await waitFor(async () => expect(await loadCart(db)).toHaveLength(1));
+    await user.click(await screen.findByRole('button', { name: /ขวดมะขาม 1L/ }));
 
-    await user.click(screen.getByRole('button', { name: 'เงินสด' }));
+    expect(await screen.findByText('฿139')).toBeInTheDocument();
+    expect(screen.queryByText(/ส่วนลด 2 แก้ว/)).not.toBeInTheDocument();
+  });
+});
+
+describe('giving a cup away', () => {
+  it('requires a reason, and offers no way to zero a line without one', async () => {
+    const user = userEvent.setup();
+    render(<SellScreen />);
+
+    await user.click(await tamarindButton());
+    await user.click(await screen.findByLabelText('ลดราคา'));
+
+    // Only the operator's own reasons are offered. The two promotions apply
+    // themselves, and offering them by hand would let a forgotten one look
+    // like a deliberate one.
+    expect(screen.getByRole('button', { name: 'แลกแสตมป์' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'พนักงาน' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'ส่วนลด 2 แก้ว' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'แลกแสตมป์' }));
+
+    await waitFor(async () => {
+      expect((await loadCart(db))[0]?.line.manual_discount_reason).toBe('LOYALTY_REDEEM');
+    });
+    expect(await screen.findByText(/ฟรี — แลกแสตมป์/)).toBeInTheDocument();
+  });
+
+  it('rings a loyalty cup at zero but still deducts its components', async () => {
+    const user = userEvent.setup();
+    render(<SellScreen />);
+
+    await user.click(await tamarindButton());
+    await user.click(await screen.findByLabelText('ลดราคา'));
+    await user.click(screen.getByRole('button', { name: 'แลกแสตมป์' }));
+    await waitFor(async () => {
+      expect((await loadCart(db))[0]?.line.manual_discount_reason).toBe('LOYALTY_REDEEM');
+    });
+
+    await user.click(await screen.findByRole('button', { name: 'เงินสด' }));
+    await user.click(await screen.findByRole('button', { name: 'พอดี' }));
+
+    await waitFor(async () => expect(await db.sale.count()).toBe(1));
+
+    const sale = (await db.sale.toArray())[0]!;
+    // Out of revenue, into COGS, and still one cup off the stock.
+    expect(sale.total_net).toBe(0);
+    expect(sale.total_cost).toBeGreaterThan(0);
+    expect(
+      (await db.stock_movement.where('reason').equals('SALE').toArray()).length,
+    ).toBeGreaterThan(0);
+  });
+});
+
+describe('paying cash', () => {
+  it('completes on พอดี, with no change to read', async () => {
+    const user = userEvent.setup();
+    render(<SellScreen />);
+
+    await user.click(await tamarindButton());
+    await user.click(await screen.findByRole('button', { name: 'เงินสด' }));
+    await user.click(await screen.findByRole('button', { name: 'พอดี' }));
 
     await waitFor(async () => expect(await db.sale.count()).toBe(1));
 
     const sale = (await db.sale.toArray())[0]!;
     expect(sale.total_net).toBe(4000);
+    expect(sale.cash_received).toBe(4000);
+    expect(sale.cash_change).toBe(0);
     expect(sale.payment_method).toBe('CASH');
-    expect(sale.is_voided).toBe(false);
-
-    // The cart is empty and today's header has moved.
     expect(await loadCart(db)).toHaveLength(0);
-    const header = screen.getByRole('banner');
-    await waitFor(() => expect(within(header).getByText(/฿40/)).toBeInTheDocument());
-
-    // Stock came off in the same transaction.
-    const movements = await db.stock_movement.where('reason').equals('SALE').toArray();
-    expect(movements.length).toBeGreaterThan(0);
   });
 
-  it('does nothing on an empty cart', async () => {
+  it('shows the change in the largest type on the screen, and that is the confirm', async () => {
+    const user = userEvent.setup();
     render(<SellScreen />);
-    const cash = await screen.findByRole('button', { name: 'เงินสด' });
-    expect(cash).toBeDisabled();
+
+    await user.click(await tamarindButton());
+    await user.click(await screen.findByRole('button', { name: 'เงินสด' }));
+    await user.click(await screen.findByRole('button', { name: '฿100' }));
+
+    const confirm = await screen.findByRole('button', { name: /ทอน/ });
+    expect(confirm).toHaveTextContent('฿60');
+
+    await user.click(confirm);
+
+    await waitFor(async () => expect(await db.sale.count()).toBe(1));
+    expect((await db.sale.toArray())[0]?.cash_change).toBe(6000);
+  });
+
+  it('will not take a tender smaller than the bill', async () => {
+    const user = userEvent.setup();
+    render(<SellScreen />);
+
+    await user.click(await screen.findByRole('button', { name: /สาลี่ขาว/ }));
+    await user.click(await screen.findByRole('button', { name: 'เงินสด' }));
+
+    // 59 THB due: 40 and 50 cannot pay it.
+    expect(await screen.findByRole('button', { name: '฿40' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '฿50' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '฿59' })).toBeEnabled();
+  });
+
+  it('writes the discount rows the day report reads', async () => {
+    const user = userEvent.setup();
+    render(<SellScreen />);
+
+    const tamarind = await tamarindButton();
+    await user.click(tamarind);
+    await user.click(tamarind);
+    await user.click(await screen.findByRole('button', { name: 'เงินสด' }));
+    await user.click(await screen.findByRole('button', { name: 'พอดี' }));
+
+    await waitFor(async () => expect(await db.sale.count()).toBe(1));
+
+    const discounts = await db.sale_line_discount.toArray();
+    expect(discounts).toHaveLength(1);
+    expect(discounts[0]).toMatchObject({ reason: 'PROMO_TWO_CUP', amount: 1000 });
+    expect((await db.sale.toArray())[0]?.total_net).toBe(7000);
+  });
+});
+
+describe('paying by PromptPay', () => {
+  it('says plainly that the app checked nothing, and waits for the operator', async () => {
+    const user = userEvent.setup();
+    render(<SellScreen />);
+
+    await user.click(await tamarindButton());
+    await user.click(await screen.findByRole('button', { name: 'QR' }));
+
+    expect(await screen.findByText(/ระบบไม่ได้ตรวจสอบการโอน/)).toBeInTheDocument();
+    // Nothing is recorded until the operator says the money arrived.
+    expect(await db.sale.count()).toBe(0);
+
+    await user.click(screen.getByRole('button', { name: 'ลูกค้าจ่ายแล้ว' }));
+
+    await waitFor(async () => expect(await db.sale.count()).toBe(1));
+    const sale = (await db.sale.toArray())[0]!;
+    expect(sale.payment_method).toBe('PROMPTPAY');
+    expect(sale.cash_received).toBeNull();
+  });
+});
+
+describe('the receipt', () => {
+  it('is never prompted for, and opens from the completed-sale toast', async () => {
+    const user = userEvent.setup();
+    render(<SellScreen />);
+
+    await user.click(await tamarindButton());
+    await user.click(await screen.findByRole('button', { name: 'เงินสด' }));
+    await user.click(await screen.findByRole('button', { name: 'พอดี' }));
+
+    await waitFor(async () => expect(await db.sale.count()).toBe(1));
+    // Nothing opened by itself.
+    expect(screen.queryByRole('dialog', { name: 'ใบเสร็จ' })).not.toBeInTheDocument();
+
+    await user.click(await screen.findByRole('button', { name: 'ดูใบเสร็จ' }));
+
+    const receipt = await screen.findByRole('dialog', { name: 'ใบเสร็จ' });
+    expect(within(receipt).getByText(/มะขามแดง/)).toBeInTheDocument();
+    expect(within(receipt).getByText('สุทธิ')).toBeInTheDocument();
+    // The shop is not VAT registered: no VAT line, anywhere.
+    expect(receipt).not.toHaveTextContent(/VAT|ภาษีมูลค่าเพิ่ม/);
+  });
+});
+
+describe('an empty cart', () => {
+  it('cannot be paid for', async () => {
+    render(<SellScreen />);
+    expect(await screen.findByRole('button', { name: 'เงินสด' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'QR' })).toBeDisabled();
   });
 });

@@ -191,9 +191,30 @@ export interface SaleLine extends Synced {
   /** Snapshot. Never recomputed from the catalog (CLAUDE.md §2.1.8). */
   unit_price: Satang;
   line_discount: Satang;
-  /** Mandatory whenever line_discount is non-zero or unit_price is 0. */
+  /**
+   * The reason, when exactly one applies. Null when a line carries more than
+   * one — a rainy-day hot pear that is also half of a two-cup pair — in which
+   * case sale_line_discount holds them all. Never null while line_discount is
+   * non-zero and singular (CLAUDE.md §4).
+   */
   discount_reason: DiscountReason | null;
   unit_cost: Satang;
+}
+
+/**
+ * One reason's worth of discount on a line.
+ *
+ * §8 gives sale_line a single line_discount and a single reason, which cannot
+ * express a line that is both rainy-day priced and half of a two-cup pair. The
+ * money would still add up; the discounts-by-reason report would not, and
+ * telling shrinkage from generosity is the whole point of recording a reason.
+ */
+export interface SaleLineDiscount extends Synced {
+  id: string;
+  sale_line_id: string;
+  reason: DiscountReason;
+  /** Total for the line, not per cup. */
+  amount: Satang;
 }
 
 export interface SaleLineMod extends Synced {
@@ -262,6 +283,11 @@ export interface CartLine extends Synced {
   qty: number;
   /** Set when the operator rang past the available stock and confirmed it. */
   sold_out_override: boolean;
+  /**
+   * Set by the operator to give the line away — a loyalty redemption, a staff
+   * drink, goodwill. Never settable without choosing which (CLAUDE.md §4).
+   */
+  manual_discount_reason: DiscountReason | null;
   added_at: string;
 }
 

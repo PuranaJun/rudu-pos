@@ -4,6 +4,8 @@ import type { CostCatalog } from '../domain/cost.ts';
 import { unitPrice } from '../domain/cost.ts';
 import { modifiersFor, variantsOf } from '../domain/cart.ts';
 import type { CartItem } from '../db/cart-repo.ts';
+import { DISCOUNT_REASON_TH, MANUAL_DISCOUNT_REASONS } from '../domain/promotions.ts';
+import type { DiscountReason } from '../db/types.ts';
 
 interface Props {
   catalog: CostCatalog;
@@ -11,6 +13,7 @@ interface Props {
   onStep: (delta: number) => void;
   onSetVariant: (variantId: string, allowedModifierIds: string[]) => void;
   onToggleModifier: (modifierId: string) => void;
+  onSetDiscountReason: (reason: DiscountReason | null) => void;
 }
 
 /**
@@ -27,8 +30,11 @@ export default function CartLineRow({
   onStep,
   onSetVariant,
   onToggleModifier,
+  onSetDiscountReason,
 }: Props) {
   const [showModifiers, setShowModifiers] = useState(false);
+  const [showReasons, setShowReasons] = useState(false);
+  const givenAway = item.line.manual_discount_reason;
 
   const variant = catalog.variants.get(item.line.variant_id);
   const product = variant ? catalog.products.get(variant.product_id) : undefined;
@@ -61,7 +67,11 @@ export default function CartLineRow({
           ) : null}
         </div>
 
-        <span className="text-xl font-bold tabular-nums">{formatTHB(price * item.line.qty)}</span>
+        <span
+          className={`text-xl font-bold tabular-nums ${givenAway ? 'text-ink-soft line-through' : ''}`}
+        >
+          {formatTHB(price * item.line.qty)}
+        </span>
 
         <div className="flex items-center gap-1">
           <button
@@ -117,7 +127,35 @@ export default function CartLineRow({
             {showModifiers ? '−' : '+'}
           </button>
         ) : null}
+
+        <button
+          type="button"
+          onClick={() => setShowReasons((open) => !open)}
+          aria-expanded={showReasons}
+          aria-label="ลดราคา"
+          className="border-line min-h-touch text-ink rounded-xl border-2 px-4 text-lg font-bold"
+        >
+          ฿0
+        </button>
       </div>
+
+      {showReasons ? (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {MANUAL_DISCOUNT_REASONS.map((reason) => (
+            <button
+              key={reason}
+              type="button"
+              onClick={() => onSetDiscountReason(givenAway === reason ? null : reason)}
+              aria-pressed={givenAway === reason}
+              className={`min-h-touch rounded-xl px-4 text-lg font-bold ${
+                givenAway === reason ? 'bg-ink text-paper' : 'border-line text-ink border-2'
+              }`}
+            >
+              {DISCOUNT_REASON_TH[reason]}
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       {showModifiers ? (
         <div className="mt-2 flex flex-wrap gap-2">
@@ -135,6 +173,10 @@ export default function CartLineRow({
             </button>
           ))}
         </div>
+      ) : null}
+
+      {givenAway ? (
+        <p className="mt-2 text-lg font-bold">ฟรี — {DISCOUNT_REASON_TH[givenAway]}</p>
       ) : null}
 
       {advisories.map((advisory) => (

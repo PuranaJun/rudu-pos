@@ -16,6 +16,7 @@ import type { StockSnapshot } from '../domain/stock.ts';
 import type { Satang } from '../lib/money.ts';
 import { bangkokDate } from '../lib/datetime.ts';
 import { DEVICE_ID_KEY } from './device.ts';
+import { loadSettings, type PosSettings } from './settings-repo.ts';
 
 export function useCostCatalog(): CostCatalog | undefined {
   return useLiveQuery(() => loadCostCatalog(db), []);
@@ -23,6 +24,10 @@ export function useCostCatalog(): CostCatalog | undefined {
 
 export function useStockSnapshot(): StockSnapshot | undefined {
   return useLiveQuery(() => loadStockSnapshot(db), []);
+}
+
+export function useSettings(): PosSettings | undefined {
+  return useLiveQuery(() => loadSettings(db), []);
 }
 
 export function useCart(): CartItem[] | undefined {

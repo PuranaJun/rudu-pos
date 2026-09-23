@@ -12,6 +12,7 @@ import type {
   Product,
   Sale,
   SaleLine,
+  SaleLineDiscount,
   SaleLineMod,
   Setting,
   StockMovement,
@@ -48,6 +49,7 @@ export class RuduPosDB extends Dexie {
   sale!: Table<Sale, string>;
   sale_line!: Table<SaleLine, string>;
   sale_line_mod!: Table<SaleLineMod, string>;
+  sale_line_discount!: Table<SaleLineDiscount, string>;
   cash_session!: Table<CashSession, string>;
 
   // The open cart. Persisted per line, cleared at payment.
@@ -84,6 +86,10 @@ export class RuduPosDB extends Dexie {
     this.version(2).stores({
       cart_line: 'id, variant_id, added_at',
       cart_line_mod: 'id, cart_line_id, modifier_id',
+    });
+
+    this.version(3).stores({
+      sale_line_discount: 'id, sale_line_id, reason',
     });
   }
 }

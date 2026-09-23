@@ -1,22 +1,34 @@
 import { useState } from 'react';
 import DrinkButton from '../components/DrinkButton.tsx';
 import CartLineRow from '../components/CartLineRow.tsx';
+import CashTenderPad from '../components/CashTenderPad.tsx';
+import PromptPayPanel from '../components/PromptPayPanel.tsx';
+import ReceiptSheet from '../components/ReceiptSheet.tsx';
 import VersionStamp from '../components/VersionStamp.tsx';
 import { formatTHB } from '../lib/money.ts';
 import { useWakeLock } from '../lib/useWakeLock.ts';
-import { cartTotals, defaultVariantOf } from '../domain/cart.ts';
+import { defaultVariantOf } from '../domain/cart.ts';
 import { unitPrice } from '../domain/cost.ts';
+import { DISCOUNT_REASON_TH } from '../domain/promotions.ts';
 import { availableCups } from '../domain/stock.ts';
 import {
   useCart,
   useCostCatalog,
   useDeviceId,
   useOperator,
+  useSettings,
   useStockSnapshot,
   useTodayTotals,
 } from '../db/hooks.ts';
-import { addDrink, clearCart, setVariant, stepQty, toggleModifier } from '../db/cart-repo.ts';
-import { completeSale } from '../db/sale-repo.ts';
+import {
+  addDrink,
+  clearCart,
+  setLineDiscountReason,
+  setVariant,
+  stepQty,
+  toggleModifier,
+} from '../db/cart-repo.ts';
+import { completeSale, priceCart, type Receipt } from '../db/sale-repo.ts';
 import type { PaymentMethod, Product } from '../db/types.ts';
 
 const MENU_COLORS = ['--color-drink-1', '--color-drink-2', '--color-drink-3'];
@@ -32,6 +44,7 @@ const MENU_COLORS = ['--color-drink-1', '--color-drink-2', '--color-drink-3'];
 export default function SellScreen() {
   const catalog = useCostCatalog();
   const stock = useStockSnapshot();
+  const settings = useSettings();
   const cart = useCart();
   const today = useTodayTotals();
   const operatorId = useOperator();
@@ -41,12 +54,15 @@ export default function SellScreen() {
   useWakeLock();
 
   const [pendingSoldOut, setPendingSoldOut] = useState<Product | null>(null);
-  const [paying, setPaying] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
+  const [tendering, setTendering] = useState<PaymentMethod | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState<{ receipt: Receipt; shortfalls: number } | null>(null);
+  const [showReceipt, setShowReceipt] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  if (!catalog || !stock || !cart) {
+  if (!catalog || !stock || !cart || !settings) {
     return (
-      <div className="flex h-full items-center justify-center bg-white">
+      <div className="text-ink flex h-full items-center justify-center bg-white">
         <p className="text-2xl font-bold">กำลังโหลด…</p>
       </div>
     );
@@ -58,12 +74,9 @@ export default function SellScreen() {
   const drinks = products.filter((product) => product.kind === 'DRINK');
   const bottles = products.filter((product) => product.kind === 'BOTTLE');
 
-  const entries = cart.map((item) => ({
-    variantId: item.line.variant_id,
-    qty: item.line.qty,
-    modifierIds: item.modifierIds,
-  }));
-  const totals = cartTotals(catalog, entries);
+  // Priced exactly the way the sale will be written, so the total on the
+  // footer can never differ from the total recorded.
+  const priced = priceCart(catalog, settings, cart);
 
   function stockFor(product: Product) {
     const variant = defaultVariantOf(catalog!, product.id);
@@ -76,8 +89,7 @@ export default function SellScreen() {
       cups,
       // Naming the component is what makes the number actionable: it decides
       // whether to push a drink or slow it down (CLAUDE.md §2.2).
-      limitingComponentName:
-        cups > 0 && !Number.isFinite(cups) ? null : (limiting?.name_th ?? null),
+      limitingComponentName: Number.isFinite(cups) ? (limiting?.name_th ?? null) : null,
       variantId: variant.id,
       price: unitPrice(catalog!, variant.id),
     };
@@ -103,30 +115,52 @@ export default function SellScreen() {
     if (variantId) void addDrink(variantId, { soldOutOverride: true });
   }
 
-  function pay(method: PaymentMethod) {
-    if (cart!.length === 0 || paying) return;
-    setPaying(true);
+  function confirmPayment(method: PaymentMethod, received: number | null) {
+    if (busy) return;
+    setBusy(true);
 
-    completeSale(catalog!, cart!, {
+    completeSale(catalog!, cart!, priced, {
       method,
-      cashReceived: method === 'CASH' ? totals.gross : null,
+      cashReceived: received,
       operatorId,
       deviceId: deviceId ?? 'unknown',
+      brandingLineTh: settings!.brandingLineTh,
     })
       .then((result) => {
-        setToast(
-          result.shortfalls.length > 0
-            ? `ขายแล้ว — สต็อกติดลบ ${result.shortfalls.length} รายการ`
-            : 'ขายแล้ว',
-        );
-        window.setTimeout(() => setToast(null), 2000);
+        setTendering(null);
+        setDone({ receipt: result.receipt, shortfalls: result.shortfalls.length });
+        window.setTimeout(() => setDone(null), 6000);
       })
-      .catch((error: unknown) => setToast(`บันทึกไม่สำเร็จ: ${String(error)}`))
-      .finally(() => setPaying(false));
+      .catch((cause: unknown) => setError(`บันทึกไม่สำเร็จ: ${String(cause)}`))
+      .finally(() => setBusy(false));
+  }
+
+  if (tendering === 'CASH') {
+    return (
+      <CashTenderPad
+        due={priced.totalNet}
+        quickTender={settings.quickTender}
+        busy={busy}
+        onCancel={() => setTendering(null)}
+        onConfirm={(received) => confirmPayment('CASH', received)}
+      />
+    );
+  }
+
+  if (tendering === 'PROMPTPAY') {
+    return (
+      <PromptPayPanel
+        due={priced.totalNet}
+        qrImage={settings.promptPayQrImage}
+        busy={busy}
+        onCancel={() => setTendering(null)}
+        onConfirm={() => confirmPayment('PROMPTPAY', null)}
+      />
+    );
   }
 
   return (
-    <div className="safe-x flex h-full flex-col bg-white text-ink">
+    <div className="safe-x text-ink flex h-full flex-col bg-white">
       {/* Today, live. */}
       <header className="safe-top border-line flex items-baseline justify-between gap-3 border-b px-4 pb-2">
         <p className="text-4xl font-bold tabular-nums">
@@ -188,6 +222,7 @@ export default function SellScreen() {
                   void setVariant(item.line.id, variantId, allowed)
                 }
                 onToggleModifier={(modifierId) => void toggleModifier(item.line.id, modifierId)}
+                onSetDiscountReason={(reason) => void setLineDiscountReason(item.line.id, reason)}
               />
             ))}
           </ul>
@@ -218,10 +253,36 @@ export default function SellScreen() {
           </div>
         ) : null}
 
-        {toast ? (
-          <p role="status" className="mb-2 text-center text-xl font-bold">
-            {toast}
+        {done ? (
+          <div role="status" className="mb-2 flex items-center justify-between gap-2">
+            <p className="text-xl font-bold">
+              ขายแล้ว
+              {done.shortfalls > 0 ? ` — สต็อกติดลบ ${done.shortfalls} รายการ` : ''}
+            </p>
+            <button
+              type="button"
+              onClick={() => setShowReceipt(true)}
+              className="border-line min-h-touch rounded-xl border-2 px-4 text-lg font-bold"
+            >
+              ดูใบเสร็จ
+            </button>
+          </div>
+        ) : null}
+
+        {error ? (
+          <p role="alert" className="mb-2 text-lg font-bold">
+            {error}
           </p>
+        ) : null}
+
+        {priced.totalDiscount > 0 ? (
+          <div className="mb-1 flex flex-wrap justify-end gap-x-3 text-lg font-bold">
+            {priced.byReason.map((discount) => (
+              <span key={discount.reason}>
+                {DISCOUNT_REASON_TH[discount.reason]} −{formatTHB(discount.amount)}
+              </span>
+            ))}
+          </div>
         ) : null}
 
         <div className="mb-2 flex items-baseline justify-between">
@@ -233,22 +294,22 @@ export default function SellScreen() {
           >
             ล้าง
           </button>
-          <p className="text-3xl font-bold tabular-nums">{formatTHB(totals.gross)}</p>
+          <p className="text-3xl font-bold tabular-nums">{formatTHB(priced.totalNet)}</p>
         </div>
 
         <div className="flex gap-2">
           <button
             type="button"
-            onClick={() => pay('CASH')}
-            disabled={cart.length === 0 || paying}
-            className="min-h-touch-lg flex-1 rounded-2xl bg-brand-2 text-2xl font-bold text-white active:brightness-90 disabled:opacity-40"
+            onClick={() => setTendering('CASH')}
+            disabled={cart.length === 0 || busy}
+            className="bg-brand-2 min-h-touch-lg flex-1 rounded-2xl text-2xl font-bold text-white active:brightness-90 disabled:opacity-40"
           >
             เงินสด
           </button>
           <button
             type="button"
-            onClick={() => pay('PROMPTPAY')}
-            disabled={cart.length === 0 || paying}
+            onClick={() => setTendering('PROMPTPAY')}
+            disabled={cart.length === 0 || busy}
             className="bg-ink min-h-touch-lg flex-1 rounded-2xl text-2xl font-bold text-white active:brightness-90 disabled:opacity-40"
           >
             QR
@@ -259,6 +320,10 @@ export default function SellScreen() {
           <VersionStamp />
         </div>
       </footer>
+
+      {showReceipt && done ? (
+        <ReceiptSheet receipt={done.receipt} onClose={() => setShowReceipt(false)} />
+      ) : null}
     </div>
   );
 }
