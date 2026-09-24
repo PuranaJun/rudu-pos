@@ -192,7 +192,7 @@ export async function completeSale(
         });
       }
 
-      const snapshot = await loadStockSnapshot(db);
+      const snapshot = await loadStockSnapshot(db, now);
       const deduction = deductForSale(
         catalog,
         snapshot,

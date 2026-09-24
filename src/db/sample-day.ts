@@ -2,85 +2,54 @@
  * A plausible morning's stock, for development only.
  *
  * Reached from the DEV-build reseed and nowhere else — a production build has
- * no path to it. It exists so open day and the sell screen can be exercised
- * before the production-batch screen does this for real: both jellies are
- * left as uncut slabs, the pear is on its last day, and the white-tea jelly
- * takes its 500 ml out of the white tea the way a real batch would.
+ * no path to it. Recorded through the same path as a real batch, so the
+ * clocks come from the catalog and the white-tea jelly takes its tea out of
+ * the white tea. Both jellies are left as uncut slabs for open day to catch,
+ * and the fresh pear is on its last few hours.
  */
 import type { RuduPosDB } from './database.ts';
 import { db as defaultDb } from './database.ts';
-import { recordBatch } from './stock-repo.ts';
-import type { BatchState, ComponentBatch } from './types.ts';
-import { newId, nowIso } from '../lib/id.ts';
+import { blanchBatch, recordProduction } from './stock-repo.ts';
+import { addHours } from '../lib/datetime.ts';
+import { nowIso } from '../lib/id.ts';
 
-interface SampleBatch {
-  componentId: string;
-  qty: number;
-  state: BatchState;
-  /** How long ago it was made. */
-  ageHours: number;
-  shelfLifeHours: number;
-}
-
-const SAMPLE: SampleBatch[] = [
-  { componentId: 'COMP_TEA_RED', qty: 5000, state: 'READY', ageHours: 12, shelfLifeHours: 72 },
-  { componentId: 'COMP_TEA_WHITE', qty: 4000, state: 'READY', ageHours: 14, shelfLifeHours: 72 },
-  {
-    componentId: 'COMP_CONC_TAMARIND',
-    qty: 3000,
-    state: 'READY',
-    ageHours: 36,
-    shelfLifeHours: 168,
-  },
-  { componentId: 'COMP_CONC_PEAR', qty: 3000, state: 'READY', ageHours: 36, shelfLifeHours: 168 },
-  { componentId: 'COMP_JELLY_CHRYS', qty: 1000, state: 'SLAB', ageHours: 12, shelfLifeHours: 72 },
-  { componentId: 'COMP_PEAR_FRESH', qty: 420, state: 'READY', ageHours: 16, shelfLifeHours: 24 },
-  { componentId: 'COMP_PEACH_GUM', qty: 350, state: 'BLANCHED', ageHours: 20, shelfLifeHours: 72 },
-  { componentId: 'COMP_BASIL_SEED', qty: 250, state: 'READY', ageHours: 1, shelfLifeHours: 24 },
+/** Component, quantity, and how many hours ago it was made. In making order. */
+const SAMPLE: Array<[string, number, number]> = [
+  ['COMP_TEA_RED', 5000, 12],
+  ['COMP_TEA_WHITE', 4000, 14],
+  ['COMP_CONC_TAMARIND', 3000, 36],
+  ['COMP_CONC_PEAR', 3000, 36],
+  ['COMP_JELLY_CHRYS', 1000, 12],
+  ['COMP_JELLY_WHITE_GOJI', 1000, 12],
+  ['COMP_PEAR_FRESH', 420, 16],
+  ['COMP_PEACH_GUM', 350, 20],
+  ['COMP_BASIL_SEED', 250, 1],
 ];
 
 export async function stockSampleDay(
   db: RuduPosDB = defaultDb,
   now: string = nowIso(),
 ): Promise<void> {
-  const at = Date.parse(now);
-  const iso = (hoursFromNow: number) => new Date(at + hoursFromNow * 3_600_000).toISOString();
+  const made = new Map<string, string>();
 
-  const batch = (sample: SampleBatch): ComponentBatch => ({
-    id: newId(),
-    component_id: sample.componentId,
-    made_at: iso(-sample.ageHours),
-    qty_made: sample.qty,
-    state: sample.state,
-    ready_at: iso(-sample.ageHours),
-    expires_at: iso(sample.shelfLifeHours - sample.ageHours),
-    parent_batch_id: null,
-    note: 'ตัวอย่าง',
-    synced_at: null,
-  });
+  for (const [componentId, qty, ageHours] of SAMPLE) {
+    const component = await db.component.get(componentId);
+    if (!component) continue;
 
-  let whiteTeaId: string | null = null;
-  for (const sample of SAMPLE) {
-    const row = batch(sample);
-    if (sample.componentId === 'COMP_TEA_WHITE') whiteTeaId = row.id;
-    await recordBatch(row, null, db, row.made_at);
+    const madeAt = addHours(now, -ageHours);
+    const sourceBatchId = component.source_component_id
+      ? (made.get(component.source_component_id) ?? null)
+      : null;
+    if (component.source_component_id && !sourceBatchId) continue;
+
+    const batch = await recordProduction(
+      component,
+      { qty, madeAt, sourceBatchId, note: 'ตัวอย่าง' },
+      db,
+    );
+    made.set(componentId, batch.id);
+
+    // Peach gum came out of the blanching pot once its soak was done.
+    if (batch.state === 'SOAKING') await blanchBatch(batch.id, db, batch.ready_at);
   }
-
-  // The white-tea jelly is made out of the white tea (CLAUDE.md §2.1.3).
-  const jelly = {
-    ...batch({
-      componentId: 'COMP_JELLY_WHITE_GOJI',
-      qty: 1000,
-      state: 'SLAB',
-      ageHours: 12,
-      shelfLifeHours: 72,
-    }),
-    parent_batch_id: whiteTeaId,
-  };
-  await recordBatch(
-    jelly,
-    whiteTeaId ? { batchId: whiteTeaId, qty: 500 } : null,
-    db,
-    jelly.made_at,
-  );
 }

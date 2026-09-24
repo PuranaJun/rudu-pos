@@ -25,7 +25,7 @@ import type {
 } from '../db/types.ts';
 
 /** Bump to force a reseed of a database that was seeded by an older build. */
-export const SEED_VERSION = 6;
+export const SEED_VERSION = 7;
 export const SEED_VERSION_KEY = 'seed_version';
 
 const unsynced = { synced_at: null } as const;
@@ -130,9 +130,17 @@ export const VARIANTS: Variant[] = [
 // `shelf_life_hours: 24` is how "same day" is stored. Close-day treats
 // anything at or under 24 h as a same-day component that defaults to discard.
 
+/** Made from raw ingredients, with no prep reminder. Overridden per row below. */
+const fromScratch = {
+  source_component_id: null,
+  source_qty_per_unit: null,
+  prep_start_by: null,
+} as const;
+
 export const COMPONENTS: Component[] = [
   {
     ...unsynced,
+    ...fromScratch,
     id: 'COMP_TEA_RED',
     name_th: 'ชาแดงสกัดเย็น 2x',
     unit: 'ML',
@@ -148,9 +156,11 @@ export const COMPONENTS: Component[] = [
       'ชาแดง 50 g ในถุงกรอง + น้ำดื่ม 5.25 L · แช่ตู้เย็น ≤4°C 10 ชม. · ยกถุงขึ้น บีบเบา ๆ ครั้งเดียว',
     is_batch_tracked: true,
     sort_order: 1,
+    prep_start_by: '21:00',
   },
   {
     ...unsynced,
+    ...fromScratch,
     id: 'COMP_TEA_WHITE',
     name_th: 'ชาขาวสกัดเย็น 2x',
     unit: 'ML',
@@ -165,9 +175,11 @@ export const COMPONENTS: Component[] = [
     recipe_note_th: 'ชาขาวโซ่วเหมย 52 g + น้ำดื่ม 4.3 L · แช่ ≤4°C 12–14 ชม.',
     is_batch_tracked: true,
     sort_order: 2,
+    prep_start_by: '19:00',
   },
   {
     ...unsynced,
+    ...fromScratch,
     id: 'COMP_CONC_TAMARIND',
     name_th: 'หัวเชื้อมะขาม',
     unit: 'ML',
@@ -186,6 +198,7 @@ export const COMPONENTS: Component[] = [
   },
   {
     ...unsynced,
+    ...fromScratch,
     id: 'COMP_CONC_PEAR',
     name_th: 'หัวเชื้อสาลี่พุทราจีน',
     unit: 'ML',
@@ -204,6 +217,7 @@ export const COMPONENTS: Component[] = [
   },
   {
     ...unsynced,
+    ...fromScratch,
     id: 'COMP_JELLY_CHRYS',
     name_th: 'เยลลี่เก๊กฮวย',
     unit: 'G',
@@ -222,6 +236,7 @@ export const COMPONENTS: Component[] = [
   },
   {
     ...unsynced,
+    ...fromScratch,
     id: 'COMP_JELLY_WHITE_GOJI',
     name_th: 'เยลลี่ชาขาวฝังเก๋ากี้',
     unit: 'G',
@@ -237,9 +252,13 @@ export const COMPONENTS: Component[] = [
       'ใช้ชาขาว 500 ml · น้ำ 500 ml · ผงวุ้น 10 g · น้ำตาลกรวด 70 g · เก๋ากี้แช่ 40 g · ต้มวุ้นในน้ำเปล่าเท่านั้น ลด 60°C ใส่ชาเย็น ลด 50°C ใส่เก๋ากี้ เทถาดทันที',
     is_batch_tracked: true,
     sort_order: 6,
+    // ใช้ชาขาว 500 ml per 1,000 g slab (docs/seed-data.md §2).
+    source_component_id: 'COMP_TEA_WHITE',
+    source_qty_per_unit: 0.5,
   },
   {
     ...unsynced,
+    ...fromScratch,
     id: 'COMP_PEAR_FRESH',
     name_th: 'กอง B สาลี่สด',
     unit: 'G',
@@ -257,6 +276,7 @@ export const COMPONENTS: Component[] = [
   },
   {
     ...unsynced,
+    ...fromScratch,
     id: 'COMP_PEACH_GUM',
     name_th: 'ยางพีช',
     unit: 'G',
@@ -275,6 +295,7 @@ export const COMPONENTS: Component[] = [
   },
   {
     ...unsynced,
+    ...fromScratch,
     id: 'COMP_BASIL_SEED',
     name_th: 'เม็ดแมงลักพอง',
     unit: 'G',
@@ -294,6 +315,7 @@ export const COMPONENTS: Component[] = [
     // Not batch tracked, but it carries a real per-cup cost (0.03 on pear
     // variants) that the margin table in docs/seed-data.md §6.3 depends on.
     ...unsynced,
+    ...fromScratch,
     id: 'COMP_CHRYS_GARNISH',
     name_th: 'เก๊กฮวยแห้งโรยหน้า',
     unit: 'PC',
@@ -575,6 +597,4 @@ export const SETTINGS: Setting[] = [
     value: ['ลูกค้าเปลี่ยนใจ', 'กดผิด', 'ทำหก', 'ชำระเงินผิดวิธี'],
     synced_at: null,
   },
-  { key: 'prep_reminder_red_tea', value: '21:00', synced_at: null },
-  { key: 'prep_reminder_white_tea', value: '19:00', synced_at: null },
 ];

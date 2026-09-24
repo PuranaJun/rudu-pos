@@ -131,8 +131,38 @@ async function upgradeCatalog(db: RuduPosDB, from: number): Promise<void> {
       await addMissingSettings(db);
     }
 
+    if (from < 7) {
+      // v7 gave white-tea jelly its source, and moved the prep-reminder times
+      // from two named settings onto the components they belong to.
+      for (const seeded of COMPONENTS) {
+        await db.component.update(seeded.id, {
+          source_component_id: seeded.source_component_id,
+          source_qty_per_unit: seeded.source_qty_per_unit,
+          prep_start_by: seeded.prep_start_by,
+        });
+      }
+      await moveLegacyPrepTimes(db);
+    }
+
     await markSeeded(db);
   });
+}
+
+/** The v6 setting keys, and the component each one was about. */
+const LEGACY_PREP_SETTINGS: Record<string, string> = {
+  prep_reminder_red_tea: 'COMP_TEA_RED',
+  prep_reminder_white_tea: 'COMP_TEA_WHITE',
+};
+
+/** Carry a time the owner may have edited over to its component, then drop the old row. */
+async function moveLegacyPrepTimes(db: RuduPosDB): Promise<void> {
+  for (const [key, componentId] of Object.entries(LEGACY_PREP_SETTINGS)) {
+    const row = await db.setting.get(key);
+    if (typeof row?.value === 'string') {
+      await db.component.update(componentId, { prep_start_by: row.value });
+    }
+    await db.setting.delete(key);
+  }
 }
 
 /**

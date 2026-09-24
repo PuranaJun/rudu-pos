@@ -10,6 +10,7 @@
  * decrement. That is what makes a void reverse exactly, and what makes an
  * override recoverable instead of a mystery.
  */
+import { addHours } from '../lib/datetime.ts';
 import { newId } from '../lib/id.ts';
 import type { BatchState, Component, ComponentBatch, StockMovement } from '../db/types.ts';
 import { recipeFor, requireComponent, resolveModifiers, type RecipeCatalog } from './recipe.ts';
@@ -85,6 +86,28 @@ export function componentRemaining(snapshot: StockSnapshot, componentId: string)
     total += batchRemaining(batch.id, snapshot.movements);
   }
   return total;
+}
+
+/**
+ * A batch's state at a moment. Cold brew is STEEPING until its lead time has
+ * run and READY after — nothing has to be tapped, and nothing has to wake the
+ * phone, for the tea to become sellable at 07:00. Every other transition is
+ * an explicit action (blanching, cutting) and is stored when it happens.
+ */
+export function stateAt(batch: ComponentBatch, now: string): BatchState {
+  return batch.state === 'STEEPING' && batch.ready_at <= now ? 'READY' : batch.state;
+}
+
+/** The snapshot as it stands at `now`, with finished steeps read as READY. */
+export function stockAt(snapshot: StockSnapshot, now: string): StockSnapshot {
+  let changed = false;
+  const batches = snapshot.batches.map((batch) => {
+    const state = stateAt(batch, now);
+    if (state === batch.state) return batch;
+    changed = true;
+    return { ...batch, state };
+  });
+  return changed ? { batches, movements: snapshot.movements } : snapshot;
 }
 
 // ---------------------------------------------------------- available cups
@@ -430,8 +453,4 @@ function movement(
     created_at: now,
     synced_at: null,
   };
-}
-
-function addHours(iso: string, hours: number): string {
-  return new Date(Date.parse(iso) + hours * 3_600_000).toISOString();
 }

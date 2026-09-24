@@ -1,5 +1,8 @@
 import { useState } from 'react';
 import VersionStamp from '../components/VersionStamp.tsx';
+import PrepBanner from '../components/PrepBanner.tsx';
+import ProductionScreen from './ProductionScreen.tsx';
+import { prepReminders } from '../domain/production.ts';
 import { formatTHB, toSatang } from '../lib/money.ts';
 import { formatQty, unitLabel } from '../lib/quantity.ts';
 import { bangkokShort, bangkokWeekday } from '../lib/datetime.ts';
@@ -42,6 +45,7 @@ export default function OpenDayScreen() {
   const [rainyDay, setRainyDay] = useState(false);
   const [opening, setOpening] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showProduction, setShowProduction] = useState(false);
 
   if (!catalog || !stock || !settings || lastOperator === undefined) {
     return (
@@ -62,6 +66,7 @@ export default function OpenDayScreen() {
   const mustCut = jelly.filter((entry) => entry.mustCut);
   const onHand = stockOnHand(catalog, stock, now);
   const missing = missingComponents(catalog, stock);
+  const reminders = prepReminders(catalog, stock, now);
 
   const rainyVariant = settings.rainyDayVariantId
     ? catalog.variants.get(settings.rainyDayVariantId)
@@ -84,10 +89,21 @@ export default function OpenDayScreen() {
 
   return (
     <div className="safe-x text-ink flex h-full flex-col bg-white">
-      <header className="safe-top border-line border-b px-4 pb-2">
-        <h1 className="text-3xl font-bold">เปิดร้าน</h1>
-        <p className="text-ink-soft text-lg font-semibold">{bangkokWeekday(now)}</p>
+      <header className="safe-top border-line flex items-start justify-between gap-3 border-b px-4 pb-2">
+        <div>
+          <h1 className="text-3xl font-bold">เปิดร้าน</h1>
+          <p className="text-ink-soft text-lg font-semibold">{bangkokWeekday(now)}</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowProduction(true)}
+          className="border-line min-h-touch rounded-xl border-2 px-4 text-lg font-bold"
+        >
+          ผลิต
+        </button>
       </header>
+
+      <PrepBanner reminders={reminders} onTap={() => setShowProduction(true)} />
 
       <main className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
         {jelly.length > 0 ? (
@@ -214,6 +230,8 @@ export default function OpenDayScreen() {
           <VersionStamp />
         </div>
       </footer>
+
+      {showProduction ? <ProductionScreen onClose={() => setShowProduction(false)} /> : null}
     </div>
   );
 }

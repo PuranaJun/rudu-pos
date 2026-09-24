@@ -5,6 +5,8 @@ import CashTenderPad from '../components/CashTenderPad.tsx';
 import PromptPayPanel from '../components/PromptPayPanel.tsx';
 import ReceiptSheet from '../components/ReceiptSheet.tsx';
 import SalesListScreen from './SalesListScreen.tsx';
+import ProductionScreen from './ProductionScreen.tsx';
+import PrepBanner from '../components/PrepBanner.tsx';
 import VersionStamp from '../components/VersionStamp.tsx';
 import { formatTHB } from '../lib/money.ts';
 import { useWakeLock } from '../lib/useWakeLock.ts';
@@ -12,6 +14,8 @@ import { defaultVariantOf } from '../domain/cart.ts';
 import { unitPrice } from '../domain/cost.ts';
 import { DISCOUNT_REASON_TH } from '../domain/promotions.ts';
 import { availableCups } from '../domain/stock.ts';
+import { prepReminders } from '../domain/production.ts';
+import { nowIso } from '../lib/id.ts';
 import {
   useCart,
   useCostCatalog,
@@ -69,6 +73,7 @@ export default function SellScreen({ session }: { session: CashSession }) {
   const [showReceipt, setShowReceipt] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showSales, setShowSales] = useState(false);
+  const [showProduction, setShowProduction] = useState(false);
 
   if (!catalog || !stock || !cart || !settings) {
     return (
@@ -77,6 +82,10 @@ export default function SellScreen({ session }: { session: CashSession }) {
       </div>
     );
   }
+
+  // Drawn with the screen, which redraws on every tap and every write — close
+  // enough for a reminder about tonight, and nothing has to tick for it.
+  const reminders = prepReminders(catalog, stock, nowIso());
 
   const products = [...catalog.products.values()]
     .filter((product) => product.is_active)
@@ -173,17 +182,29 @@ export default function SellScreen({ session }: { session: CashSession }) {
   return (
     <div className="safe-x text-ink flex h-full flex-col bg-white">
       {/* Today, live. */}
-      <button
-        type="button"
-        onClick={() => setShowSales(true)}
-        aria-label="รายการขายวันนี้"
-        className="safe-top border-line flex w-full items-baseline justify-between gap-3 border-b px-4 pb-2 text-left"
-      >
-        <span className="text-4xl font-bold tabular-nums">
-          {today.units} <span className="text-2xl font-bold">แก้ว</span>
-        </span>
-        <span className="text-4xl font-bold tabular-nums">{formatTHB(today.revenue)}</span>
-      </button>
+      <div className="safe-top border-line flex items-stretch border-b">
+        <button
+          type="button"
+          onClick={() => setShowSales(true)}
+          aria-label="รายการขายวันนี้"
+          className="flex min-w-0 flex-1 items-baseline justify-between gap-3 px-4 pb-2 text-left"
+        >
+          <span className="text-4xl font-bold tabular-nums">
+            {today.units} <span className="text-2xl font-bold">แก้ว</span>
+          </span>
+          <span className="text-4xl font-bold tabular-nums">{formatTHB(today.revenue)}</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setShowProduction(true)}
+          className="border-line min-h-touch min-w-touch-lg mb-2 border-l px-3 text-lg font-bold"
+        >
+          ผลิต
+        </button>
+      </div>
+
+      {/* Tomorrow's tea. Only there when something needs starting. */}
+      <PrepBanner reminders={reminders} onTap={() => setShowProduction(true)} />
 
       {/* The menu. */}
       <div className="flex shrink-0 flex-col gap-2 p-2">
@@ -350,6 +371,8 @@ export default function SellScreen({ session }: { session: CashSession }) {
           onClose={() => setShowSales(false)}
         />
       ) : null}
+
+      {showProduction ? <ProductionScreen onClose={() => setShowProduction(false)} /> : null}
 
       {showReceipt && done ? (
         <ReceiptSheet receipt={done.receipt} onClose={() => setShowReceipt(false)} />

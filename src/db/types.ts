@@ -94,6 +94,24 @@ export interface Component extends Synced {
   role: ComponentRole;
   recipe_note_th: string | null;
   is_batch_tracked: boolean;
+  /**
+   * The component a batch of this one is made out of: white-tea jelly is made
+   * with white tea (CLAUDE.md §2.1.3). Null for everything made from scratch.
+   */
+  source_component_id: string | null;
+  /**
+   * How much of the source goes into one unit of this — 0.5 ml of white tea
+   * per gram of jelly, so a 1,000 g slab takes 500 ml. Per unit rather than
+   * per batch, so a half or double batch deducts the right amount.
+   */
+  source_qty_per_unit: number | null;
+  /**
+   * Bangkok clock time (`HH:mm`) by which a batch has to be started to be
+   * ready tomorrow morning — the prep reminder. On the component rather than
+   * a named setting, so a third drink with its own steeped base gets one
+   * without a code change (CLAUDE.md §12).
+   */
+  prep_start_by: string | null;
   sort_order: number;
 }
 

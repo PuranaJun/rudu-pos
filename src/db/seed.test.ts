@@ -238,6 +238,31 @@ describe('upgrading a database seeded by an older build', () => {
     expect((await db.product.get('DRINK_PEAR'))?.base_price).toBe(6500);
   });
 
+  it('moves an edited prep time off the old setting and onto its component (v7)', async () => {
+    await ensureSeeded(db);
+    for (const component of await db.component.toArray()) {
+      delete (component as Partial<typeof component>).source_component_id;
+      delete (component as Partial<typeof component>).source_qty_per_unit;
+      delete (component as Partial<typeof component>).prep_start_by;
+      await db.component.put(component);
+    }
+    // The owner had moved red tea to 20:30 under v6.
+    await db.setting.put({ key: 'prep_reminder_red_tea', value: '20:30', synced_at: null });
+    await db.setting.put({ key: 'prep_reminder_white_tea', value: '19:00', synced_at: null });
+    await db.setting.put({ key: SEED_VERSION_KEY, value: 6, synced_at: null });
+
+    await ensureSeeded(db);
+
+    expect((await db.component.get('COMP_TEA_RED'))?.prep_start_by).toBe('20:30');
+    expect((await db.component.get('COMP_TEA_WHITE'))?.prep_start_by).toBe('19:00');
+    expect((await db.component.get('COMP_JELLY_CHRYS'))?.prep_start_by).toBeNull();
+    expect(await db.component.get('COMP_JELLY_WHITE_GOJI')).toMatchObject({
+      source_component_id: 'COMP_TEA_WHITE',
+      source_qty_per_unit: 0.5,
+    });
+    expect(await db.setting.get('prep_reminder_red_tea')).toBeUndefined();
+  });
+
   it('does not run again once it has upgraded', async () => {
     await rollBackToV1();
     expect(await ensureSeeded(db)).toBe(true);

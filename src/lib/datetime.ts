@@ -52,3 +52,41 @@ export function bangkokWeekday(iso: string): string {
     month: 'short',
   });
 }
+
+export function addHours(iso: string, hours: number): string {
+  return new Date(Date.parse(iso) + hours * 3_600_000).toISOString();
+}
+
+/**
+ * A Bangkok wall-clock time (`HH:mm`) on a Bangkok date (`YYYY-MM-DD`), as a
+ * UTC ISO string. Thailand keeps no daylight saving, so +07:00 always holds.
+ */
+export function bangkokAt(date: string, hhmm: string): string {
+  return new Date(`${date}T${hhmm}:00+07:00`).toISOString();
+}
+
+/**
+ * The value for an `<input type="datetime-local">`, in Bangkok time whatever
+ * timezone the device happens to be set to.
+ */
+export function toBangkokInput(iso: string): string {
+  return new Date(Date.parse(iso) + 7 * 3_600_000).toISOString().slice(0, 16);
+}
+
+/** The inverse of toBangkokInput. Null for an empty or half-typed value. */
+export function fromBangkokInput(value: string): string | null {
+  const at = Date.parse(`${value}:00+07:00`);
+  return Number.isNaN(at) ? null : new Date(at).toISOString();
+}
+
+/**
+ * A span for a countdown: `2 วัน`, `6 ชม.`, `40 นาที`. Rounded down for time
+ * left and up for time to wait, so it never promises more than there is.
+ */
+export function formatSpan(ms: number, round: 'down' | 'up' = 'down'): string {
+  const fit = round === 'up' ? Math.ceil : Math.floor;
+  const hours = ms / 3_600_000;
+  if (hours >= 24) return `${fit(hours / 24)} วัน`;
+  if (hours >= 1) return `${fit(hours)} ชม.`;
+  return `${Math.max(1, fit(ms / 60_000))} นาที`;
+}
