@@ -103,8 +103,7 @@ describe('a third drink, through settings alone', () => {
 
     // 5. Rung, it is priced and costed from the rows just typed in.
     await user.click(button);
-    await user.click(await enabledButton('เงินสด'));
-    await user.click(await screen.findByRole('button', { name: 'พอดี' }));
+    await user.click(await enabledButton('พอดี'));
 
     await waitFor(async () => {
       const line = (await db.sale_line.toArray()).find(

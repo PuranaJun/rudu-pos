@@ -9,7 +9,6 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import SellScreen from '../screens/SellScreen.tsx';
-import CashTenderPad from '../components/CashTenderPad.tsx';
 import PromptPayPanel from '../components/PromptPayPanel.tsx';
 import { db } from '../db/database.ts';
 import { ensureSeeded } from '../db/seed.ts';
@@ -71,26 +70,13 @@ describe('touch targets', () => {
       'ลดจำนวน',
       'ร้อน',
       'เย็น',
-      'เงินสด',
+      'พอดี',
+      '฿100',
       'QR',
     ]) {
       const button = screen.getByRole('button', { name });
       expect(button.className, String(name)).toMatch(LARGE);
     }
-  });
-
-  it('on the cash pad', () => {
-    render(
-      <CashTenderPad
-        due={4_000}
-        quickTender={[4_000, 5_000, 10_000]}
-        onConfirm={() => {}}
-        onCancel={() => {}}
-        busy={false}
-      />,
-    );
-    expect(undersized()).toEqual([]);
-    expect(screen.getByRole('button', { name: 'พอดี' }).className).toMatch(LARGE);
   });
 
   it('on the PromptPay panel', () => {

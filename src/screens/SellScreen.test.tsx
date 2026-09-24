@@ -273,8 +273,7 @@ describe('giving a cup away', () => {
       expect((await loadCart(db))[0]?.line.manual_discount_reason).toBe('LOYALTY_REDEEM');
     });
 
-    await user.click(await enabledButton('เงินสด'));
-    await user.click(await screen.findByRole('button', { name: 'พอดี' }));
+    await user.click(await enabledButton('พอดี'));
 
     await waitFor(async () => expect(await db.sale.count()).toBe(1));
 
@@ -294,8 +293,7 @@ describe('paying cash', () => {
     render(<SellScreen session={SESSION} />);
 
     await user.click(await tamarindButton());
-    await user.click(await enabledButton('เงินสด'));
-    await user.click(await screen.findByRole('button', { name: 'พอดี' }));
+    await user.click(await enabledButton('พอดี'));
 
     await waitFor(async () => expect(await db.sale.count()).toBe(1));
 
@@ -307,34 +305,39 @@ describe('paying cash', () => {
     expect(await loadCart(db)).toHaveLength(0);
   });
 
-  it('shows the change in the largest type on the screen, and that is the confirm', async () => {
+  it('takes a note in one tap and shows the change, largest on the screen', async () => {
     const user = userEvent.setup();
     render(<SellScreen session={SESSION} />);
 
     await user.click(await tamarindButton());
-    await user.click(await enabledButton('เงินสด'));
-    await user.click(await screen.findByRole('button', { name: '฿100' }));
-
-    const confirm = await screen.findByRole('button', { name: /ทอน/ });
-    expect(confirm).toHaveTextContent('฿60');
-
-    await user.click(confirm);
+    await user.click(await enabledButton('฿100'));
 
     await waitFor(async () => expect(await db.sale.count()).toBe(1));
-    expect((await db.sale.toArray())[0]?.cash_change).toBe(6000);
+    expect((await db.sale.toArray())[0]).toMatchObject({
+      total_net: 4_000,
+      cash_received: 10_000,
+      cash_change: 6_000,
+    });
+    const change = await screen.findByText('ทอน ฿60');
+    expect(change).toHaveClass('text-5xl');
+
+    // It stays until the next customer's first tap, not on a timer.
+    await user.click(await tamarindButton());
+    await waitFor(() => expect(screen.queryByText('ทอน ฿60')).not.toBeInTheDocument());
   });
 
-  it('will not take a tender smaller than the bill', async () => {
+  it('only offers notes that cover the bill', async () => {
     const user = userEvent.setup();
     render(<SellScreen session={SESSION} />);
 
     await user.click(await screen.findByRole('button', { name: /สาลี่ขาว/ }));
-    await user.click(await enabledButton('เงินสด'));
+    await enabledButton('พอดี');
 
-    // 59 THB due: 40 and 50 cannot pay it.
-    expect(await screen.findByRole('button', { name: '฿40' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: '฿50' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: '฿59' })).toBeEnabled();
+    // 59 THB due: a ฿40 or a ฿50 cannot pay it, so neither is there to be tapped.
+    const pay = screen.getByRole('group', { name: 'รับเงิน' });
+    expect(within(pay).queryByRole('button', { name: '฿40' })).not.toBeInTheDocument();
+    expect(within(pay).queryByRole('button', { name: '฿50' })).not.toBeInTheDocument();
+    expect(within(pay).getByRole('button', { name: '฿100' })).toBeEnabled();
   });
 
   it('writes the discount rows the day report reads', async () => {
@@ -344,8 +347,9 @@ describe('paying cash', () => {
     const tamarind = await tamarindButton();
     await user.click(tamarind);
     await user.click(tamarind);
-    await user.click(await enabledButton('เงินสด'));
-    await user.click(await screen.findByRole('button', { name: 'พอดี' }));
+    // Paid against the total on the screen, as the operator does.
+    expect(await screen.findByText('฿70')).toBeInTheDocument();
+    await user.click(await enabledButton('พอดี'));
 
     await waitFor(async () => expect(await db.sale.count()).toBe(1));
 
@@ -383,8 +387,7 @@ describe('the receipt', () => {
     render(<SellScreen session={SESSION} />);
 
     await user.click(await tamarindButton());
-    await user.click(await enabledButton('เงินสด'));
-    await user.click(await screen.findByRole('button', { name: 'พอดี' }));
+    await user.click(await enabledButton('พอดี'));
 
     await waitFor(async () => expect(await db.sale.count()).toBe(1));
     // Nothing opened by itself.
@@ -403,7 +406,7 @@ describe('the receipt', () => {
 describe('an empty cart', () => {
   it('cannot be paid for', async () => {
     render(<SellScreen session={SESSION} />);
-    expect(await screen.findByRole('button', { name: 'เงินสด' })).toBeDisabled();
+    expect(await screen.findByRole('button', { name: 'พอดี' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'QR' })).toBeDisabled();
   });
 });
@@ -473,21 +476,20 @@ describe('crash safety', () => {
     expect(await screen.findByText(/ฟรี — แลกแสตมป์/)).toBeInTheDocument();
   });
 
-  it('survives a reload on the payment screen, and does not resume a half tender', async () => {
+  it('survives a reload on the payment screen, and does not resume a half-taken payment', async () => {
     const user = userEvent.setup();
     render(<SellScreen session={SESSION} />);
 
     await user.click(await tamarindButton());
-    await user.click(await enabledButton('เงินสด'));
-    await user.click(await screen.findByRole('button', { name: '฿100' }));
-    expect(await screen.findByRole('button', { name: /ทอน/ })).toBeInTheDocument();
+    await user.click(await enabledButton('QR'));
+    expect(await screen.findByRole('button', { name: 'ลูกค้าจ่ายแล้ว' })).toBeInTheDocument();
 
     await reload();
 
-    // Back on the sell screen with the cart intact: a tender half entered
-    // before the phone died is not something to carry forward.
-    expect(screen.getByRole('button', { name: 'เงินสด' })).toBeEnabled();
-    expect(screen.queryByRole('button', { name: /ทอน/ })).not.toBeInTheDocument();
+    // Back on the sell screen with the cart intact: a payment the phone died
+    // in the middle of is not something to carry forward unconfirmed.
+    expect(screen.getByRole('button', { name: 'พอดี' })).toBeEnabled();
+    expect(screen.queryByRole('button', { name: 'ลูกค้าจ่ายแล้ว' })).not.toBeInTheDocument();
     expect(await loadCart(db)).toHaveLength(1);
     expect(await db.sale.count()).toBe(0);
   });
@@ -497,8 +499,7 @@ describe('crash safety', () => {
     render(<SellScreen session={SESSION} />);
 
     await user.click(await tamarindButton());
-    await user.click(await enabledButton('เงินสด'));
-    await user.click(await screen.findByRole('button', { name: 'พอดี' }));
+    await user.click(await enabledButton('พอดี'));
     await waitFor(async () => expect(await db.sale.count()).toBe(1));
 
     await reload();
@@ -513,8 +514,7 @@ describe('the day’s sales', () => {
     render(<SellScreen session={SESSION} />);
 
     await user.click(await tamarindButton());
-    await user.click(await enabledButton('เงินสด'));
-    await user.click(await screen.findByRole('button', { name: 'พอดี' }));
+    await user.click(await enabledButton('พอดี'));
     await waitFor(async () => expect(await db.sale.count()).toBe(1));
 
     await user.click(screen.getByLabelText('รายการขายวันนี้'));
@@ -532,8 +532,7 @@ describe('the day’s sales', () => {
     const before = (await tamarindButton()).textContent ?? '';
 
     await user.click(await tamarindButton());
-    await user.click(await enabledButton('เงินสด'));
-    await user.click(await screen.findByRole('button', { name: 'พอดี' }));
+    await user.click(await enabledButton('พอดี'));
     await waitFor(async () => expect(await db.sale.count()).toBe(1));
 
     await user.click(screen.getByLabelText('รายการขายวันนี้'));
@@ -572,10 +571,10 @@ describe('today, live', () => {
   async function pay(method: 'เงินสด' | 'QR') {
     const user = userEvent.setup();
     await user.click(await tamarindButton());
-    await user.click(await enabledButton(method));
     if (method === 'เงินสด') {
-      await user.click(await screen.findByRole('button', { name: 'พอดี' }));
+      await user.click(await enabledButton('พอดี'));
     } else {
+      await user.click(await enabledButton('QR'));
       await user.click(await screen.findByRole('button', { name: 'ลูกค้าจ่ายแล้ว' }));
     }
   }

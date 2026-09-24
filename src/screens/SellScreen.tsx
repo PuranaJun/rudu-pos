@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import DrinkButton from '../components/DrinkButton.tsx';
 import CartLineRow from '../components/CartLineRow.tsx';
-import CashTenderPad from '../components/CashTenderPad.tsx';
+import PayButtons from '../components/PayButtons.tsx';
 import PromptPayPanel from '../components/PromptPayPanel.tsx';
 import ReceiptSheet from '../components/ReceiptSheet.tsx';
 import SalesListScreen from './SalesListScreen.tsx';
@@ -37,7 +37,7 @@ import {
   stepQty,
   toggleModifier,
 } from '../db/cart-repo.ts';
-import { completeSale, priceCart, type Receipt } from '../db/sale-repo.ts';
+import { CartChangedError, completeSale, priceCart, type Receipt } from '../db/sale-repo.ts';
 import { voidSale } from '../db/stock-repo.ts';
 import { sessionBusinessDate } from '../db/session-repo.ts';
 import type { CashSession, PaymentMethod, Product } from '../db/types.ts';
@@ -87,8 +87,11 @@ export default function SellScreen({
   const sales = useTodaySales(catalog, businessDate);
 
   const [pendingSoldOut, setPendingSoldOut] = useState<Product | null>(null);
-  const [tendering, setTendering] = useState<PaymentMethod | null>(null);
+  // Only PromptPay has a screen of its own: cash completes from the footer.
+  const [showQr, setShowQr] = useState(false);
   const [busy, setBusy] = useState(false);
+  // What the last sale was, until the next drink is tapped — long enough to
+  // read the change at arm's length, with no timer to clear it.
   const [done, setDone] = useState<{ receipt: Receipt; shortfalls: number } | null>(null);
   const [showReceipt, setShowReceipt] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -144,6 +147,8 @@ export default function SellScreen({
     const { cups, variantId } = stockFor(product);
     if (!variantId) return;
 
+    setDone(null);
+    setError(null);
     if (cups <= 0) {
       setPendingSoldOut(product);
       return;
@@ -173,33 +178,27 @@ export default function SellScreen({
       businessDate,
     })
       .then((result) => {
-        setTendering(null);
+        setError(null);
+        setShowQr(false);
         setDone({ receipt: result.receipt, shortfalls: result.shortfalls.length });
-        window.setTimeout(() => setDone(null), 6000);
       })
-      .catch((cause: unknown) => setError(`บันทึกไม่สำเร็จ: ${String(cause)}`))
+      .catch((cause: unknown) =>
+        // A cart that moved under the tap is not a failure to report as one:
+        // the screen has the new total now, and the next tap will ring it.
+        setError(
+          cause instanceof CartChangedError ? cause.message : `บันทึกไม่สำเร็จ: ${String(cause)}`,
+        ),
+      )
       .finally(() => setBusy(false));
   }
 
-  if (tendering === 'CASH') {
-    return (
-      <CashTenderPad
-        due={priced.totalNet}
-        quickTender={settings.quickTender}
-        busy={busy}
-        onCancel={() => setTendering(null)}
-        onConfirm={(received) => confirmPayment('CASH', received)}
-      />
-    );
-  }
-
-  if (tendering === 'PROMPTPAY') {
+  if (showQr) {
     return (
       <PromptPayPanel
         due={priced.totalNet}
         qrImage={settings.promptPayQrImage}
         busy={busy}
-        onCancel={() => setTendering(null)}
+        onCancel={() => setShowQr(false)}
         onConfirm={() => confirmPayment('PROMPTPAY', null)}
       />
     );
@@ -339,10 +338,18 @@ export default function SellScreen({
 
             {done ? (
               <div role="status" className="mb-2 flex items-center justify-between gap-2">
-                <p className="text-xl font-bold">
-                  ขายแล้ว
-                  {done.shortfalls > 0 ? ` — สต็อกติดลบ ${done.shortfalls} รายการ` : ''}
-                </p>
+                {done.receipt.cashChange ? (
+                  // Read at arm's length with the customer watching: the
+                  // largest type on the screen.
+                  <p className="text-5xl leading-none font-bold tabular-nums">
+                    ทอน {formatTHB(done.receipt.cashChange)}
+                  </p>
+                ) : (
+                  <p className="text-xl font-bold">ขายแล้ว {formatTHB(done.receipt.totalNet)}</p>
+                )}
+                {done.shortfalls > 0 ? (
+                  <p className="text-lg font-bold">สต็อกติดลบ {done.shortfalls} รายการ</p>
+                ) : null}
                 <button
                   type="button"
                   onClick={() => setShowReceipt(true)}
@@ -381,24 +388,13 @@ export default function SellScreen({
               <p className="text-3xl font-bold tabular-nums">{formatTHB(priced.totalNet)}</p>
             </div>
 
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setTendering('CASH')}
-                disabled={cart.length === 0 || busy}
-                className="bg-brand-2 min-h-touch-lg flex-1 rounded-2xl text-2xl font-bold text-white active:brightness-90 disabled:bg-paper-sunk disabled:text-ink-soft disabled:border-line"
-              >
-                เงินสด
-              </button>
-              <button
-                type="button"
-                onClick={() => setTendering('PROMPTPAY')}
-                disabled={cart.length === 0 || busy}
-                className="bg-ink min-h-touch-lg flex-1 rounded-2xl text-2xl font-bold text-white active:brightness-90 disabled:bg-paper-sunk disabled:text-ink-soft disabled:border-line"
-              >
-                QR
-              </button>
-            </div>
+            <PayButtons
+              due={priced.totalNet}
+              quickTender={settings.quickTender}
+              disabled={cart.length === 0 || busy}
+              onCash={(received) => confirmPayment('CASH', received)}
+              onQr={() => setShowQr(true)}
+            />
 
             <div className="mt-1 flex justify-center">
               <VersionStamp />

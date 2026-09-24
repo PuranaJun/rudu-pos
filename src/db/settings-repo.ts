@@ -20,7 +20,6 @@ export interface PosSettings extends PromotionSettings {
   brandingLineTh: string;
   /** A data URL the operator uploads once. The printed QR is the real one. */
   promptPayQrImage: string | null;
-  vatRegistered: boolean;
   operators: string[];
   /** One-tap choices when voiding. A void always carries one. */
   voidReasons: string[];
@@ -43,7 +42,6 @@ const FALLBACK: PosSettings = {
   loyaltyStampsRequired: 10,
   brandingLineTh: '',
   promptPayQrImage: null,
-  vatRegistered: false,
   operators: [],
   voidReasons: ['ยกเลิก'],
   annualRevenueThreshold: 180_000_000,
@@ -84,7 +82,6 @@ export async function loadSettings(db: RuduPosDB = defaultDb): Promise<PosSettin
     loyaltyStampsRequired: num('loyalty_stamps_required', FALLBACK.loyaltyStampsRequired),
     brandingLineTh: str('branding_line_th', '') ?? '',
     promptPayQrImage: str('promptpay_qr_image', null),
-    vatRegistered: bool('vat_registered', FALLBACK.vatRegistered),
     operators: (() => {
       const value = values.get('operators');
       return Array.isArray(value) ? value.map(String) : FALLBACK.operators;

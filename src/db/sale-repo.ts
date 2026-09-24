@@ -22,7 +22,7 @@ import { deductForSale, type Shortfall } from '../domain/stock.ts';
 import { loadStockSnapshot } from './stock-repo.ts';
 import { bangkokDate } from '../lib/datetime.ts';
 import { newId, nowIso } from '../lib/id.ts';
-import type { CartItem } from './cart-repo.ts';
+import { loadCart, type CartItem } from './cart-repo.ts';
 
 export interface CompletedSale {
   saleId: string;
@@ -51,6 +51,31 @@ export interface Receipt {
   paymentMethod: PaymentMethod;
   cashReceived: number | null;
   cashChange: number | null;
+}
+
+/** The cart moved between the screen drawing it and the tap. Nothing was recorded. */
+export class CartChangedError extends Error {
+  constructor() {
+    super('ตะกร้าเพิ่งเปลี่ยน — ดูยอดอีกครั้งแล้วกดใหม่');
+    this.name = 'CartChangedError';
+  }
+}
+
+/** Everything about a cart that changes what a sale records. */
+function signature(cart: readonly CartItem[]): string {
+  return cart
+    .map(({ line, modifierIds }) =>
+      [
+        line.id,
+        line.variant_id,
+        line.qty,
+        line.manual_discount_reason ?? '',
+        line.sold_out_override,
+        [...modifierIds].sort().join('+'),
+      ].join(':'),
+    )
+    .sort()
+    .join('|');
 }
 
 export interface PaymentDetails {
@@ -114,6 +139,13 @@ export async function completeSale(
       db.cart_line_mod,
     ],
     async () => {
+      // The cart as it is now, not as the screen last drew it. A tap that
+      // landed a moment before this one (the second cup, a topping) may not
+      // have repainted yet: ringing the drawn cart would record the wrong sale
+      // and then clear away the cup it missed. Refuse, and let the operator
+      // pay against the total they can see.
+      if (signature(await loadCart(db)) !== signature(cart)) throw new CartChangedError();
+
       const lines: SaleLine[] = [];
       const lineMods: SaleLineMod[] = [];
       const lineDiscounts: SaleLineDiscount[] = [];
