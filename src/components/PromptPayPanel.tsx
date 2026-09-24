@@ -25,7 +25,7 @@ export default function PromptPayPanel({ due, qrImage, onConfirm, onCancel, busy
         <button
           type="button"
           onClick={onCancel}
-          className="min-h-touch text-ink-soft text-xl font-bold"
+          className="min-h-touch-lg min-w-touch-lg text-ink-soft pr-3 text-xl font-bold"
         >
           ← กลับ
         </button>
@@ -42,7 +42,7 @@ export default function PromptPayPanel({ due, qrImage, onConfirm, onCancel, busy
         ) : (
           <div className="border-line flex flex-col items-center gap-2 rounded-2xl border-4 border-dashed p-8 text-center">
             <p className="text-3xl font-bold">ใช้ QR ที่พิมพ์ไว้</p>
-            <p className="text-ink-soft text-lg font-semibold">ยังไม่ได้ใส่รูป QR ในตั้งค่า</p>
+            <p className="text-ink-soft text-lg font-bold">ยังไม่ได้ใส่รูป QR ในตั้งค่า</p>
           </div>
         )}
       </div>
@@ -55,7 +55,7 @@ export default function PromptPayPanel({ due, qrImage, onConfirm, onCancel, busy
           type="button"
           onClick={onConfirm}
           disabled={busy}
-          className="bg-ink min-h-touch-lg text-paper w-full rounded-2xl py-5 text-3xl font-bold active:brightness-90 disabled:opacity-40"
+          className="bg-ink min-h-touch-lg text-paper w-full rounded-2xl py-5 text-3xl font-bold active:brightness-90 disabled:bg-paper-sunk disabled:text-ink-soft disabled:border-line"
         >
           ลูกค้าจ่ายแล้ว
         </button>

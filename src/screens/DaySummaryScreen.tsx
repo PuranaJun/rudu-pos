@@ -38,7 +38,7 @@ export default function DaySummaryScreen({ sessionId, onDone, doneLabel = 'เ�
     >
       <header className="safe-top border-line border-b px-4 pb-2">
         <h1 className="text-3xl font-bold">สรุปวัน</h1>
-        <p className="text-ink-soft text-lg font-semibold">{bangkokWeekday(dayDate)}</p>
+        <p className="text-ink-soft text-lg font-bold">{bangkokWeekday(dayDate)}</p>
       </header>
 
       <main className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
@@ -50,11 +50,11 @@ export default function DaySummaryScreen({ sessionId, onDone, doneLabel = 'เ�
           <p className="text-2xl font-bold">
             {breakeven.past ? 'ผ่านจุดคุ้มทุน' : 'ยังไม่ถึงจุดคุ้มทุน'}
           </p>
-          <p className="text-lg font-semibold">
+          <p className="text-lg font-bold">
             {breakeven.cups}/{breakeven.cupsTarget} แก้ว · กำไรขั้นต้น{' '}
             {formatTHB(breakeven.grossProfit)} จาก {formatTHB(breakeven.fixedCost)}
           </p>
-          <p className="text-lg font-semibold">หลังหักของเสีย {formatTHB(breakeven.afterWaste)}</p>
+          <p className="text-lg font-bold">หลังหักของเสีย {formatTHB(breakeven.afterWaste)}</p>
         </div>
 
         <dl className="mt-3 grid grid-cols-2 gap-2">
@@ -160,7 +160,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div className="border-line flex items-baseline justify-between gap-3 border-b py-2 text-lg font-semibold">
+    <div className="border-line flex items-baseline justify-between gap-3 border-b py-2 text-lg font-bold">
       <dt>{label}</dt>
       <dd className="font-bold tabular-nums">{value}</dd>
     </div>

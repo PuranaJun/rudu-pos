@@ -62,7 +62,8 @@ export default function SettingsScreen({ onClose }: { onClose: () => void }) {
         </nav>
       </header>
 
-      <main className="min-h-0 flex-1 overflow-y-auto px-4">
+      {/* No footer bar here, so the list itself keeps clear of the home indicator. */}
+      <main className="safe-bottom min-h-0 flex-1 overflow-y-auto px-4">
         {!catalog || !settings ? null : tab === 'MENU' ? (
           <MenuSettings catalog={catalog} />
         ) : tab === 'COMPONENTS' ? (

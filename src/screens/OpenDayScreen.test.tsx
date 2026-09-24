@@ -261,3 +261,21 @@ describe('the choices', () => {
     });
   });
 });
+
+describe('the storage note', () => {
+  it('is shown on open day until the operator says they have read it', async () => {
+    await stock('CUT');
+    await db.setting.put({ key: 'storage_persist_note', value: 'PENDING', synced_at: null });
+    const user = userEvent.setup();
+    render(<App />);
+
+    const note = await screen.findByText(/ไม่รับประกันว่าจะเก็บข้อมูลไว้ถาวร/);
+    expect(note).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'รับทราบ' }));
+
+    await waitFor(() =>
+      expect(screen.queryByText(/ไม่รับประกันว่าจะเก็บข้อมูลไว้ถาวร/)).not.toBeInTheDocument(),
+    );
+    expect((await db.setting.get('storage_persist_note'))?.value).toBe('SEEN');
+  });
+});

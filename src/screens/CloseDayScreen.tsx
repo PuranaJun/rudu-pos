@@ -115,7 +115,7 @@ export default function CloseDayScreen({ session, onCancel, onClosed }: Props) {
     >
       <header className="safe-top border-line border-b px-4 pb-2">
         <h1 className="text-3xl font-bold">ปิดร้าน</h1>
-        <p className="text-ink-soft text-lg font-semibold">
+        <p className="text-ink-soft text-lg font-bold">
           {step === 'STOCK' ? '1 · ของที่เหลือ' : '2 · นับเงิน'}
         </p>
       </header>
@@ -123,7 +123,7 @@ export default function CloseDayScreen({ session, onCancel, onClosed }: Props) {
       <main className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
         {step === 'STOCK' ? (
           lines.length === 0 ? (
-            <p className="py-6 text-lg font-semibold">ไม่มีของเหลือ</p>
+            <p className="py-6 text-lg font-bold">ไม่มีของเหลือ</p>
           ) : (
             <ul aria-label="ของที่เหลือ">
               {rows.map((row) => {
@@ -232,7 +232,7 @@ export default function CloseDayScreen({ session, onCancel, onClosed }: Props) {
           )
         ) : (
           <section aria-label="นับเงิน" className="pt-4">
-            <dl className="text-lg font-semibold">
+            <dl className="text-lg font-bold">
               <div className="flex justify-between">
                 <dt>เงินทอนเริ่มต้น</dt>
                 <dd className="tabular-nums">{formatTHB(session.opening_float)}</dd>
@@ -386,7 +386,7 @@ export default function CloseDayScreen({ session, onCancel, onClosed }: Props) {
                   setEditing(null);
                   setStep('CASH');
                 }}
-                className="bg-ink min-h-touch-lg flex-1 rounded-2xl text-2xl font-bold text-white disabled:opacity-40"
+                className="bg-ink min-h-touch-lg flex-1 rounded-2xl text-2xl font-bold text-white disabled:bg-paper-sunk disabled:text-ink-soft disabled:border-line"
               >
                 ต่อไป: นับเงิน
               </button>
@@ -405,7 +405,7 @@ export default function CloseDayScreen({ session, onCancel, onClosed }: Props) {
               type="button"
               disabled={counted === null || busy}
               onClick={close}
-              className="bg-brand min-h-touch-lg flex-1 rounded-2xl text-2xl font-bold text-white disabled:opacity-40"
+              className="bg-brand min-h-touch-lg flex-1 rounded-2xl text-2xl font-bold text-white disabled:bg-paper-sunk disabled:text-ink-soft disabled:border-line"
             >
               ปิดร้าน
             </button>

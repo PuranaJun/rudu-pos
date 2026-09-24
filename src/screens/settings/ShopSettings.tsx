@@ -194,7 +194,7 @@ function QrUpload({ current }: { current: string | null }) {
           className="border-line mt-2 w-48 rounded-xl border-2"
         />
       ) : (
-        <p className="mt-1 text-lg font-semibold">ยังไม่มีรูป</p>
+        <p className="mt-1 text-lg font-bold">ยังไม่มีรูป</p>
       )}
       <label className="bg-ink min-h-touch mt-2 flex w-full items-center justify-center rounded-xl text-lg font-bold text-white">
         {current ? 'เปลี่ยนรูป' : 'เลือกรูป'}

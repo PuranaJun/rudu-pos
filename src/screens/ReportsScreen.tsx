@@ -38,7 +38,7 @@ export default function ReportsScreen({ onClose }: { onClose: () => void }) {
         <section aria-label="วันที่ปิดแล้ว" className="pt-5">
           <h2 className="border-line border-b pb-1 text-xl font-bold">วันที่ปิดแล้ว</h2>
           {days === undefined ? null : days.length === 0 ? (
-            <p className="py-4 text-lg font-semibold">ยังไม่มีวันที่ปิดร้าน</p>
+            <p className="py-4 text-lg font-bold">ยังไม่มีวันที่ปิดร้าน</p>
           ) : (
             <ul>
               {days.map((day) => (
@@ -56,7 +56,7 @@ export default function ReportsScreen({ onClose }: { onClose: () => void }) {
                         {formatTHB(day.revenue)}
                       </span>
                     </span>
-                    <span className="flex flex-wrap gap-x-3 text-base font-semibold">
+                    <span className="flex flex-wrap gap-x-3 text-base font-bold">
                       <span>{day.units} แก้ว</span>
                       <span className={day.wasteCost > 0 ? 'bg-today rounded px-1' : ''}>
                         ของเสีย {formatTHB(day.wasteCost)}

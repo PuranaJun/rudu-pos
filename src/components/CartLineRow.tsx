@@ -58,7 +58,7 @@ export default function CartLineRow({
         <div className="min-w-0 flex-1">
           <p className="text-xl leading-tight font-bold">{product.name_short_th}</p>
           {item.modifierIds.length > 0 ? (
-            <p className="text-ink-soft text-base font-semibold">
+            <p className="text-ink-soft text-base font-bold">
               {item.modifierIds
                 .map((id) => catalog.modifiers.get(id)?.name_th)
                 .filter(Boolean)
@@ -78,7 +78,7 @@ export default function CartLineRow({
             type="button"
             aria-label="ลดจำนวน"
             onClick={() => onStep(-1)}
-            className="border-line size-touch rounded-xl border-2 text-2xl font-bold active:bg-paper-sunk"
+            className="border-line size-touch-lg rounded-xl border-2 text-2xl font-bold active:bg-paper-sunk"
           >
             −
           </button>
@@ -87,7 +87,7 @@ export default function CartLineRow({
             type="button"
             aria-label="เพิ่มจำนวน"
             onClick={() => onStep(1)}
-            className="border-line size-touch rounded-xl border-2 text-2xl font-bold active:bg-paper-sunk"
+            className="border-line size-touch-lg rounded-xl border-2 text-2xl font-bold active:bg-paper-sunk"
           >
             +
           </button>
@@ -107,7 +107,7 @@ export default function CartLineRow({
                   )
                 }
                 aria-pressed={sibling.id === variant.id}
-                className={`min-h-touch rounded-xl px-4 text-lg font-bold ${
+                className={`min-h-touch-lg min-w-touch-lg rounded-xl px-4 text-lg font-bold ${
                   sibling.id === variant.id ? 'bg-ink text-paper' : 'border-line text-ink border-2'
                 }`}
               >
@@ -122,7 +122,7 @@ export default function CartLineRow({
             onClick={() => setShowModifiers((open) => !open)}
             aria-expanded={showModifiers}
             aria-label="เพิ่มท็อปปิ้ง"
-            className="border-line min-h-touch text-ink rounded-xl border-2 px-4 text-lg font-bold"
+            className="border-line min-h-touch-lg min-w-touch-lg text-ink rounded-xl border-2 px-4 text-lg font-bold"
           >
             {showModifiers ? '−' : '+'}
           </button>
@@ -133,7 +133,7 @@ export default function CartLineRow({
           onClick={() => setShowReasons((open) => !open)}
           aria-expanded={showReasons}
           aria-label="ลดราคา"
-          className="border-line min-h-touch text-ink rounded-xl border-2 px-4 text-lg font-bold"
+          className="border-line min-h-touch-lg min-w-touch-lg text-ink rounded-xl border-2 px-4 text-lg font-bold"
         >
           ฿0
         </button>
@@ -147,7 +147,7 @@ export default function CartLineRow({
               type="button"
               onClick={() => onSetDiscountReason(givenAway === reason ? null : reason)}
               aria-pressed={givenAway === reason}
-              className={`min-h-touch rounded-xl px-4 text-lg font-bold ${
+              className={`min-h-touch-lg min-w-touch-lg rounded-xl px-4 text-lg font-bold ${
                 givenAway === reason ? 'bg-ink text-paper' : 'border-line text-ink border-2'
               }`}
             >
@@ -165,7 +165,7 @@ export default function CartLineRow({
               type="button"
               onClick={() => onToggleModifier(modifier.id)}
               aria-pressed={chosen.has(modifier.id)}
-              className={`min-h-touch rounded-xl px-4 text-lg font-bold ${
+              className={`min-h-touch-lg min-w-touch-lg rounded-xl px-4 text-lg font-bold ${
                 chosen.has(modifier.id) ? 'bg-ink text-paper' : 'border-line text-ink border-2'
               }`}
             >

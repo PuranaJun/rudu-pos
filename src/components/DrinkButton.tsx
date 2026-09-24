@@ -44,19 +44,25 @@ export default function DrinkButton({
       aria-label={`${product.name_short_th} ${formatTHB(price)}`}
       style={{ backgroundColor: soldOut ? 'var(--color-soldout)' : `var(${colorVar})` }}
       className={`relative flex w-full flex-col justify-between rounded-2xl px-4 text-left text-white active:brightness-90 ${
-        large ? 'min-h-[7.5rem] flex-1 py-4' : 'min-h-touch-lg py-3'
+        large
+          ? 'tablet:min-h-[13rem] tablet:px-6 min-h-[7.5rem] flex-1 py-4'
+          : 'min-h-touch-lg py-3'
       }`}
     >
       <span className="flex w-full items-start justify-between gap-2">
-        <span className={`font-bold ${large ? 'text-3xl' : 'text-2xl'} leading-tight`}>
+        <span
+          className={`font-bold ${large ? 'tablet:text-5xl text-3xl' : 'tablet:text-3xl text-2xl'} leading-tight`}
+        >
           {product.name_short_th}
         </span>
-        <span className={`font-bold ${large ? 'text-2xl' : 'text-xl'} shrink-0 tabular-nums`}>
+        <span
+          className={`font-bold ${large ? 'tablet:text-4xl text-2xl' : 'tablet:text-2xl text-xl'} shrink-0 tabular-nums`}
+        >
           {formatTHB(price)}
         </span>
       </span>
 
-      <span className="mt-2 text-base leading-snug font-semibold">
+      <span className="tablet:text-xl mt-2 text-base leading-snug font-bold">
         {soldOut ? (
           <span>หมด{limitingComponentName ? ` — ${limitingComponentName}` : ''}</span>
         ) : Number.isFinite(cups) ? (

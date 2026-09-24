@@ -29,9 +29,9 @@ export default function ReceiptSheet({ receipt, onClose }: Props) {
         <div className="py-4 text-center">
           <p className="text-3xl font-bold">ฤดูชา</p>
           {receipt.brandingLineTh ? (
-            <p className="text-ink-soft text-lg font-semibold">{receipt.brandingLineTh}</p>
+            <p className="text-ink-soft text-lg font-bold">{receipt.brandingLineTh}</p>
           ) : null}
-          <p className="text-ink-soft mt-1 text-base font-semibold">
+          <p className="text-ink-soft mt-1 text-base font-bold">
             {formatBangkok(receipt.createdAt)}
           </p>
         </div>
@@ -46,12 +46,10 @@ export default function ReceiptSheet({ receipt, onClose }: Props) {
                 <span className="text-xl font-bold tabular-nums">{formatTHB(line.net)}</span>
               </div>
               {line.modifiers.length > 0 ? (
-                <p className="text-ink-soft text-base font-semibold">
-                  {line.modifiers.join(' · ')}
-                </p>
+                <p className="text-ink-soft text-base font-bold">{line.modifiers.join(' · ')}</p>
               ) : null}
               {line.discounts.map((discount, discountIndex) => (
-                <p key={discountIndex} className="flex justify-between text-base font-semibold">
+                <p key={discountIndex} className="flex justify-between text-base font-bold">
                   <span>
                     {DISCOUNT_REASON_TH[discount.label as DiscountReason] ?? discount.label}
                   </span>
@@ -62,7 +60,7 @@ export default function ReceiptSheet({ receipt, onClose }: Props) {
           ))}
         </ul>
 
-        <dl className="mt-3 space-y-1 text-lg font-semibold">
+        <dl className="mt-3 space-y-1 text-lg font-bold">
           <div className="flex justify-between">
             <dt>รวม</dt>
             <dd className="tabular-nums">{formatTHB(receipt.totalGross)}</dd>

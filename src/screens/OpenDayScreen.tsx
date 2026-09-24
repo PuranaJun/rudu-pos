@@ -19,7 +19,14 @@ import {
   type BatchOnHand,
   type JellyToCut,
 } from '../domain/open-day.ts';
-import { useCostCatalog, useLastOperator, useSettings, useStockSnapshot } from '../db/hooks.ts';
+import {
+  useCostCatalog,
+  useLastOperator,
+  useSettings,
+  useStockSnapshot,
+  useStorageNote,
+} from '../db/hooks.ts';
+import { dismissStorageNote } from '../db/storage-note.ts';
 import { adjustBatch, commitCut } from '../db/stock-repo.ts';
 import { openSession } from '../db/session-repo.ts';
 import type { Component } from '../db/types.ts';
@@ -41,6 +48,7 @@ export default function OpenDayScreen() {
   const stock = useStockSnapshot();
   const settings = useSettings();
   const lastOperator = useLastOperator();
+  const storageNote = useStorageNote();
 
   const [now] = useState(nowIso);
   const [operator, setOperator] = useState<string | null>(null);
@@ -97,7 +105,7 @@ export default function OpenDayScreen() {
       <header className="safe-top border-line flex items-start justify-between gap-3 border-b px-4 pb-2">
         <div>
           <h1 className="text-3xl font-bold">เปิดร้าน</h1>
-          <p className="text-ink-soft text-lg font-semibold">{bangkokWeekday(now)}</p>
+          <p className="text-ink-soft text-lg font-bold">{bangkokWeekday(now)}</p>
         </div>
         <div className="flex flex-wrap justify-end gap-2">
           <button
@@ -127,6 +135,22 @@ export default function OpenDayScreen() {
       <PrepBanner reminders={reminders} onTap={() => setShowProduction(true)} />
 
       <main className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
+        {storageNote ? (
+          <div role="alert" className="bg-today mt-3 rounded-xl px-4 py-3">
+            <p className="text-lg font-bold">
+              เครื่องนี้ไม่รับประกันว่าจะเก็บข้อมูลไว้ถาวร — ถ้าพื้นที่เต็ม ข้อมูลอาจหาย
+            </p>
+            <p className="text-lg font-bold">เปิดแอปจากไอคอนบนหน้าจอโฮมเสมอ และสำรองข้อมูลทุกวัน</p>
+            <button
+              type="button"
+              onClick={() => void dismissStorageNote()}
+              className="bg-ink min-h-touch mt-2 w-full rounded-xl text-lg font-bold text-white"
+            >
+              รับทราบ
+            </button>
+          </div>
+        ) : null}
+
         {/* Only once the year is close to the VAT threshold — every morning, then. */}
         <div className="pt-3 empty:hidden">
           <AnnualRevenueCard year={bangkokDate(now).slice(0, 4)} onlyWhenNear />
@@ -183,7 +207,7 @@ export default function OpenDayScreen() {
             >
               <span>
                 <span className="block text-xl font-bold">โปรวันฝนตก</span>
-                <span className="block text-lg font-semibold">
+                <span className="block text-lg font-bold">
                   {rainyVariant.name_th} {formatTHB(rainyPrice)} →{' '}
                   {formatTHB(rainyPrice - settings.rainyDayAmount)}
                 </span>
@@ -199,7 +223,7 @@ export default function OpenDayScreen() {
           {missing.length > 0 ? (
             <div className="bg-today mt-2 rounded-xl px-4 py-3">
               <p className="text-xl font-bold">ไม่มีของพร้อมขาย</p>
-              <p className="text-lg font-semibold">
+              <p className="text-lg font-bold">
                 {missing.map((component) => component.name_th).join(' · ')}
               </p>
             </div>
@@ -309,7 +333,7 @@ function FloatEditor({ value, onChange }: { value: number; onChange: (satang: nu
           onChange(toSatang(baht));
           setEditing(null);
         }}
-        className="bg-brand-2 min-h-touch-lg shrink-0 rounded-xl px-4 text-xl font-bold text-white disabled:opacity-40"
+        className="bg-brand-2 min-h-touch-lg shrink-0 rounded-xl px-4 text-xl font-bold text-white disabled:bg-paper-sunk disabled:text-ink-soft disabled:border-line"
       >
         ตกลง
       </button>
@@ -376,9 +400,7 @@ function SlabCutter({
   return (
     <div className="mt-3">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-lg font-semibold">
-          ในถาด {formatQty(slab.remaining, component.unit)}
-        </span>
+        <span className="text-lg font-bold">ในถาด {formatQty(slab.remaining, component.unit)}</span>
         <ShelfBadge status={slab.status} expiresAt={slab.expiresAt} />
       </div>
       <div className="mt-2 flex gap-2">
@@ -397,7 +419,7 @@ function SlabCutter({
           type="button"
           disabled={!valid}
           onClick={() => onCut(value)}
-          className="bg-brand min-h-touch-lg shrink-0 rounded-xl px-5 text-xl font-bold text-white disabled:opacity-40"
+          className="bg-brand min-h-touch-lg shrink-0 rounded-xl px-5 text-xl font-bold text-white disabled:bg-paper-sunk disabled:text-ink-soft disabled:border-line"
         >
           ตัด {valid ? formatQty(value, component.unit) : ''}
         </button>
@@ -443,7 +465,7 @@ function BatchRow({
             onAdjust(value);
             setEditing(null);
           }}
-          className="bg-brand-2 min-h-touch-lg shrink-0 rounded-xl px-4 text-xl font-bold text-white disabled:opacity-40"
+          className="bg-brand-2 min-h-touch-lg shrink-0 rounded-xl px-4 text-xl font-bold text-white disabled:bg-paper-sunk disabled:text-ink-soft disabled:border-line"
         >
           บันทึก
         </button>

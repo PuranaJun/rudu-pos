@@ -5,10 +5,12 @@ import { ensureDeviceId } from './db/device.ts';
 import { ensureSeeded } from './db/seed.ts';
 import { promoteReadyBatches } from './db/stock-repo.ts';
 import { requestPersistentStorage } from './lib/storage.ts';
+import { recordStorageDurability } from './db/storage-note.ts';
 import './index.css';
 
-// iOS can evict IndexedDB. Ask for durable storage on first launch; never block on it.
-void requestPersistentStorage();
+// iOS can evict IndexedDB. Ask for durable storage on launch, never block on
+// it, and leave a one-time note for the operator if the answer is no.
+void requestPersistentStorage().then((result) => recordStorageDurability(result));
 
 // First launch loads the catalog. Deliberately not awaited: the shell renders
 // immediately and useLiveQuery picks the rows up the moment they land.

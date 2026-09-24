@@ -15,6 +15,7 @@ import type { CostCatalog } from '../domain/cost.ts';
 import type { StockSnapshot } from '../domain/stock.ts';
 import { bangkokDate } from '../lib/datetime.ts';
 import { DEVICE_ID_KEY } from './device.ts';
+import { STORAGE_NOTE_KEY } from './storage-note.ts';
 import { loadSettings, type PosSettings } from './settings-repo.ts';
 import { loadSalesForDate, type SaleSummary } from './sale-repo.ts';
 import type { ClosedDay, DayTotals, DaySummary } from '../domain/reporting.ts';
@@ -97,4 +98,10 @@ export function useExpectedCash(session: CashSession): number | undefined {
 /** A day's report by its session: null if there is no such session. */
 export function useDaySummary(sessionId: string): DaySummary | null | undefined {
   return useLiveQuery(() => loadDaySummary(sessionId, db), [sessionId]);
+}
+
+/** True while the "storage is not guaranteed" note is waiting to be read. */
+export function useStorageNote(): boolean {
+  const value = useLiveQuery(async () => (await db.setting.get(STORAGE_NOTE_KEY))?.value, []);
+  return value === 'PENDING';
 }

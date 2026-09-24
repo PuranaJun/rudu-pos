@@ -129,7 +129,7 @@ export default function ProductionScreen({ onClose }: { onClose: () => void }) {
           <section aria-label="ของที่ทำไว้" className="pt-6">
             <h2 className="text-2xl font-bold">ของที่ทำไว้</h2>
             {batches.length === 0 ? (
-              <p className="text-ink-soft py-4 text-lg font-semibold">ยังไม่มี</p>
+              <p className="text-ink-soft py-4 text-lg font-bold">ยังไม่มี</p>
             ) : (
               <ul>
                 {batches.map((entry) => (
@@ -210,7 +210,7 @@ function NewBatchForm({
 
       {component.recipe_note_th ? (
         // A reminder, not a form field: the recipe is edited in settings.
-        <p className="bg-paper-sunk mt-2 rounded-xl px-4 py-3 text-lg leading-relaxed font-semibold">
+        <p className="bg-paper-sunk mt-2 rounded-xl px-4 py-3 text-lg leading-relaxed font-bold">
           {component.recipe_note_th}
         </p>
       ) : null}
@@ -306,7 +306,7 @@ function NewBatchForm({
             if (!canRecord || !madeAt) return;
             onRecord({ qty, madeAt, sourceBatchId: chosen?.batch.id ?? null });
           }}
-          className="bg-brand-2 min-h-touch-lg flex-1 rounded-2xl text-2xl font-bold text-white disabled:opacity-40"
+          className="bg-brand-2 min-h-touch-lg flex-1 rounded-2xl text-2xl font-bold text-white disabled:bg-paper-sunk disabled:text-ink-soft disabled:border-line"
         >
           บันทึก
         </button>
@@ -341,9 +341,7 @@ function BatchListRow({ entry, onBlanch }: { entry: BatchListEntry; onBlanch: ()
           {STATE_TH[state]}
         </span>
         <Clock entry={entry} />
-        <span className="text-ink-soft text-base font-semibold">
-          ทำ {bangkokShort(batch.made_at)}
-        </span>
+        <span className="text-ink-soft text-base font-bold">ทำ {bangkokShort(batch.made_at)}</span>
       </div>
 
       {state === 'SOAKING' ? (

@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { formatBangkok } from '../lib/datetime.ts';
+import { useOfflineReady } from '../lib/useOfflineReady.ts';
 import { resetAndReseed } from '../db/seed.ts';
 import { stockSampleDay } from '../db/sample-day.ts';
 
@@ -16,6 +17,8 @@ const LONG_PRESS_MS = 1500;
 export default function VersionStamp() {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [status, setStatus] = useState<'idle' | 'working' | 'done' | 'failed'>('idle');
+  // Visible proof, once installed, that the shell will cold-start in airplane mode.
+  const offline = useOfflineReady();
 
   const cancel = () => {
     if (timer.current !== null) {
@@ -49,7 +52,7 @@ export default function VersionStamp() {
 
   return (
     <p
-      className="text-ink-soft text-base font-semibold"
+      className="text-ink-soft text-base font-bold"
       onPointerDown={start}
       onPointerUp={cancel}
       onPointerCancel={cancel}
@@ -57,6 +60,7 @@ export default function VersionStamp() {
       onContextMenu={(event) => event.preventDefault()}
     >
       build <time dateTime={__BUILD_TIME__}>{formatBangkok(__BUILD_TIME__)}</time>
+      {offline ? ' · พร้อมใช้ออฟไลน์' : ''}
       {label ? <span className="text-ink block">{label}</span> : null}
     </p>
   );

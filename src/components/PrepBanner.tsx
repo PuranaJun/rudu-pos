@@ -18,7 +18,7 @@ export default function PrepBanner({ reminders, onTap }: Props) {
       type="button"
       onClick={onTap}
       aria-label="เตือนเตรียมของพรุ่งนี้"
-      className="bg-today text-ink w-full px-4 py-2 text-left"
+      className="bg-today text-ink min-h-touch-lg w-full px-4 py-2 text-left"
     >
       {reminders.map((reminder) => (
         <span key={reminder.component.id} className="block text-lg leading-snug font-bold">

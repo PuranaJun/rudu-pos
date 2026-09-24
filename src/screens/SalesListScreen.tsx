@@ -51,7 +51,7 @@ export default function SalesListScreen({
           <p className="text-3xl font-bold tabular-nums">{formatTHB(totals.revenue)}</p>
         </div>
         <div className="flex items-center justify-between gap-2">
-          <p className="text-ink-soft text-base font-semibold">
+          <p className="text-ink-soft text-base font-bold">
             {totals.units} แก้ว · {totals.saleCount} บิล
             {totals.voidedCount > 0 ? ` · ยกเลิก ${totals.voidedCount}` : ''}
           </p>
@@ -86,9 +86,7 @@ export default function SalesListScreen({
 
       <main className="min-h-0 flex-1 overflow-y-auto px-4">
         {sales.length === 0 ? (
-          <p className="text-ink-soft py-8 text-center text-lg font-semibold">
-            ยังไม่มีการขายวันนี้
-          </p>
+          <p className="text-ink-soft py-8 text-center text-lg font-bold">ยังไม่มีการขายวันนี้</p>
         ) : (
           <ul>
             {sales.map((sale) => (
@@ -106,10 +104,10 @@ export default function SalesListScreen({
                   </span>
                 </div>
 
-                <p className={`text-lg font-semibold ${sale.isVoided ? 'line-through' : ''}`}>
+                <p className={`text-lg font-bold ${sale.isVoided ? 'line-through' : ''}`}>
                   {sale.items}
                 </p>
-                <p className="text-ink-soft text-base font-semibold">
+                <p className="text-ink-soft text-base font-bold">
                   {sale.paymentMethod === 'CASH' ? 'เงินสด' : 'พร้อมเพย์'}
                 </p>
 

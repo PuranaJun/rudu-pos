@@ -33,7 +33,7 @@ export function TextField({
           value={value}
           onChange={(event) => onChange(event.target.value)}
           rows={3}
-          className={`${INPUT} py-2 text-lg font-semibold`}
+          className={`${INPUT} py-2 text-lg font-bold`}
         />
       ) : (
         <input
@@ -44,7 +44,7 @@ export function TextField({
           className={INPUT}
         />
       )}
-      {hint ? <span className="text-ink-soft block text-base font-semibold">{hint}</span> : null}
+      {hint ? <span className="text-ink-soft block text-base font-bold">{hint}</span> : null}
     </label>
   );
 }
@@ -76,7 +76,7 @@ export function NumberField({
         />
         {suffix ? <span className="shrink-0 text-lg font-bold">{suffix}</span> : null}
       </span>
-      {hint ? <span className="text-ink-soft block text-base font-semibold">{hint}</span> : null}
+      {hint ? <span className="text-ink-soft block text-base font-bold">{hint}</span> : null}
     </label>
   );
 }

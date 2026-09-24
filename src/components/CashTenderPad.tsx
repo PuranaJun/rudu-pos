@@ -28,7 +28,7 @@ export default function CashTenderPad({ due, quickTender, onConfirm, onCancel, b
         <button
           type="button"
           onClick={onCancel}
-          className="min-h-touch text-ink-soft text-xl font-bold"
+          className="min-h-touch-lg min-w-touch-lg text-ink-soft pr-3 text-xl font-bold"
         >
           ← กลับ
         </button>
@@ -45,7 +45,7 @@ export default function CashTenderPad({ due, quickTender, onConfirm, onCancel, b
               disabled={tooLittle}
               onClick={() => setReceived(amount)}
               aria-pressed={received === amount}
-              className={`min-h-touch-lg rounded-2xl py-4 text-2xl font-bold tabular-nums disabled:opacity-35 ${
+              className={`min-h-touch-lg w-full rounded-2xl py-4 text-2xl font-bold tabular-nums disabled:bg-paper-sunk disabled:text-ink-soft disabled:border-line disabled:line-through ${
                 received === amount ? 'bg-ink text-paper' : 'border-line text-ink border-2'
               }`}
             >
@@ -58,7 +58,7 @@ export default function CashTenderPad({ due, quickTender, onConfirm, onCancel, b
           type="button"
           onClick={() => onConfirm(due)}
           disabled={busy}
-          className="bg-brand-2 min-h-touch-lg col-span-3 rounded-2xl py-5 text-3xl font-bold text-white active:brightness-90 disabled:opacity-40"
+          className="bg-brand-2 min-h-touch-lg col-span-3 rounded-2xl py-5 text-3xl font-bold text-white active:brightness-90 disabled:bg-paper-sunk disabled:text-ink-soft disabled:border-line"
         >
           พอดี
         </button>
@@ -74,7 +74,7 @@ export default function CashTenderPad({ due, quickTender, onConfirm, onCancel, b
             type="button"
             onClick={() => onConfirm(received)}
             disabled={busy}
-            className="bg-brand min-h-touch-lg w-full rounded-2xl px-4 py-5 text-white active:brightness-90 disabled:opacity-40"
+            className="bg-brand min-h-touch-lg w-full rounded-2xl px-4 py-5 text-white active:brightness-90 disabled:bg-paper-sunk disabled:text-ink-soft disabled:border-line"
           >
             <span className="block text-xl font-bold">ทอน</span>
             <span className="block text-6xl leading-none font-bold tabular-nums">

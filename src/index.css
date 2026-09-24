@@ -11,13 +11,14 @@
   --color-brand-2: #1f5c4a; /* white tea / go */
 
   /* Menu buttons. Assigned by menu order, not by product id, so a third drink
-     gets the next colour without a code change. All carry white text at 5:1
-     or better in direct sunlight. */
+     gets the next colour without a code change. Every text/background pair
+     in the app is 7:1 or better for direct sunlight — src/test/contrast.test.ts
+     holds that line. */
   --color-drink-1: #96271a; /* deep red   — มะขามแดง */
-  --color-drink-2: #99530a; /* warm amber — สาลี่ขาว */
+  --color-drink-2: #7c4410; /* warm amber — สาลี่ขาว, 7.8:1 */
   --color-drink-3: #1f5c4a; /* reserved for the third drink */
   --color-bottle: #33302c; /* bottles are not a drink button */
-  --color-soldout: #6b6259; /* still 5.5:1 on white — never grey-on-grey */
+  --color-soldout: #565049; /* 8:1 on white — never grey-on-grey */
 
   /* Shelf life on the open-day screen. Loud means a filled block, not a
      tinted word: tinted text disappears in direct sun. */
@@ -28,6 +29,10 @@
   --font-sans:
     'Noto Sans Thai', 'IBM Plex Sans Thai', -apple-system, BlinkMacSystemFont, 'Segoe UI',
     sans-serif;
+
+  /* iPad and up, including the iPad mini's 744px portrait width, which the
+     stock 768px breakpoint would miss. Phones stay below it. */
+  --breakpoint-tablet: 43rem;
 
   /* Touch targets: wet hands, ice, condensation. */
   --spacing-touch: 3rem; /* 48px — absolute minimum */
@@ -44,6 +49,30 @@ body,
 html {
   /* Stop iOS from resizing text when the phone is turned sideways. */
   -webkit-text-size-adjust: 100%;
+  /* No double-tap zoom and no 300 ms wait anywhere, not only on buttons. */
+  touch-action: manipulation;
+}
+
+/* The document never scrolls and never rubber-bands: every screen is exactly
+   the viewport, and only the lists inside it scroll. */
+html,
+body {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+/* A list that reaches its end stops there instead of handing the bounce to
+   the page underneath. */
+.overflow-y-auto {
+  overscroll-behavior: contain;
+}
+
+/* iOS zooms into any field under 16px when it is focused, and does not zoom
+   back out. Every field here is larger; this is the floor. */
+input,
+textarea,
+select {
+  font-size: max(16px, 1em);
 }
 
 body {
