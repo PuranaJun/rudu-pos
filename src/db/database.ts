@@ -91,6 +91,11 @@ export class RuduPosDB extends Dexie {
     this.version(3).stores({
       sale_line_discount: 'id, sale_line_id, reason',
     });
+
+    // A day's waste is read back by its session.
+    this.version(4).stores({
+      waste_event: 'id, component_batch_id, reason, recorded_at, cash_session_id',
+    });
   }
 }
 

@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import VersionStamp from '../components/VersionStamp.tsx';
+import ShelfBadge from '../components/ShelfBadge.tsx';
 import PrepBanner from '../components/PrepBanner.tsx';
 import ProductionScreen from './ProductionScreen.tsx';
 import { prepReminders } from '../domain/production.ts';
 import { formatTHB, toSatang } from '../lib/money.ts';
 import { formatQty, unitLabel } from '../lib/quantity.ts';
-import { bangkokShort, bangkokWeekday } from '../lib/datetime.ts';
+import { bangkokWeekday } from '../lib/datetime.ts';
 import { nowIso } from '../lib/id.ts';
 import { unitPrice } from '../domain/cost.ts';
 import {
@@ -14,7 +15,6 @@ import {
   stockOnHand,
   type BatchOnHand,
   type JellyToCut,
-  type ShelfStatus,
 } from '../domain/open-day.ts';
 import { useCostCatalog, useLastOperator, useSettings, useStockSnapshot } from '../db/hooks.ts';
 import { adjustBatch, commitCut } from '../db/stock-repo.ts';
@@ -442,25 +442,5 @@ function BatchRow({
         {formatQty(entry.remaining, component.unit)}
       </button>
     </div>
-  );
-}
-
-const SHELF_STYLE: Record<ShelfStatus, string> = {
-  EXPIRED: 'bg-expired text-white',
-  TODAY: 'bg-today text-ink',
-  OK: 'border-fresh text-fresh border-2',
-};
-
-function ShelfBadge({ status, expiresAt }: { status: ShelfStatus; expiresAt: string }) {
-  const label = {
-    EXPIRED: `หมดอายุแล้ว ${bangkokShort(expiresAt)}`,
-    TODAY: `หมดอายุวันนี้ ${bangkokShort(expiresAt)}`,
-    OK: `ถึง ${bangkokShort(expiresAt)}`,
-  }[status];
-
-  return (
-    <span className={`rounded-lg px-3 py-1 text-base font-bold ${SHELF_STYLE[status]}`}>
-      {label}
-    </span>
   );
 }

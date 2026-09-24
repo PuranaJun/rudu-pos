@@ -17,7 +17,8 @@ import { bangkokDate } from '../lib/datetime.ts';
 import { DEVICE_ID_KEY } from './device.ts';
 import { loadSettings, type PosSettings } from './settings-repo.ts';
 import { loadSalesForDate, type SaleSummary } from './sale-repo.ts';
-import { dayTotals, type DayTotals } from '../domain/reporting.ts';
+import { dayTotals, type DayTotals, type DaySummary } from '../domain/reporting.ts';
+import { loadDaySummary, loadExpectedCash } from './close-repo.ts';
 import { lastOperator, loadOpenSession } from './session-repo.ts';
 import type { CashSession } from './types.ts';
 
@@ -100,4 +101,14 @@ export function useOpenSession(): CashSession | null | undefined {
 /** Who opened last, to pre-select on the open-day screen. */
 export function useLastOperator(): string | null | undefined {
   return useLiveQuery(() => lastOperator(db), []);
+}
+
+/** What should be in the drawer, live — moves with every cash sale and void. */
+export function useExpectedCash(session: CashSession): number | undefined {
+  return useLiveQuery(() => loadExpectedCash(session, db), [session]);
+}
+
+/** A day's report by its session: null if there is no such session. */
+export function useDaySummary(sessionId: string): DaySummary | null | undefined {
+  return useLiveQuery(() => loadDaySummary(sessionId, db), [sessionId]);
 }

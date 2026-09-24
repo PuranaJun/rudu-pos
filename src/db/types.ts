@@ -268,6 +268,14 @@ export interface WasteEvent extends Synced {
   reason: WasteReason;
   recorded_at: string;
   note: string | null;
+  /** The trading day it was thrown out in, so a past day's waste reads back. */
+  cash_session_id: string | null;
+  /**
+   * What was thrown away, in satang, priced when it was thrown. A snapshot
+   * like sale_line.unit_cost: a later cost edit never reprices old waste
+   * (CLAUDE.md §2.1.8).
+   */
+  cost: Satang;
 }
 
 export interface CashSession extends Synced {

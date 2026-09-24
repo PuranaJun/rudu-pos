@@ -6,6 +6,7 @@ import PromptPayPanel from '../components/PromptPayPanel.tsx';
 import ReceiptSheet from '../components/ReceiptSheet.tsx';
 import SalesListScreen from './SalesListScreen.tsx';
 import ProductionScreen from './ProductionScreen.tsx';
+import CloseDayScreen from './CloseDayScreen.tsx';
 import PrepBanner from '../components/PrepBanner.tsx';
 import VersionStamp from '../components/VersionStamp.tsx';
 import { formatTHB } from '../lib/money.ts';
@@ -51,7 +52,14 @@ const MENU_COLORS = ['--color-drink-1', '--color-drink-2', '--color-drink-3'];
  * Only reachable with a session open. The operator was chosen at open day and
  * is never asked again; every sale lands on the session's business date.
  */
-export default function SellScreen({ session }: { session: CashSession }) {
+export default function SellScreen({
+  session,
+  onDayClosed = () => {},
+}: {
+  session: CashSession;
+  /** Called with the session once close day has written it. */
+  onDayClosed?: (sessionId: string) => void;
+}) {
   const businessDate = sessionBusinessDate(session);
   const operatorId = session.operator_id;
 
@@ -74,6 +82,7 @@ export default function SellScreen({ session }: { session: CashSession }) {
   const [error, setError] = useState<string | null>(null);
   const [showSales, setShowSales] = useState(false);
   const [showProduction, setShowProduction] = useState(false);
+  const [showClose, setShowClose] = useState(false);
 
   if (!catalog || !stock || !cart || !settings) {
     return (
@@ -369,6 +378,21 @@ export default function SellScreen({ session }: { session: CashSession }) {
             );
           }}
           onClose={() => setShowSales(false)}
+          onCloseDay={() => {
+            setShowSales(false);
+            setShowClose(true);
+          }}
+        />
+      ) : null}
+
+      {showClose ? (
+        <CloseDayScreen
+          session={session}
+          onCancel={() => setShowClose(false)}
+          onClosed={(sessionId) => {
+            setShowClose(false);
+            onDayClosed(sessionId);
+          }}
         />
       ) : null}
 

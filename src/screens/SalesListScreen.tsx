@@ -10,6 +10,8 @@ interface Props {
   voidReasons: readonly string[];
   onVoid: (saleId: string, reason: string) => void;
   onClose: () => void;
+  /** Close day lives here, beside the day's sales — off the sell screen, one tap away. */
+  onCloseDay?: () => void;
 }
 
 /**
@@ -20,7 +22,14 @@ interface Props {
  * record of what happened (CLAUDE.md §10). A voided sale stays in the list,
  * struck through, saying why.
  */
-export default function SalesListScreen({ sales, totals, voidReasons, onVoid, onClose }: Props) {
+export default function SalesListScreen({
+  sales,
+  totals,
+  voidReasons,
+  onVoid,
+  onClose,
+  onCloseDay,
+}: Props) {
   const [voiding, setVoiding] = useState<string | null>(null);
 
   return (
@@ -113,11 +122,20 @@ export default function SalesListScreen({ sales, totals, voidReasons, onVoid, on
         )}
       </main>
 
-      <footer className="safe-bottom border-line border-t px-4 pt-3">
+      <footer className="safe-bottom border-line flex gap-2 border-t px-4 pt-3">
+        {onCloseDay ? (
+          <button
+            type="button"
+            onClick={onCloseDay}
+            className="border-line min-h-touch-lg rounded-2xl border-2 px-5 text-xl font-bold"
+          >
+            ปิดร้าน
+          </button>
+        ) : null}
         <button
           type="button"
           onClick={onClose}
-          className="bg-ink text-paper min-h-touch-lg w-full rounded-2xl py-4 text-2xl font-bold"
+          className="bg-ink text-paper min-h-touch-lg flex-1 rounded-2xl py-4 text-2xl font-bold"
         >
           กลับไปขาย
         </button>
