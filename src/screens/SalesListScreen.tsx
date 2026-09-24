@@ -15,6 +15,7 @@ interface Props {
   onCloseDay?: () => void;
   /** Past days' summaries and the year's takings. */
   onReports?: () => void;
+  onSettings?: () => void;
 }
 
 /**
@@ -34,6 +35,7 @@ export default function SalesListScreen({
   onClose,
   onCloseDay,
   onReports,
+  onSettings,
 }: Props) {
   const [voiding, setVoiding] = useState<string | null>(null);
 
@@ -53,15 +55,26 @@ export default function SalesListScreen({
             {totals.units} แก้ว · {totals.saleCount} บิล
             {totals.voidedCount > 0 ? ` · ยกเลิก ${totals.voidedCount}` : ''}
           </p>
-          {onReports ? (
-            <button
-              type="button"
-              onClick={onReports}
-              className="border-line min-h-touch rounded-xl border-2 px-3 text-lg font-bold"
-            >
-              ย้อนหลัง
-            </button>
-          ) : null}
+          <div className="flex gap-2">
+            {onReports ? (
+              <button
+                type="button"
+                onClick={onReports}
+                className="border-line min-h-touch rounded-xl border-2 px-3 text-lg font-bold"
+              >
+                ย้อนหลัง
+              </button>
+            ) : null}
+            {onSettings ? (
+              <button
+                type="button"
+                onClick={onSettings}
+                className="border-line min-h-touch rounded-xl border-2 px-3 text-lg font-bold"
+              >
+                ตั้งค่า
+              </button>
+            ) : null}
+          </div>
         </div>
         {breakeven ? (
           <p className="text-lg font-bold tabular-nums">

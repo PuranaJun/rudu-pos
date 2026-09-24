@@ -8,6 +8,7 @@ import SalesListScreen from './SalesListScreen.tsx';
 import ProductionScreen from './ProductionScreen.tsx';
 import CloseDayScreen from './CloseDayScreen.tsx';
 import ReportsScreen from './ReportsScreen.tsx';
+import SettingsScreen from './SettingsScreen.tsx';
 import PrepBanner from '../components/PrepBanner.tsx';
 import VersionStamp from '../components/VersionStamp.tsx';
 import { formatTHB } from '../lib/money.ts';
@@ -99,6 +100,7 @@ export default function SellScreen({
   const [showProduction, setShowProduction] = useState(false);
   const [showClose, setShowClose] = useState(false);
   const [showReports, setShowReports] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
 
   if (!catalog || !stock || !cart || !settings) {
     return (
@@ -248,7 +250,9 @@ export default function SellScreen({
 
       {/* The menu. */}
       <div className="flex shrink-0 flex-col gap-2 p-2">
-        <div className="flex gap-2">
+        {/* Wraps: a third drink takes the next row rather than squeezing the
+            first two until their names no longer fit (CLAUDE.md §9, §12). */}
+        <div className="flex flex-wrap gap-2">
           {drinks.map((product, index) => {
             const info = stockFor(product);
             return (
@@ -411,6 +415,7 @@ export default function SellScreen({
           }}
           onClose={() => setShowSales(false)}
           onReports={() => setShowReports(true)}
+          onSettings={() => setShowSettings(true)}
           onCloseDay={() => {
             setShowSales(false);
             setShowClose(true);
@@ -419,6 +424,7 @@ export default function SellScreen({
       ) : null}
 
       {showReports ? <ReportsScreen onClose={() => setShowReports(false)} /> : null}
+      {showSettings ? <SettingsScreen onClose={() => setShowSettings(false)} /> : null}
 
       {showClose ? (
         <CloseDayScreen

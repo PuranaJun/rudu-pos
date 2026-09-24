@@ -41,8 +41,10 @@ export function recipeFor(
   variantId: string,
   modifierIds: readonly string[] = [],
 ): RecipeLine[] {
-  const bom = catalog.bomByVariant.get(variantId);
-  if (!bom) throw new Error(`no bill of materials for variant ${variantId}`);
+  // A variant with no recipe rows yet is a new drink half set up in settings,
+  // not an error: it costs its packaging and nothing limits it. Throwing here
+  // would take the sell screen down while the owner is still typing.
+  const bom = catalog.bomByVariant.get(variantId) ?? [];
 
   const modifiers = resolveModifiers(catalog, modifierIds);
 

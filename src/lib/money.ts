@@ -32,3 +32,19 @@ export function formatTHB(satang: Satang): string {
 
   return `${negative ? '-' : ''}฿${body}`;
 }
+
+/**
+ * Baht as typed into a settings field — `40`, `1.18`, `1,500` — to satang.
+ * Null for anything that is not a sensible amount, so a stray letter is
+ * refused rather than saved as ฿0.
+ */
+export function parseBaht(text: string): Satang | null {
+  const cleaned = text.replace(/[,\s฿]/g, '');
+  if (!/^\d+(\.\d{1,2})?$/.test(cleaned)) return null;
+  return toSatang(Number(cleaned));
+}
+
+/** Satang as it goes back into a field: `40`, `1.18`. No symbol, no separators. */
+export function bahtInput(satang: Satang): string {
+  return satang % 100 === 0 ? String(satang / 100) : (satang / 100).toFixed(2);
+}

@@ -4,6 +4,7 @@ import ShelfBadge from '../components/ShelfBadge.tsx';
 import PrepBanner from '../components/PrepBanner.tsx';
 import ProductionScreen from './ProductionScreen.tsx';
 import ReportsScreen from './ReportsScreen.tsx';
+import SettingsScreen from './SettingsScreen.tsx';
 import AnnualRevenueCard from '../components/AnnualRevenueCard.tsx';
 import { prepReminders } from '../domain/production.ts';
 import { formatTHB, toSatang } from '../lib/money.ts';
@@ -49,6 +50,7 @@ export default function OpenDayScreen() {
   const [error, setError] = useState<string | null>(null);
   const [showProduction, setShowProduction] = useState(false);
   const [showReports, setShowReports] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
 
   if (!catalog || !stock || !settings || lastOperator === undefined) {
     return (
@@ -97,7 +99,14 @@ export default function OpenDayScreen() {
           <h1 className="text-3xl font-bold">เปิดร้าน</h1>
           <p className="text-ink-soft text-lg font-semibold">{bangkokWeekday(now)}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => setShowSettings(true)}
+            className="border-line min-h-touch rounded-xl border-2 px-3 text-lg font-bold"
+          >
+            ตั้งค่า
+          </button>
           <button
             type="button"
             onClick={() => setShowReports(true)}
@@ -250,6 +259,7 @@ export default function OpenDayScreen() {
 
       {showProduction ? <ProductionScreen onClose={() => setShowProduction(false)} /> : null}
       {showReports ? <ReportsScreen onClose={() => setShowReports(false)} /> : null}
+      {showSettings ? <SettingsScreen onClose={() => setShowSettings(false)} /> : null}
     </div>
   );
 }

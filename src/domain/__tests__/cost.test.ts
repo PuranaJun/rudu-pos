@@ -275,3 +275,20 @@ describe('failure modes', () => {
     expect(() => materialCost(broken, 'VAR_TAMARIND_ICED')).toThrow(/COMP_TEA_RED/);
   });
 });
+
+describe('a variant with no recipe yet', () => {
+  it('costs its packaging and does not throw — a new drink half set up in settings', async () => {
+    const rows = await db.transaction('r', db.tables, async () => ({
+      products: await db.product.toArray(),
+      variants: await db.variant.toArray(),
+      components: await db.component.toArray(),
+      bom: (await db.bom.toArray()).filter((row) => row.variant_id !== 'VAR_TAMARIND_ICED'),
+      packagingSets: await db.packaging_set.toArray(),
+      packagingItems: await db.packaging_item.toArray(),
+      modifiers: await db.modifier.toArray(),
+    }));
+    const bare = buildCostCatalog(rows);
+
+    expect(lineCost(bare, 'VAR_TAMARIND_ICED')).toBe(packagingCost(bare, 'VAR_TAMARIND_ICED'));
+  });
+});
