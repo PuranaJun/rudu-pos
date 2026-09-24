@@ -188,3 +188,42 @@ describe('after the close', () => {
     expect(await loadOpenSession(db)).not.toBeNull();
   });
 });
+
+describe('the backup, straight after the close', () => {
+  it('is offered on the summary and takes one tap', async () => {
+    const shared: File[] = [];
+    Object.defineProperty(navigator, 'canShare', { value: () => true, configurable: true });
+    Object.defineProperty(navigator, 'share', {
+      configurable: true,
+      value: async ({ files }: { files: File[] }) => {
+        shared.push(...files);
+      },
+    });
+    await db.setting.delete('last_backup_at');
+
+    try {
+      const user = userEvent.setup();
+      const dialog = await toCloseDay(user);
+      await user.click(within(dialog).getByRole('button', { name: 'ต่อไป: นับเงิน' }));
+      await user.type(within(dialog).getByLabelText('เงินที่นับได้ (บาท)'), '1500');
+      await user.click(within(dialog).getByRole('button', { name: 'ปิดร้าน' }));
+
+      const summary = await screen.findByRole('dialog', { name: 'สรุปวัน' });
+      await user.click(await within(summary).findByRole('button', { name: 'สำรองข้อมูลวันนี้' }));
+
+      await waitFor(() => expect(shared).toHaveLength(1));
+      // The backup holds the day just closed.
+      const backup = JSON.parse(await shared[0]!.text());
+      expect(backup.tables.cash_session[0].closed_at).not.toBeNull();
+      await waitFor(async () =>
+        expect((await db.setting.get('last_backup_at'))?.value).toBeTruthy(),
+      );
+      expect(
+        await within(summary).findByRole('button', { name: 'สำรองข้อมูลวันนี้ แล้ว ✓' }),
+      ).toBeInTheDocument();
+    } finally {
+      Reflect.deleteProperty(navigator, 'canShare');
+      Reflect.deleteProperty(navigator, 'share');
+    }
+  });
+});

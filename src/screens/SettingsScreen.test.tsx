@@ -13,6 +13,7 @@ import { ensureDeviceId } from '../db/device.ts';
 import { recordProduction } from '../db/stock-repo.ts';
 import { loadSettings } from '../db/settings-repo.ts';
 import type { CashSession } from '../db/types.ts';
+import { enabledButton } from '../test/helpers.ts';
 
 const SESSION: CashSession = {
   id: 'SESSION_SETTINGS',
@@ -102,7 +103,7 @@ describe('a third drink, through settings alone', () => {
 
     // 5. Rung, it is priced and costed from the rows just typed in.
     await user.click(button);
-    await user.click(await screen.findByRole('button', { name: 'เงินสด' }));
+    await user.click(await enabledButton('เงินสด'));
     await user.click(await screen.findByRole('button', { name: 'พอดี' }));
 
     await waitFor(async () => {

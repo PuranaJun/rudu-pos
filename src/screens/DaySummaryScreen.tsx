@@ -3,6 +3,8 @@ import { formatQty } from '../lib/quantity.ts';
 import { bangkokWeekday } from '../lib/datetime.ts';
 import { DISCOUNT_REASON_TH } from '../domain/promotions.ts';
 import { useDaySummary } from '../db/hooks.ts';
+import { backupAsFile, markBackedUp } from '../db/backup.ts';
+import ShareFileButton from '../components/ShareFileButton.tsx';
 import type { Satang } from '../lib/money.ts';
 
 interface Props {
@@ -10,6 +12,11 @@ interface Props {
   onDone: () => void;
   /** เสร็จ straight after a close; กลับ when opened from the reports. */
   doneLabel?: string;
+  /**
+   * Straight after a close: offer the day's backup, one tap. This is the
+   * routine that keeps the records alive (CLAUDE.md §13).
+   */
+  promptBackup?: boolean;
 }
 
 /**
@@ -20,7 +27,12 @@ interface Props {
  * away, and whether the drawer is right. Waste sits beside profit, not under
  * it — it is where this shop actually loses money. The detail follows below.
  */
-export default function DaySummaryScreen({ sessionId, onDone, doneLabel = 'เสร็จ' }: Props) {
+export default function DaySummaryScreen({
+  sessionId,
+  onDone,
+  doneLabel = 'เสร็จ',
+  promptBackup = false,
+}: Props) {
   const summary = useDaySummary(sessionId);
 
   if (!summary) {
@@ -123,6 +135,15 @@ export default function DaySummaryScreen({ sessionId, onDone, doneLabel = 'เ�
       </main>
 
       <footer className="safe-bottom border-line border-t px-4 pt-3">
+        {promptBackup ? (
+          <div className="mb-2">
+            <ShareFileButton
+              label="สำรองข้อมูลวันนี้"
+              build={() => backupAsFile()}
+              onDone={() => void markBackedUp()}
+            />
+          </div>
+        ) : null}
         <button
           type="button"
           onClick={onDone}

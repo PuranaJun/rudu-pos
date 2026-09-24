@@ -26,7 +26,7 @@ export default function App() {
   if (justClosed) {
     return (
       <>
-        <DaySummaryScreen sessionId={justClosed} onDone={() => setJustClosed(null)} />
+        <DaySummaryScreen sessionId={justClosed} onDone={() => setJustClosed(null)} promptBackup />
         {toast}
       </>
     );

@@ -4,6 +4,7 @@ import ComponentSettings from './settings/ComponentSettings.tsx';
 import PackagingSettings from './settings/PackagingSettings.tsx';
 import ModifierSettings from './settings/ModifierSettings.tsx';
 import ShopSettings from './settings/ShopSettings.tsx';
+import DataSettings from './settings/DataSettings.tsx';
 import { useCostCatalog, useSettings } from '../db/hooks.ts';
 
 const TABS = [
@@ -12,6 +13,7 @@ const TABS = [
   ['PACKAGING', 'บรรจุภัณฑ์'],
   ['MODIFIERS', 'ท็อปปิ้ง'],
   ['SHOP', 'ร้าน'],
+  ['DATA', 'ข้อมูล'],
 ] as const;
 
 type Tab = (typeof TABS)[number][0];
@@ -72,8 +74,10 @@ export default function SettingsScreen({ onClose }: { onClose: () => void }) {
           <PackagingSettings catalog={catalog} />
         ) : tab === 'MODIFIERS' ? (
           <ModifierSettings catalog={catalog} />
-        ) : (
+        ) : tab === 'SHOP' ? (
           <ShopSettings catalog={catalog} settings={settings} />
+        ) : (
+          <DataSettings />
         )}
       </main>
     </div>

@@ -92,6 +92,8 @@ describe('past days', () => {
     expect(await within(summary).findByRole('status', { name: 'จุดคุ้มทุน' })).toHaveTextContent(
       '3/10 แก้ว',
     );
+    // Re-reading an old day is not the moment to nag about a backup.
+    expect(within(summary).queryByRole('button', { name: /สำรองข้อมูล/ })).not.toBeInTheDocument();
     await user.click(within(summary).getByRole('button', { name: 'กลับ' }));
 
     expect(screen.queryByRole('dialog', { name: 'สรุปวัน' })).not.toBeInTheDocument();
