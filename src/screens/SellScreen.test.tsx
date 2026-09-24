@@ -562,3 +562,80 @@ describe('the day’s sales', () => {
     expect(movements.length).toBeGreaterThan(0);
   });
 });
+
+describe('today, live', () => {
+  const header = () => screen.getByLabelText('รายการขายวันนี้');
+  const cupsLeft = async () =>
+    Number(/เหลือ (\d+) แก้ว/.exec((await tamarindButton()).textContent ?? '')?.[1]);
+
+  async function pay(method: 'เงินสด' | 'QR') {
+    const user = userEvent.setup();
+    await user.click(await tamarindButton());
+    await user.click(await screen.findByRole('button', { name: method }));
+    if (method === 'เงินสด') {
+      await user.click(await screen.findByRole('button', { name: 'พอดี' }));
+    } else {
+      await user.click(await screen.findByRole('button', { name: 'ลูกค้าจ่ายแล้ว' }));
+    }
+  }
+
+  it('moves cups, revenue, the drawer and available cups with every sale and void', async () => {
+    const user = userEvent.setup();
+    render(<SellScreen session={SESSION} />);
+
+    await waitFor(() => expect(header()).toHaveTextContent('ลิ้นชัก ฿1,500'));
+    expect(header()).toHaveTextContent('0 แก้ว');
+    const before = await cupsLeft();
+
+    // Cash: into the drawer.
+    await pay('เงินสด');
+    await waitFor(() => {
+      expect(header()).toHaveTextContent('ลิ้นชัก ฿1,540');
+      expect(header()).toHaveTextContent('1 แก้ว');
+      expect(header()).toHaveTextContent('฿40');
+    });
+    await waitFor(async () => expect(await cupsLeft()).toBe(before - 1));
+
+    // QR: the takings move, the drawer does not.
+    await pay('QR');
+    await waitFor(() => {
+      expect(header()).toHaveTextContent('2 แก้ว');
+      expect(header()).toHaveTextContent('฿80');
+      expect(header()).toHaveTextContent('ลิ้นชัก ฿1,540');
+    });
+
+    // Void the cash sale: all of it comes back.
+    await user.click(header());
+    const list = await screen.findByRole('dialog', { name: 'รายการขายวันนี้' });
+    const buttons = within(list).getAllByRole('button', { name: /ยกเลิกบิล/ });
+    await user.click(buttons[buttons.length - 1]!); // oldest: the cash sale
+    await user.click(within(list).getByRole('button', { name: 'กดผิด' }));
+    await user.click(within(list).getByRole('button', { name: 'กลับไปขาย' }));
+
+    await waitFor(() => {
+      expect(header()).toHaveTextContent('ลิ้นชัก ฿1,500');
+      expect(header()).toHaveTextContent('1 แก้ว');
+    });
+    await waitFor(async () => expect(await cupsLeft()).toBe(before - 1));
+  });
+
+  it('marks breakeven: cups against ten, then past it once gross profit covers the day', async () => {
+    const fixed = await db.setting.get('fixed_cost_per_day');
+    render(<SellScreen session={SESSION} />);
+    await waitFor(() => expect(header()).toHaveTextContent('คุ้มทุน 0/10'));
+
+    // A day whose fixed cost one cup covers.
+    await db.setting.put({ key: 'fixed_cost_per_day', value: 1_000, synced_at: null });
+    try {
+      await pay('เงินสด');
+      await waitFor(() => expect(header()).toHaveTextContent('ผ่านจุดคุ้มทุน'));
+
+      const user = userEvent.setup();
+      await user.click(header());
+      const list = await screen.findByRole('dialog', { name: 'รายการขายวันนี้' });
+      expect(within(list).getByText(/กำไรขั้นต้น .* จาก ฿10/)).toBeInTheDocument();
+    } finally {
+      await db.setting.put(fixed!);
+    }
+  });
+});

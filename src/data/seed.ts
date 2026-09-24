@@ -25,7 +25,7 @@ import type {
 } from '../db/types.ts';
 
 /** Bump to force a reseed of a database that was seeded by an older build. */
-export const SEED_VERSION = 7;
+export const SEED_VERSION = 8;
 export const SEED_VERSION_KEY = 'seed_version';
 
 const unsynced = { synced_at: null } as const;
@@ -587,6 +587,9 @@ export const SETTINGS: Setting[] = [
   { key: 'loyalty_stamps_required', value: 10, synced_at: null },
   { key: 'vat_registered', value: false, synced_at: null },
   { key: 'annual_revenue_warn_threshold', value: toSatang(1_800_000), synced_at: null },
+  // Warn from three-quarters of the way to the VAT threshold: registering is
+  // a compliance event with lead time, not something to learn about on the day.
+  { key: 'annual_revenue_warn_ratio', value: 0.75, synced_at: null },
   { key: 'branding_line_th', value: 'ชาต้มเอง วันต่อวัน', synced_at: null },
   { key: 'promptpay_qr_image', value: null, synced_at: null },
   { key: 'operators', value: ['เจ้าของ'], synced_at: null },

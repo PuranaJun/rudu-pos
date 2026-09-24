@@ -22,6 +22,7 @@ import type {
   WasteEvent,
 } from '../db/types.ts';
 import type { CostCatalog } from './cost.ts';
+import { salesInSession } from './close-day.ts';
 
 export interface DayTotals {
   /** Cups and bottles rung, voids excluded. Free cups count. */
@@ -81,6 +82,38 @@ export function pastBreakeven(
   return totals.grossProfit - wasteCost >= fixedCostPerDay;
 }
 
+/**
+ * The breakeven marker: cups against the ten it usually takes, and gross
+ * profit against the day's fixed cost. The money decides; the cups are the
+ * number the operator can feel. Live during the day the waste is not known
+ * yet and counts as nothing; at close it comes off.
+ */
+export interface Breakeven {
+  cups: number;
+  cupsTarget: number;
+  grossProfit: Satang;
+  /** Gross profit less waste. Equal to grossProfit until the day is closed. */
+  afterWaste: Satang;
+  fixedCost: Satang;
+  past: boolean;
+}
+
+export function breakeven(
+  totals: DayTotals,
+  fixedCostPerDay: Satang,
+  cupsTarget: number,
+  wasteCost: Satang = 0,
+): Breakeven {
+  return {
+    cups: totals.units,
+    cupsTarget,
+    grossProfit: totals.grossProfit,
+    afterWaste: totals.grossProfit - wasteCost,
+    fixedCost: fixedCostPerDay,
+    past: pastBreakeven(totals, fixedCostPerDay, wasteCost),
+  };
+}
+
 export interface WasteLine {
   componentId: string;
   name: string;
@@ -99,7 +132,7 @@ export interface DaySummary {
   wasteCost: Satang;
   /** Gross profit less what was thrown away: what the day really made. */
   afterWaste: Satang;
-  breakeven: { cups: number; cupsTarget: number; fixedCost: Satang; past: boolean };
+  breakeven: Breakeven;
   /** Null while the session is open and the drawer has not been counted. */
   cash: {
     openingFloat: Satang;
@@ -174,12 +207,7 @@ export function daySummary(input: DaySummaryInput): DaySummary {
     waste,
     wasteCost,
     afterWaste: totals.grossProfit - wasteCost,
-    breakeven: {
-      cups: totals.units,
-      cupsTarget: input.breakevenCups,
-      fixedCost: input.fixedCostPerDay,
-      past: pastBreakeven(totals, input.fixedCostPerDay, wasteCost),
-    },
+    breakeven: breakeven(totals, input.fixedCostPerDay, input.breakevenCups, wasteCost),
     cash:
       session.counted_cash !== null && session.expected_cash !== null
         ? {
@@ -198,4 +226,78 @@ function menuOrder(catalog: CostCatalog, a: string, b: string): number {
   const pa = va ? (catalog.products.get(va.product_id)?.sort_order ?? 0) : 0;
   const pb = vb ? (catalog.products.get(vb.product_id)?.sort_order ?? 0) : 0;
   return pa - pb || (va?.sort_order ?? 0) - (vb?.sort_order ?? 0);
+}
+
+// ------------------------------------------------------------ the year
+
+export type RevenueBand = 'OK' | 'NEAR' | 'OVER';
+
+/**
+ * The year's takings against the VAT registration threshold (CLAUDE.md §5).
+ * Not a tax calculation — there is none anywhere in this app. Crossing the
+ * threshold is a compliance event with lead time, so the warning starts well
+ * before it: from `warnRatio` of the way there.
+ */
+export function revenueBand(total: Satang, threshold: Satang, warnRatio: number): RevenueBand {
+  if (total >= threshold) return 'OVER';
+  if (total >= threshold * warnRatio) return 'NEAR';
+  return 'OK';
+}
+
+/** Takings for a Bangkok calendar year. Voided sales never happened. */
+export function annualRevenue(sales: readonly Sale[], year: string): Satang {
+  return sales
+    .filter((sale) => !sale.is_voided && sale.business_date.startsWith(`${year}-`))
+    .reduce((total, sale) => total + sale.total_net, 0);
+}
+
+// ------------------------------------------------------------ past days
+
+export interface ClosedDay {
+  sessionId: string;
+  businessDate: string;
+  revenue: Satang;
+  units: number;
+  wasteCost: Satang;
+  variance: Satang | null;
+}
+
+/**
+ * One line per closed day, newest first — the index to each day's full
+ * summary. Built from whole tables in one pass, so a year of days is one
+ * read rather than three hundred.
+ */
+export function closedDays(
+  sessions: readonly CashSession[],
+  sales: readonly Sale[],
+  lines: readonly SaleLine[],
+  waste: readonly WasteEvent[],
+): ClosedDay[] {
+  const unitsBySale = new Map<string, number>();
+  for (const line of lines) {
+    unitsBySale.set(line.sale_id, (unitsBySale.get(line.sale_id) ?? 0) + line.qty);
+  }
+  const wasteBySession = new Map<string, Satang>();
+  for (const event of waste) {
+    if (event.cash_session_id === null) continue;
+    wasteBySession.set(
+      event.cash_session_id,
+      (wasteBySession.get(event.cash_session_id) ?? 0) + event.cost,
+    );
+  }
+
+  return sessions
+    .filter((session) => session.closed_at !== null)
+    .map((session) => {
+      const live = salesInSession(sales, session).filter((sale) => !sale.is_voided);
+      return {
+        sessionId: session.id,
+        businessDate: bangkokDate(session.opened_at),
+        revenue: live.reduce((total, sale) => total + sale.total_net, 0),
+        units: live.reduce((total, sale) => total + (unitsBySale.get(sale.id) ?? 0), 0),
+        wasteCost: wasteBySession.get(session.id) ?? 0,
+        variance: session.variance,
+      };
+    })
+    .sort((a, b) => b.businessDate.localeCompare(a.businessDate));
 }

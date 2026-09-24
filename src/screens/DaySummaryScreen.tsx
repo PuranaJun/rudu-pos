@@ -8,6 +8,8 @@ import type { Satang } from '../lib/money.ts';
 interface Props {
   sessionId: string;
   onDone: () => void;
+  /** เสร็จ straight after a close; กลับ when opened from the reports. */
+  doneLabel?: string;
 }
 
 /**
@@ -18,7 +20,7 @@ interface Props {
  * away, and whether the drawer is right. Waste sits beside profit, not under
  * it — it is where this shop actually loses money. The detail follows below.
  */
-export default function DaySummaryScreen({ sessionId, onDone }: Props) {
+export default function DaySummaryScreen({ sessionId, onDone, doneLabel = 'เสร็จ' }: Props) {
   const summary = useDaySummary(sessionId);
 
   if (!summary) {
@@ -49,9 +51,10 @@ export default function DaySummaryScreen({ sessionId, onDone }: Props) {
             {breakeven.past ? 'ผ่านจุดคุ้มทุน' : 'ยังไม่ถึงจุดคุ้มทุน'}
           </p>
           <p className="text-lg font-semibold">
-            {breakeven.cups}/{breakeven.cupsTarget} แก้ว · หลังหักของเสีย{' '}
-            {formatTHB(summary.afterWaste)} จาก {formatTHB(breakeven.fixedCost)}
+            {breakeven.cups}/{breakeven.cupsTarget} แก้ว · กำไรขั้นต้น{' '}
+            {formatTHB(breakeven.grossProfit)} จาก {formatTHB(breakeven.fixedCost)}
           </p>
+          <p className="text-lg font-semibold">หลังหักของเสีย {formatTHB(breakeven.afterWaste)}</p>
         </div>
 
         <dl className="mt-3 grid grid-cols-2 gap-2">
@@ -125,7 +128,7 @@ export default function DaySummaryScreen({ sessionId, onDone }: Props) {
           onClick={onDone}
           className="bg-ink min-h-touch-lg w-full rounded-2xl py-4 text-2xl font-bold text-white"
         >
-          เสร็จ
+          {doneLabel}
         </button>
       </footer>
     </div>

@@ -3,10 +3,12 @@ import VersionStamp from '../components/VersionStamp.tsx';
 import ShelfBadge from '../components/ShelfBadge.tsx';
 import PrepBanner from '../components/PrepBanner.tsx';
 import ProductionScreen from './ProductionScreen.tsx';
+import ReportsScreen from './ReportsScreen.tsx';
+import AnnualRevenueCard from '../components/AnnualRevenueCard.tsx';
 import { prepReminders } from '../domain/production.ts';
 import { formatTHB, toSatang } from '../lib/money.ts';
 import { formatQty, unitLabel } from '../lib/quantity.ts';
-import { bangkokWeekday } from '../lib/datetime.ts';
+import { bangkokDate, bangkokWeekday } from '../lib/datetime.ts';
 import { nowIso } from '../lib/id.ts';
 import { unitPrice } from '../domain/cost.ts';
 import {
@@ -46,6 +48,7 @@ export default function OpenDayScreen() {
   const [opening, setOpening] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showProduction, setShowProduction] = useState(false);
+  const [showReports, setShowReports] = useState(false);
 
   if (!catalog || !stock || !settings || lastOperator === undefined) {
     return (
@@ -94,18 +97,32 @@ export default function OpenDayScreen() {
           <h1 className="text-3xl font-bold">เปิดร้าน</h1>
           <p className="text-ink-soft text-lg font-semibold">{bangkokWeekday(now)}</p>
         </div>
-        <button
-          type="button"
-          onClick={() => setShowProduction(true)}
-          className="border-line min-h-touch rounded-xl border-2 px-4 text-lg font-bold"
-        >
-          ผลิต
-        </button>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setShowReports(true)}
+            className="border-line min-h-touch rounded-xl border-2 px-3 text-lg font-bold"
+          >
+            รายงาน
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowProduction(true)}
+            className="border-line min-h-touch rounded-xl border-2 px-3 text-lg font-bold"
+          >
+            ผลิต
+          </button>
+        </div>
       </header>
 
       <PrepBanner reminders={reminders} onTap={() => setShowProduction(true)} />
 
       <main className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
+        {/* Only once the year is close to the VAT threshold — every morning, then. */}
+        <div className="pt-3 empty:hidden">
+          <AnnualRevenueCard year={bangkokDate(now).slice(0, 4)} onlyWhenNear />
+        </div>
+
         {jelly.length > 0 ? (
           <section aria-label="ตัดเยลลี่วันนี้" className="pt-4">
             <h2 className="text-2xl font-bold">ตัดเยลลี่วันนี้</h2>
@@ -232,6 +249,7 @@ export default function OpenDayScreen() {
       </footer>
 
       {showProduction ? <ProductionScreen onClose={() => setShowProduction(false)} /> : null}
+      {showReports ? <ReportsScreen onClose={() => setShowReports(false)} /> : null}
     </div>
   );
 }

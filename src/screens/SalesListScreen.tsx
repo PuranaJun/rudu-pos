@@ -2,16 +2,19 @@ import { useState } from 'react';
 import { formatTHB } from '../lib/money.ts';
 import { bangkokTime } from '../lib/datetime.ts';
 import type { SaleSummary } from '../db/sale-repo.ts';
-import type { DayTotals } from '../domain/reporting.ts';
+import type { Breakeven, DayTotals } from '../domain/reporting.ts';
 
 interface Props {
   sales: SaleSummary[];
   totals: DayTotals;
+  breakeven?: Breakeven;
   voidReasons: readonly string[];
   onVoid: (saleId: string, reason: string) => void;
   onClose: () => void;
   /** Close day lives here, beside the day's sales — off the sell screen, one tap away. */
   onCloseDay?: () => void;
+  /** Past days' summaries and the year's takings. */
+  onReports?: () => void;
 }
 
 /**
@@ -25,10 +28,12 @@ interface Props {
 export default function SalesListScreen({
   sales,
   totals,
+  breakeven,
   voidReasons,
   onVoid,
   onClose,
   onCloseDay,
+  onReports,
 }: Props) {
   const [voiding, setVoiding] = useState<string | null>(null);
 
@@ -43,10 +48,27 @@ export default function SalesListScreen({
           <p className="text-2xl font-bold">รายการขายวันนี้</p>
           <p className="text-3xl font-bold tabular-nums">{formatTHB(totals.revenue)}</p>
         </div>
-        <p className="text-ink-soft text-base font-semibold">
-          {totals.units} แก้ว · {totals.saleCount} บิล
-          {totals.voidedCount > 0 ? ` · ยกเลิก ${totals.voidedCount}` : ''}
-        </p>
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-ink-soft text-base font-semibold">
+            {totals.units} แก้ว · {totals.saleCount} บิล
+            {totals.voidedCount > 0 ? ` · ยกเลิก ${totals.voidedCount}` : ''}
+          </p>
+          {onReports ? (
+            <button
+              type="button"
+              onClick={onReports}
+              className="border-line min-h-touch rounded-xl border-2 px-3 text-lg font-bold"
+            >
+              ย้อนหลัง
+            </button>
+          ) : null}
+        </div>
+        {breakeven ? (
+          <p className="text-lg font-bold tabular-nums">
+            กำไรขั้นต้น {formatTHB(breakeven.grossProfit)} จาก {formatTHB(breakeven.fixedCost)}
+            {breakeven.past ? ' · ผ่านจุดคุ้มทุน' : ''}
+          </p>
+        ) : null}
       </header>
 
       <main className="min-h-0 flex-1 overflow-y-auto px-4">

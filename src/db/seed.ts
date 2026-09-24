@@ -144,6 +144,11 @@ async function upgradeCatalog(db: RuduPosDB, from: number): Promise<void> {
       await moveLegacyPrepTimes(db);
     }
 
+    if (from < 8) {
+      // v8 added the annual revenue warning band.
+      await addMissingSettings(db);
+    }
+
     await markSeeded(db);
   });
 }

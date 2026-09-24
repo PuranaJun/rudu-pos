@@ -7,6 +7,7 @@ import ReceiptSheet from '../components/ReceiptSheet.tsx';
 import SalesListScreen from './SalesListScreen.tsx';
 import ProductionScreen from './ProductionScreen.tsx';
 import CloseDayScreen from './CloseDayScreen.tsx';
+import ReportsScreen from './ReportsScreen.tsx';
 import PrepBanner from '../components/PrepBanner.tsx';
 import VersionStamp from '../components/VersionStamp.tsx';
 import { formatTHB } from '../lib/money.ts';
@@ -14,6 +15,7 @@ import { useWakeLock } from '../lib/useWakeLock.ts';
 import { defaultVariantOf } from '../domain/cart.ts';
 import { unitPrice } from '../domain/cost.ts';
 import { DISCOUNT_REASON_TH } from '../domain/promotions.ts';
+import { breakeven, type DayTotals } from '../domain/reporting.ts';
 import { availableCups } from '../domain/stock.ts';
 import { prepReminders } from '../domain/production.ts';
 import { nowIso } from '../lib/id.ts';
@@ -24,7 +26,8 @@ import {
   useSettings,
   useStockSnapshot,
   useTodaySales,
-  useTodayTotals,
+  useExpectedCash,
+  useSessionTotals,
 } from '../db/hooks.ts';
 import {
   addDrink,
@@ -40,6 +43,17 @@ import { sessionBusinessDate } from '../db/session-repo.ts';
 import type { CashSession, PaymentMethod, Product } from '../db/types.ts';
 
 const MENU_COLORS = ['--color-drink-1', '--color-drink-2', '--color-drink-3'];
+
+const NO_SALES: DayTotals = {
+  units: 0,
+  revenue: 0,
+  cogs: 0,
+  grossProfit: 0,
+  discountsByReason: [],
+  totalDiscount: 0,
+  saleCount: 0,
+  voidedCount: 0,
+};
 
 /**
  * The sell screen. The only workflow that has to be fast.
@@ -67,7 +81,8 @@ export default function SellScreen({
   const stock = useStockSnapshot();
   const settings = useSettings();
   const cart = useCart();
-  const today = useTodayTotals(businessDate);
+  const today = useSessionTotals(session) ?? NO_SALES;
+  const drawer = useExpectedCash(session);
   const deviceId = useDeviceId();
   const sales = useTodaySales(catalog, businessDate);
 
@@ -83,6 +98,7 @@ export default function SellScreen({
   const [showSales, setShowSales] = useState(false);
   const [showProduction, setShowProduction] = useState(false);
   const [showClose, setShowClose] = useState(false);
+  const [showReports, setShowReports] = useState(false);
 
   if (!catalog || !stock || !cart || !settings) {
     return (
@@ -95,6 +111,9 @@ export default function SellScreen({
   // Drawn with the screen, which redraws on every tap and every write — close
   // enough for a reminder about tonight, and nothing has to tick for it.
   const reminders = prepReminders(catalog, stock, nowIso());
+
+  // Live, the waste is not known yet; at close it comes off (CLAUDE.md §7).
+  const even = breakeven(today, settings.fixedCostPerDay, settings.breakevenCups);
 
   const products = [...catalog.products.values()]
     .filter((product) => product.is_active)
@@ -196,12 +215,24 @@ export default function SellScreen({
           type="button"
           onClick={() => setShowSales(true)}
           aria-label="รายการขายวันนี้"
-          className="flex min-w-0 flex-1 items-baseline justify-between gap-3 px-4 pb-2 text-left"
+          className="flex min-w-0 flex-1 flex-col px-4 pb-2 text-left"
         >
-          <span className="text-4xl font-bold tabular-nums">
-            {today.units} <span className="text-2xl font-bold">แก้ว</span>
+          <span className="flex items-baseline justify-between gap-3">
+            <span className="text-4xl font-bold tabular-nums">
+              {today.units} <span className="text-2xl font-bold">แก้ว</span>
+            </span>
+            <span className="text-4xl font-bold tabular-nums">{formatTHB(today.revenue)}</span>
           </span>
-          <span className="text-4xl font-bold tabular-nums">{formatTHB(today.revenue)}</span>
+          <span className="flex items-center justify-between gap-2 text-lg font-bold">
+            <span className="tabular-nums">
+              ลิ้นชัก {drawer === undefined ? '—' : formatTHB(drawer)}
+            </span>
+            <span
+              className={`rounded-lg px-2 tabular-nums ${even.past ? 'bg-brand-2 text-white' : ''}`}
+            >
+              {even.past ? 'ผ่านจุดคุ้มทุน' : `คุ้มทุน ${even.cups}/${even.cupsTarget}`}
+            </span>
+          </span>
         </button>
         <button
           type="button"
@@ -371,6 +402,7 @@ export default function SellScreen({
         <SalesListScreen
           sales={sales ?? []}
           totals={today}
+          breakeven={even}
           voidReasons={settings.voidReasons}
           onVoid={(saleId, reason) => {
             void voidSale(saleId, reason).catch((cause: unknown) =>
@@ -378,12 +410,15 @@ export default function SellScreen({
             );
           }}
           onClose={() => setShowSales(false)}
+          onReports={() => setShowReports(true)}
           onCloseDay={() => {
             setShowSales(false);
             setShowClose(true);
           }}
         />
       ) : null}
+
+      {showReports ? <ReportsScreen onClose={() => setShowReports(false)} /> : null}
 
       {showClose ? (
         <CloseDayScreen

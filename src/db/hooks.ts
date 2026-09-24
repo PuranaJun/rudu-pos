@@ -17,7 +17,8 @@ import { bangkokDate } from '../lib/datetime.ts';
 import { DEVICE_ID_KEY } from './device.ts';
 import { loadSettings, type PosSettings } from './settings-repo.ts';
 import { loadSalesForDate, type SaleSummary } from './sale-repo.ts';
-import { dayTotals, type DayTotals, type DaySummary } from '../domain/reporting.ts';
+import type { ClosedDay, DayTotals, DaySummary } from '../domain/reporting.ts';
+import { loadAnnualRevenue, loadClosedDays, loadSessionTotals } from './report-repo.ts';
 import { loadDaySummary, loadExpectedCash } from './close-repo.ts';
 import { lastOperator, loadOpenSession } from './session-repo.ts';
 import type { CashSession } from './types.ts';
@@ -38,37 +39,22 @@ export function useCart(): CartItem[] | undefined {
   return useLiveQuery(() => loadCart(db), []);
 }
 
-const NO_SALES: DayTotals = {
-  units: 0,
-  revenue: 0,
-  cogs: 0,
-  grossProfit: 0,
-  discountsByReason: [],
-  totalDiscount: 0,
-  saleCount: 0,
-  voidedCount: 0,
-};
-
 /**
- * Today's numbers, keyed on the Asia/Bangkok business date. Never the UTC
- * date: a 06:00 Bangkok sale is the previous UTC day (CLAUDE.md §8).
+ * The open session's cups, revenue and gross profit, live: every sale and
+ * every void repaints it. Never keyed on the UTC date (CLAUDE.md §8).
  */
-export function useTodayTotals(businessDate = bangkokDate(new Date().toISOString())): DayTotals {
-  const totals = useLiveQuery(async () => {
-    const sales = await db.sale.where('business_date').equals(businessDate).toArray();
-    if (sales.length === 0) return NO_SALES;
+export function useSessionTotals(session: CashSession): DayTotals | undefined {
+  return useLiveQuery(() => loadSessionTotals(session, db), [session]);
+}
 
-    const saleIds = new Set(sales.map((sale) => sale.id));
-    const lines = (await db.sale_line.toArray()).filter((line) => saleIds.has(line.sale_id));
-    const lineIds = new Set(lines.map((line) => line.id));
-    const discounts = (await db.sale_line_discount.toArray()).filter((discount) =>
-      lineIds.has(discount.sale_line_id),
-    );
+/** A Bangkok calendar year's takings, live. */
+export function useAnnualRevenue(year: string): number | undefined {
+  return useLiveQuery(() => loadAnnualRevenue(year, db), [year]);
+}
 
-    return dayTotals(sales, lines, discounts);
-  }, [businessDate]);
-
-  return totals ?? NO_SALES;
+/** Every closed day, newest first, for the reports list. */
+export function useClosedDays(): ClosedDay[] | undefined {
+  return useLiveQuery(() => loadClosedDays(db), []);
 }
 
 /** The day's sales for the list, newest first, voided ones included. */

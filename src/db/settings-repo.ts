@@ -24,6 +24,10 @@ export interface PosSettings extends PromotionSettings {
   operators: string[];
   /** One-tap choices when voiding. A void always carries one. */
   voidReasons: string[];
+  /** The VAT registration threshold, in satang. Watched, never calculated against. */
+  annualRevenueThreshold: Satang;
+  /** How far towards the threshold the warning starts, 0–1. */
+  annualRevenueWarnRatio: number;
 }
 
 const FALLBACK: PosSettings = {
@@ -42,6 +46,8 @@ const FALLBACK: PosSettings = {
   vatRegistered: false,
   operators: [],
   voidReasons: ['ยกเลิก'],
+  annualRevenueThreshold: 180_000_000,
+  annualRevenueWarnRatio: 0.75,
 };
 
 export async function loadSettings(db: RuduPosDB = defaultDb): Promise<PosSettings> {
@@ -87,5 +93,7 @@ export async function loadSettings(db: RuduPosDB = defaultDb): Promise<PosSettin
       const value = values.get('void_reasons');
       return Array.isArray(value) && value.length > 0 ? value.map(String) : FALLBACK.voidReasons;
     })(),
+    annualRevenueThreshold: num('annual_revenue_warn_threshold', FALLBACK.annualRevenueThreshold),
+    annualRevenueWarnRatio: num('annual_revenue_warn_ratio', FALLBACK.annualRevenueWarnRatio),
   };
 }
