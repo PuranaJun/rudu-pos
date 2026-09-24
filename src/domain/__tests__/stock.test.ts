@@ -497,6 +497,17 @@ describe('cutting a slab', () => {
     expect(batchRemaining(slab.batch.id, [...slab.movements, ...plan.movements])).toBe(400);
   });
 
+  it('never gives cut cubes longer than the slab they came from', () => {
+    const slab = makeBatch('COMP_JELLY_CHRYS', 1000, {
+      state: 'SLAB',
+      expiresAt: '2026-09-23T07:00:00.000Z', // five hours after NOW
+    });
+
+    const plan = cutSlab(catalog, slab.batch, 600, NOW);
+
+    expect(plan.batch.expires_at).toBe('2026-09-23T07:00:00.000Z');
+  });
+
   it('refuses to cut something that is not a slab', () => {
     const ready = makeBatch('COMP_JELLY_CHRYS', 1000, { state: 'CUT' });
     expect(() => cutSlab(catalog, ready.batch, 100, NOW)).toThrow(/not a SLAB/);

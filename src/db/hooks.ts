@@ -18,6 +18,8 @@ import { DEVICE_ID_KEY } from './device.ts';
 import { loadSettings, type PosSettings } from './settings-repo.ts';
 import { loadSalesForDate, type SaleSummary } from './sale-repo.ts';
 import { dayTotals, type DayTotals } from '../domain/reporting.ts';
+import { lastOperator, loadOpenSession } from './session-repo.ts';
+import type { CashSession } from './types.ts';
 
 export function useCostCatalog(): CostCatalog | undefined {
   return useLiveQuery(() => loadCostCatalog(db), []);
@@ -87,12 +89,15 @@ export function useDeviceId(): string | undefined {
   }, []);
 }
 
-/** The operator chosen at open day. Until step 7 exists, the first one listed. */
-export function useOperator(): string {
-  const operator = useLiveQuery(async () => {
-    const setting = await db.setting.get('operators');
-    return Array.isArray(setting?.value) ? String(setting.value[0] ?? '') : '';
-  }, []);
+/**
+ * The open cash session: null when the day has not been opened, undefined
+ * while IndexedDB is still answering. The app shows open day on null.
+ */
+export function useOpenSession(): CashSession | null | undefined {
+  return useLiveQuery(() => loadOpenSession(db), []);
+}
 
-  return operator ?? '';
+/** Who opened last, to pre-select on the open-day screen. */
+export function useLastOperator(): string | null | undefined {
+  return useLiveQuery(() => lastOperator(db), []);
 }

@@ -1,13 +1,15 @@
 import { useRef, useState } from 'react';
 import { formatBangkok } from '../lib/datetime.ts';
 import { resetAndReseed } from '../db/seed.ts';
+import { stockSampleDay } from '../db/sample-day.ts';
 
 const LONG_PRESS_MS = 1500;
 
 /**
  * The build timestamp, so a deploy is visible on the phone.
  *
- * In a DEV build a long press reseeds the database. This is the one place a
+ * In a DEV build a long press reseeds the database and stocks a sample
+ * morning, uncut jelly and all. This is the one place a
  * long press is acceptable: it is a developer affordance, not an operator
  * path, and it is deliberately hard to hit by accident with wet hands.
  */
@@ -27,12 +29,14 @@ export default function VersionStamp() {
     cancel();
     timer.current = setTimeout(() => {
       timer.current = null;
-      if (!window.confirm('ล้างฐานข้อมูลและโหลดข้อมูลตั้งต้นใหม่?')) return;
+      if (!window.confirm('ล้างฐานข้อมูล แล้วโหลดข้อมูลตั้งต้นกับสต็อกตัวอย่าง?')) return;
       setStatus('working');
-      resetAndReseed().then(
-        () => setStatus('done'),
-        () => setStatus('failed'),
-      );
+      resetAndReseed()
+        .then(() => stockSampleDay())
+        .then(
+          () => setStatus('done'),
+          () => setStatus('failed'),
+        );
     }, LONG_PRESS_MS);
   };
 

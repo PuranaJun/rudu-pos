@@ -16,7 +16,6 @@ import {
   useCart,
   useCostCatalog,
   useDeviceId,
-  useOperator,
   useSettings,
   useStockSnapshot,
   useTodaySales,
@@ -32,7 +31,8 @@ import {
 } from '../db/cart-repo.ts';
 import { completeSale, priceCart, type Receipt } from '../db/sale-repo.ts';
 import { voidSale } from '../db/stock-repo.ts';
-import type { PaymentMethod, Product } from '../db/types.ts';
+import { sessionBusinessDate } from '../db/session-repo.ts';
+import type { CashSession, PaymentMethod, Product } from '../db/types.ts';
 
 const MENU_COLORS = ['--color-drink-1', '--color-drink-2', '--color-drink-3'];
 
@@ -43,16 +43,21 @@ const MENU_COLORS = ['--color-drink-1', '--color-drink-2', '--color-drink-3'];
  * writes to IndexedDB as it happens and nothing on the tap path is awaited, so
  * the screen never waits on a disk or a radio while the operator's hands are
  * wet (CLAUDE.md §0, §6.1).
+ *
+ * Only reachable with a session open. The operator was chosen at open day and
+ * is never asked again; every sale lands on the session's business date.
  */
-export default function SellScreen() {
+export default function SellScreen({ session }: { session: CashSession }) {
+  const businessDate = sessionBusinessDate(session);
+  const operatorId = session.operator_id;
+
   const catalog = useCostCatalog();
   const stock = useStockSnapshot();
   const settings = useSettings();
   const cart = useCart();
-  const today = useTodayTotals();
-  const operatorId = useOperator();
+  const today = useTodayTotals(businessDate);
   const deviceId = useDeviceId();
-  const sales = useTodaySales(catalog);
+  const sales = useTodaySales(catalog, businessDate);
 
   // The screen must not sleep between pours.
   useWakeLock();
@@ -130,6 +135,7 @@ export default function SellScreen() {
       operatorId,
       deviceId: deviceId ?? 'unknown',
       brandingLineTh: settings!.brandingLineTh,
+      businessDate,
     })
       .then((result) => {
         setTendering(null);

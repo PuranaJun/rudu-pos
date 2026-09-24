@@ -60,6 +60,11 @@ export interface PaymentDetails {
   operatorId: string;
   deviceId: string;
   brandingLineTh: string;
+  /**
+   * The open session's date. Falls back to the Bangkok calendar date only
+   * when there is no session to belong to (CLAUDE.md §8).
+   */
+  businessDate?: string;
 }
 
 /**
@@ -204,7 +209,7 @@ export async function completeSale(
       const sale: Sale = {
         id: saleId,
         created_at: now,
-        business_date: bangkokDate(now),
+        business_date: payment.businessDate ?? bangkokDate(now),
         operator_id: payment.operatorId,
         total_gross: priced.totalGross,
         total_discount: priced.totalDiscount,

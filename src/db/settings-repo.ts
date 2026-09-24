@@ -89,11 +89,3 @@ export async function loadSettings(db: RuduPosDB = defaultDb): Promise<PosSettin
     })(),
   };
 }
-
-/**
- * Turn the rainy-day price on or off. The operator's call, made on the
- * open-day screen — never inferred from the date or the weather.
- */
-export async function setRainyDay(enabled: boolean, db: RuduPosDB = defaultDb): Promise<void> {
-  await db.setting.put({ key: 'promo_rainy_day_enabled', value: enabled, synced_at: null });
-}

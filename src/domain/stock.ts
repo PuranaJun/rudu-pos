@@ -316,6 +316,11 @@ export function cutSlab(
   const component = requireComponent(catalog, slab.component_id);
   const shelfLife = component.cut_shelf_life_hours ?? component.shelf_life_hours ?? 24;
 
+  // Cutting shortens the clock; it never lengthens it. Cubes from a slab with
+  // five hours left have five hours left, not a fresh day.
+  const cutClock = addHours(now, shelfLife);
+  const expiresAt = cutClock < slab.expires_at ? cutClock : slab.expires_at;
+
   const batch: ComponentBatch = {
     id: newId(),
     component_id: slab.component_id,
@@ -323,7 +328,7 @@ export function cutSlab(
     qty_made: grams,
     state: 'CUT',
     ready_at: now,
-    expires_at: addHours(now, shelfLife),
+    expires_at: expiresAt,
     parent_batch_id: slab.id,
     note: null,
     synced_at: null,

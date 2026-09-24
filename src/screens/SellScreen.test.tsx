@@ -14,7 +14,21 @@ import { ensureSeeded } from '../db/seed.ts';
 import { ensureDeviceId } from '../db/device.ts';
 import { clearCart, loadCart } from '../db/cart-repo.ts';
 import { productionMovement } from '../domain/stock.ts';
-import type { ComponentBatch } from '../db/types.ts';
+import type { CashSession, ComponentBatch } from '../db/types.ts';
+
+/** The day these tests trade in. The sell screen is only ever shown inside one. */
+const SESSION: CashSession = {
+  id: 'SESSION_TEST',
+  opened_at: new Date().toISOString(),
+  closed_at: null,
+  operator_id: 'เจ้าของ',
+  opening_float: 150_000,
+  expected_cash: null,
+  counted_cash: null,
+  variance: null,
+  note: null,
+  synced_at: null,
+};
 
 function batch(componentId: string, qty: number, state: ComponentBatch['state'] = 'READY') {
   const madeAt = '2026-09-22T00:00:00.000Z';
@@ -65,7 +79,7 @@ async function tamarindButton() {
 
 describe('the menu', () => {
   it('shows the short name, the price and the available cups with what limits them', async () => {
-    render(<SellScreen />);
+    render(<SellScreen session={SESSION} />);
 
     const tamarind = await tamarindButton();
     expect(tamarind).toHaveTextContent('มะขามแดง');
@@ -76,7 +90,7 @@ describe('the menu', () => {
   });
 
   it('never renders the full marketing name on a button', async () => {
-    render(<SellScreen />);
+    render(<SellScreen session={SESSION} />);
     await tamarindButton();
 
     // สาลี่ขาวสมุนไพรจีน is 18 characters and would wrap to three lines.
@@ -88,7 +102,7 @@ describe('the menu', () => {
 describe('ringing a sale', () => {
   it('adds a cup on one tap, with no confirmation', async () => {
     const user = userEvent.setup();
-    render(<SellScreen />);
+    render(<SellScreen session={SESSION} />);
 
     await user.click(await tamarindButton());
 
@@ -98,7 +112,7 @@ describe('ringing a sale', () => {
 
   it('increments on a second tap rather than adding a row', async () => {
     const user = userEvent.setup();
-    render(<SellScreen />);
+    render(<SellScreen session={SESSION} />);
 
     const tamarind = await tamarindButton();
     await user.click(tamarind);
@@ -113,7 +127,7 @@ describe('ringing a sale', () => {
 
   it('steps a line down and removes it at zero', async () => {
     const user = userEvent.setup();
-    render(<SellScreen />);
+    render(<SellScreen session={SESSION} />);
 
     await user.click(await tamarindButton());
     await user.click(await screen.findByLabelText('ลดจำนวน'));
@@ -124,7 +138,7 @@ describe('ringing a sale', () => {
 
   it('rings pear as ICED and switches to HOT in one tap on the line', async () => {
     const user = userEvent.setup();
-    render(<SellScreen />);
+    render(<SellScreen session={SESSION} />);
 
     await user.click(await screen.findByRole('button', { name: /สาลี่ขาว/ }));
     await waitFor(async () => {
@@ -142,7 +156,7 @@ describe('ringing a sale', () => {
 describe('modifiers on the line', () => {
   it('hides peach gum on hot pear, where it is already in the recipe', async () => {
     const user = userEvent.setup();
-    render(<SellScreen />);
+    render(<SellScreen session={SESSION} />);
 
     await user.click(await screen.findByRole('button', { name: /สาลี่ขาว/ }));
     await user.click(await screen.findByLabelText('เพิ่มท็อปปิ้ง'));
@@ -157,7 +171,7 @@ describe('modifiers on the line', () => {
 
   it('shows the salted plum advisory from the data, not from a string in the code', async () => {
     const user = userEvent.setup();
-    render(<SellScreen />);
+    render(<SellScreen session={SESSION} />);
 
     await user.click(await tamarindButton());
     await user.click(await screen.findByLabelText('เพิ่มท็อปปิ้ง'));
@@ -176,7 +190,7 @@ describe('sold out', () => {
     // Empty the jelly: every tamarind component but that one is still there.
     await db.component_batch.update('B_COMP_JELLY_CHRYS', { state: 'DISCARDED' });
 
-    render(<SellScreen />);
+    render(<SellScreen session={SESSION} />);
 
     const tamarind = await screen.findByRole('button', { name: /มะขามแดง/ });
     await waitFor(() => expect(tamarind).toHaveTextContent('หมด'));
@@ -201,7 +215,7 @@ describe('sold out', () => {
 describe('the two-cup discount', () => {
   it('applies by itself when the cart qualifies — the operator never asks', async () => {
     const user = userEvent.setup();
-    render(<SellScreen />);
+    render(<SellScreen session={SESSION} />);
 
     const tamarind = await tamarindButton();
     await user.click(tamarind);
@@ -214,7 +228,7 @@ describe('the two-cup discount', () => {
 
   it('gives nothing on a drink plus a bottle', async () => {
     const user = userEvent.setup();
-    render(<SellScreen />);
+    render(<SellScreen session={SESSION} />);
 
     await user.click(await tamarindButton());
     await user.click(await screen.findByRole('button', { name: /ขวดมะขาม 1L/ }));
@@ -227,7 +241,7 @@ describe('the two-cup discount', () => {
 describe('giving a cup away', () => {
   it('requires a reason, and offers no way to zero a line without one', async () => {
     const user = userEvent.setup();
-    render(<SellScreen />);
+    render(<SellScreen session={SESSION} />);
 
     await user.click(await tamarindButton());
     await user.click(await screen.findByLabelText('ลดราคา'));
@@ -249,7 +263,7 @@ describe('giving a cup away', () => {
 
   it('rings a loyalty cup at zero but still deducts its components', async () => {
     const user = userEvent.setup();
-    render(<SellScreen />);
+    render(<SellScreen session={SESSION} />);
 
     await user.click(await tamarindButton());
     await user.click(await screen.findByLabelText('ลดราคา'));
@@ -276,7 +290,7 @@ describe('giving a cup away', () => {
 describe('paying cash', () => {
   it('completes on พอดี, with no change to read', async () => {
     const user = userEvent.setup();
-    render(<SellScreen />);
+    render(<SellScreen session={SESSION} />);
 
     await user.click(await tamarindButton());
     await user.click(await screen.findByRole('button', { name: 'เงินสด' }));
@@ -294,7 +308,7 @@ describe('paying cash', () => {
 
   it('shows the change in the largest type on the screen, and that is the confirm', async () => {
     const user = userEvent.setup();
-    render(<SellScreen />);
+    render(<SellScreen session={SESSION} />);
 
     await user.click(await tamarindButton());
     await user.click(await screen.findByRole('button', { name: 'เงินสด' }));
@@ -311,7 +325,7 @@ describe('paying cash', () => {
 
   it('will not take a tender smaller than the bill', async () => {
     const user = userEvent.setup();
-    render(<SellScreen />);
+    render(<SellScreen session={SESSION} />);
 
     await user.click(await screen.findByRole('button', { name: /สาลี่ขาว/ }));
     await user.click(await screen.findByRole('button', { name: 'เงินสด' }));
@@ -324,7 +338,7 @@ describe('paying cash', () => {
 
   it('writes the discount rows the day report reads', async () => {
     const user = userEvent.setup();
-    render(<SellScreen />);
+    render(<SellScreen session={SESSION} />);
 
     const tamarind = await tamarindButton();
     await user.click(tamarind);
@@ -344,7 +358,7 @@ describe('paying cash', () => {
 describe('paying by PromptPay', () => {
   it('says plainly that the app checked nothing, and waits for the operator', async () => {
     const user = userEvent.setup();
-    render(<SellScreen />);
+    render(<SellScreen session={SESSION} />);
 
     await user.click(await tamarindButton());
     await user.click(await screen.findByRole('button', { name: 'QR' }));
@@ -365,7 +379,7 @@ describe('paying by PromptPay', () => {
 describe('the receipt', () => {
   it('is never prompted for, and opens from the completed-sale toast', async () => {
     const user = userEvent.setup();
-    render(<SellScreen />);
+    render(<SellScreen session={SESSION} />);
 
     await user.click(await tamarindButton());
     await user.click(await screen.findByRole('button', { name: 'เงินสด' }));
@@ -387,7 +401,7 @@ describe('the receipt', () => {
 
 describe('an empty cart', () => {
   it('cannot be paid for', async () => {
-    render(<SellScreen />);
+    render(<SellScreen session={SESSION} />);
     expect(await screen.findByRole('button', { name: 'เงินสด' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'QR' })).toBeDisabled();
   });
@@ -397,12 +411,12 @@ describe('crash safety', () => {
   /** The closest jsdom gets to a hard reload: everything React held is gone. */
   async function reload() {
     cleanup();
-    render(<SellScreen />);
+    render(<SellScreen session={SESSION} />);
     await screen.findByRole('button', { name: /มะขามแดง/ });
   }
 
   it('survives a reload with an empty cart', async () => {
-    render(<SellScreen />);
+    render(<SellScreen session={SESSION} />);
     await reload();
 
     expect(screen.getByText('ยังไม่มีรายการ')).toBeInTheDocument();
@@ -411,7 +425,7 @@ describe('crash safety', () => {
 
   it('survives a reload with one line', async () => {
     const user = userEvent.setup();
-    render(<SellScreen />);
+    render(<SellScreen session={SESSION} />);
 
     await user.click(await tamarindButton());
     await user.click(await tamarindButton());
@@ -425,7 +439,7 @@ describe('crash safety', () => {
 
   it('survives a reload with modifiers on the line', async () => {
     const user = userEvent.setup();
-    render(<SellScreen />);
+    render(<SellScreen session={SESSION} />);
 
     await user.click(await tamarindButton());
     await user.click(await screen.findByLabelText('เพิ่มท็อปปิ้ง'));
@@ -444,7 +458,7 @@ describe('crash safety', () => {
 
   it('survives a reload with a line given away', async () => {
     const user = userEvent.setup();
-    render(<SellScreen />);
+    render(<SellScreen session={SESSION} />);
 
     await user.click(await tamarindButton());
     await user.click(await screen.findByLabelText('ลดราคา'));
@@ -460,7 +474,7 @@ describe('crash safety', () => {
 
   it('survives a reload on the payment screen, and does not resume a half tender', async () => {
     const user = userEvent.setup();
-    render(<SellScreen />);
+    render(<SellScreen session={SESSION} />);
 
     await user.click(await tamarindButton());
     await user.click(await screen.findByRole('button', { name: 'เงินสด' }));
@@ -479,7 +493,7 @@ describe('crash safety', () => {
 
   it('is empty again after a reload that follows a completed sale', async () => {
     const user = userEvent.setup();
-    render(<SellScreen />);
+    render(<SellScreen session={SESSION} />);
 
     await user.click(await tamarindButton());
     await user.click(await screen.findByRole('button', { name: 'เงินสด' }));
@@ -495,7 +509,7 @@ describe('crash safety', () => {
 describe('the day’s sales', () => {
   it('lists them newest first with time, items, total and method', async () => {
     const user = userEvent.setup();
-    render(<SellScreen />);
+    render(<SellScreen session={SESSION} />);
 
     await user.click(await tamarindButton());
     await user.click(await screen.findByRole('button', { name: 'เงินสด' }));
@@ -511,7 +525,7 @@ describe('the day’s sales', () => {
 
   it('voids with a reason and puts the stock back', async () => {
     const user = userEvent.setup();
-    render(<SellScreen />);
+    render(<SellScreen session={SESSION} />);
 
     // What the tamarind button says before anything is sold.
     const before = (await tamarindButton()).textContent ?? '';

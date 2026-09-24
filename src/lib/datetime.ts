@@ -31,3 +31,24 @@ export function bangkokTime(iso: string): string {
     minute: '2-digit',
   });
 }
+
+/** Day and time without the year, for batch expiry: `26 ก.ย. 07:00`. */
+export function bangkokShort(iso: string): string {
+  return new Date(iso).toLocaleString('th-TH', {
+    timeZone: BANGKOK,
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+/** The open-day heading: weekday, day and month in Bangkok. */
+export function bangkokWeekday(iso: string): string {
+  return new Date(iso).toLocaleDateString('th-TH', {
+    timeZone: BANGKOK,
+    weekday: 'long',
+    day: 'numeric',
+    month: 'short',
+  });
+}

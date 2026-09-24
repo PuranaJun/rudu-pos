@@ -10,7 +10,9 @@ import type { RuduPosDB } from './database.ts';
 import { db as defaultDb } from './database.ts';
 import type { ComponentBatch, StockMovement } from './types.ts';
 import type { RecipeCatalog } from '../domain/recipe.ts';
+import { adjustmentMovement } from '../domain/open-day.ts';
 import {
+  batchRemaining,
   cutSlab,
   deductForSale,
   productionMovement,
@@ -135,5 +137,28 @@ export async function commitCut(
     await db.stock_movement.bulkAdd(plan.movements);
 
     return plan.batch;
+  });
+}
+
+/**
+ * Bring a batch to what the operator counted, as an ADJUSTMENT row. The
+ * current balance is read inside the transaction so a sale rung a moment
+ * earlier is not silently undone by a stale number on the screen.
+ */
+export async function adjustBatch(
+  batchId: string,
+  counted: number,
+  db: RuduPosDB = defaultDb,
+  now: string = nowIso(),
+): Promise<StockMovement | null> {
+  return db.transaction('rw', [db.component_batch, db.stock_movement], async () => {
+    const batch = await db.component_batch.get(batchId);
+    if (!batch) throw new Error(`batch ${batchId} not found`);
+
+    const movements = await db.stock_movement.where('component_batch_id').equals(batchId).toArray();
+    const movement = adjustmentMovement(batchId, batchRemaining(batchId, movements), counted, now);
+    if (movement) await db.stock_movement.add(movement);
+
+    return movement;
   });
 }

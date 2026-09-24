@@ -19,6 +19,12 @@
   --color-bottle: #33302c; /* bottles are not a drink button */
   --color-soldout: #6b6259; /* still 5.5:1 on white — never grey-on-grey */
 
+  /* Shelf life on the open-day screen. Loud means a filled block, not a
+     tinted word: tinted text disappears in direct sun. */
+  --color-expired: #a1170c; /* white text, 7:1 */
+  --color-today: #f5c21b; /* ink text, 11:1 */
+  --color-fresh: #1f5c4a; /* white tea green, used as an outline */
+
   --font-sans:
     'Noto Sans Thai', 'IBM Plex Sans Thai', -apple-system, BlinkMacSystemFont, 'Segoe UI',
     sans-serif;
