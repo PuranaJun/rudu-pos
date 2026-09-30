@@ -9,6 +9,7 @@ import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import SellScreen from './SellScreen.tsx';
+import ScreenHost from '../nav/ScreenHost.tsx';
 import { db } from '../db/database.ts';
 import { ensureSeeded } from '../db/seed.ts';
 import { ensureDeviceId } from '../db/device.ts';
@@ -76,6 +77,23 @@ beforeEach(async () => {
 
 async function tamarindButton() {
   return screen.findByRole('button', { name: /มะขามแดง/ });
+}
+
+/** The sell screen with whatever the เมนู opens over it, as the app has it. */
+function renderSell() {
+  return render(
+    <>
+      <SellScreen session={SESSION} />
+      <ScreenHost session={SESSION} />
+    </>,
+  );
+}
+
+/** The day's bills: เมนู, then บิลวันนี้ — both labelled, both one tap. */
+async function openBills(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole('button', { name: 'เมนู' }));
+  await user.click(await screen.findByRole('button', { name: 'บิลวันนี้' }));
+  return screen.findByRole('dialog', { name: 'บิลวันนี้' });
 }
 
 describe('the menu', () => {
@@ -195,6 +213,8 @@ describe('sold out', () => {
 
     const tamarind = await screen.findByRole('button', { name: /มะขามแดง/ });
     await waitFor(() => expect(tamarind).toHaveTextContent('หมด'));
+    // Said, not only shown: a screen reader hears it too.
+    expect(tamarind).toHaveAccessibleName('มะขามแดง ฿40 — หมด');
 
     await user.click(tamarind);
     expect(await screen.findByText('เลยจำนวนที่มี — ขายต่อ?')).toBeInTheDocument();
@@ -210,6 +230,37 @@ describe('sold out', () => {
     });
 
     await db.component_batch.update('B_COMP_JELLY_CHRYS', { state: 'CUT' });
+  });
+});
+
+describe('running low', () => {
+  it('puts the cups left on a yellow block once there are five or fewer', async () => {
+    // 1000 g of jelly less 880 g: 120 g, at 30 g a cup, is 4 cups.
+    await db.stock_movement.put({
+      id: 'RUNNING_LOW',
+      sale_line_id: null,
+      component_batch_id: 'B_COMP_JELLY_CHRYS',
+      qty_delta: -880,
+      reason: 'ADJUSTMENT',
+      reverses_movement_id: null,
+      created_at: '2026-09-22T01:00:00.000Z',
+      synced_at: null,
+    });
+    try {
+      render(<SellScreen session={SESSION} />);
+      const tamarind = await tamarindButton();
+      await waitFor(() => expect(tamarind).toHaveTextContent('เหลือ 4 แก้ว'));
+      expect(within(tamarind).getByText(/เหลือ 4 แก้ว/)).toHaveClass('bg-today');
+    } finally {
+      await db.stock_movement.delete('RUNNING_LOW');
+    }
+  });
+
+  it('keeps plenty plain', async () => {
+    render(<SellScreen session={SESSION} />);
+    const tamarind = await tamarindButton();
+    await waitFor(() => expect(tamarind).toHaveTextContent('เหลือ 33 แก้ว'));
+    expect(within(tamarind).getByText(/เหลือ 33 แก้ว/)).not.toHaveClass('bg-today');
   });
 });
 
@@ -245,7 +296,7 @@ describe('giving a cup away', () => {
     render(<SellScreen session={SESSION} />);
 
     await user.click(await tamarindButton());
-    await user.click(await screen.findByLabelText('ลดราคา'));
+    await user.click(await screen.findByRole('button', { name: 'ฟรี' }));
 
     // Only the operator's own reasons are offered. The two promotions apply
     // themselves, and offering them by hand would let a forgotten one look
@@ -267,7 +318,7 @@ describe('giving a cup away', () => {
     render(<SellScreen session={SESSION} />);
 
     await user.click(await tamarindButton());
-    await user.click(await screen.findByLabelText('ลดราคา'));
+    await user.click(await screen.findByRole('button', { name: 'ฟรี' }));
     await user.click(screen.getByRole('button', { name: 'แลกแสตมป์' }));
     await waitFor(async () => {
       expect((await loadCart(db))[0]?.line.manual_discount_reason).toBe('LOYALTY_REDEEM');
@@ -357,6 +408,32 @@ describe('paying cash', () => {
     expect(discounts).toHaveLength(1);
     expect(discounts[0]).toMatchObject({ reason: 'PROMO_TWO_CUP', amount: 1000 });
     expect((await db.sale.toArray())[0]?.total_net).toBe(7000);
+  });
+});
+
+describe('the pay buttons', () => {
+  it('keep พอดี first and QR second whatever is due, so the thumb learns them', async () => {
+    const user = userEvent.setup();
+    render(<SellScreen session={SESSION} />);
+    const order = () =>
+      within(screen.getByRole('group', { name: 'รับเงิน' }))
+        .getAllByRole('button')
+        .slice(0, 2)
+        .map((button) => button.textContent);
+
+    await screen.findByRole('group', { name: 'รับเงิน' });
+    expect(order()).toEqual(['พอดี', 'QR']);
+
+    await user.click(await tamarindButton());
+    await waitFor(() => expect(screen.getByRole('button', { name: '฿50' })).toBeInTheDocument());
+    expect(order()).toEqual(['พอดี', 'QR']);
+
+    await user.click(await screen.findByRole('button', { name: /สาลี่ขาว/ }));
+    // ฿89: the ฿50 and ฿59 notes no longer cover it, and nothing slides over.
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: '฿50' })).not.toBeInTheDocument(),
+    );
+    expect(order()).toEqual(['พอดี', 'QR']);
   });
 });
 
@@ -465,7 +542,7 @@ describe('crash safety', () => {
     render(<SellScreen session={SESSION} />);
 
     await user.click(await tamarindButton());
-    await user.click(await screen.findByLabelText('ลดราคา'));
+    await user.click(await screen.findByRole('button', { name: 'ฟรี' }));
     await user.click(screen.getByRole('button', { name: 'แลกแสตมป์' }));
     await waitFor(async () => {
       expect((await loadCart(db))[0]?.line.manual_discount_reason).toBe('LOYALTY_REDEEM');
@@ -511,22 +588,20 @@ describe('crash safety', () => {
 describe('the day’s sales', () => {
   it('lists them newest first with time, items, total and method', async () => {
     const user = userEvent.setup();
-    render(<SellScreen session={SESSION} />);
+    renderSell();
 
     await user.click(await tamarindButton());
     await user.click(await enabledButton('พอดี'));
     await waitFor(async () => expect(await db.sale.count()).toBe(1));
 
-    await user.click(screen.getByLabelText('รายการขายวันนี้'));
-
-    const list = await screen.findByRole('dialog', { name: 'รายการขายวันนี้' });
-    expect(within(list).getByText('มะขามแดง')).toBeInTheDocument();
+    const list = await openBills(user);
+    expect(await within(list).findByText('มะขามแดง')).toBeInTheDocument();
     expect(within(list).getByText('เงินสด')).toBeInTheDocument();
   });
 
   it('voids with a reason and puts the stock back', async () => {
     const user = userEvent.setup();
-    render(<SellScreen session={SESSION} />);
+    renderSell();
 
     // What the tamarind button says before anything is sold.
     const before = (await tamarindButton()).textContent ?? '';
@@ -535,11 +610,11 @@ describe('the day’s sales', () => {
     await user.click(await enabledButton('พอดี'));
     await waitFor(async () => expect(await db.sale.count()).toBe(1));
 
-    await user.click(screen.getByLabelText('รายการขายวันนี้'));
-    await user.click(await screen.findByRole('button', { name: /ยกเลิกบิล/ }));
+    const list = await openBills(user);
+    await user.click(await within(list).findByRole('button', { name: /ยกเลิกบิล/ }));
 
     // A void cannot happen without a reason being chosen.
-    expect(await screen.findByText('ยกเลิกเพราะอะไร?')).toBeInTheDocument();
+    expect(await screen.findByText('ยกเลิกบิลนี้เพราะอะไร?')).toBeInTheDocument();
     expect(await db.sale.get((await db.sale.toArray())[0]!.id)).toMatchObject({
       is_voided: false,
     });
@@ -563,8 +638,33 @@ describe('the day’s sales', () => {
   });
 });
 
+describe('a receipt asked for later', () => {
+  it('opens from the day’s bills, and goes back to them', async () => {
+    const user = userEvent.setup();
+    renderSell();
+
+    await user.click(await tamarindButton());
+    await user.click(await enabledButton('พอดี'));
+    await waitFor(async () => expect(await db.sale.count()).toBe(1));
+    // The next customer: the sell screen's own receipt button is gone.
+    await user.click(await tamarindButton());
+    expect(screen.queryByRole('button', { name: 'ดูใบเสร็จ' })).not.toBeInTheDocument();
+
+    const list = await openBills(user);
+    await user.click(await within(list).findByRole('button', { name: /^ใบเสร็จ/ }));
+
+    const receipt = await screen.findByRole('dialog', { name: 'ใบเสร็จ' });
+    expect(within(receipt).getByText(/มะขามแดง/)).toBeInTheDocument();
+    expect(within(receipt).getByText('สุทธิ')).toBeInTheDocument();
+
+    await user.click(within(receipt).getByRole('button', { name: 'กลับไปบิลวันนี้' }));
+    expect(screen.queryByRole('dialog', { name: 'ใบเสร็จ' })).not.toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'บิลวันนี้' })).toBeInTheDocument();
+  });
+});
+
 describe('today, live', () => {
-  const header = () => screen.getByLabelText('รายการขายวันนี้');
+  const header = () => screen.getByLabelText('ยอดวันนี้');
   const cupsLeft = async () =>
     Number(/เหลือ (\d+) แก้ว/.exec((await tamarindButton()).textContent ?? '')?.[1]);
 
@@ -581,7 +681,7 @@ describe('today, live', () => {
 
   it('moves cups, revenue, the drawer and available cups with every sale and void', async () => {
     const user = userEvent.setup();
-    render(<SellScreen session={SESSION} />);
+    renderSell();
 
     await waitFor(() => expect(header()).toHaveTextContent('ลิ้นชัก ฿1,500'));
     expect(header()).toHaveTextContent('0 แก้ว');
@@ -605,9 +705,8 @@ describe('today, live', () => {
     });
 
     // Void the cash sale: all of it comes back.
-    await user.click(header());
-    const list = await screen.findByRole('dialog', { name: 'รายการขายวันนี้' });
-    const buttons = within(list).getAllByRole('button', { name: /ยกเลิกบิล/ });
+    const list = await openBills(user);
+    const buttons = await within(list).findAllByRole('button', { name: /ยกเลิกบิล/ });
     await user.click(buttons[buttons.length - 1]!); // oldest: the cash sale
     await user.click(within(list).getByRole('button', { name: 'กดผิด' }));
     await user.click(within(list).getByRole('button', { name: 'กลับไปขาย' }));
@@ -621,7 +720,7 @@ describe('today, live', () => {
 
   it('marks breakeven: cups against ten, then past it once gross profit covers the day', async () => {
     const fixed = await db.setting.get('fixed_cost_per_day');
-    render(<SellScreen session={SESSION} />);
+    renderSell();
     await waitFor(() => expect(header()).toHaveTextContent('คุ้มทุน 0/10'));
 
     // A day whose fixed cost one cup covers.
@@ -631,9 +730,8 @@ describe('today, live', () => {
       await waitFor(() => expect(header()).toHaveTextContent('ผ่านจุดคุ้มทุน'));
 
       const user = userEvent.setup();
-      await user.click(header());
-      const list = await screen.findByRole('dialog', { name: 'รายการขายวันนี้' });
-      expect(within(list).getByText(/กำไรขั้นต้น .* จาก ฿10/)).toBeInTheDocument();
+      const list = await openBills(user);
+      expect(await within(list).findByText(/กำไรขั้นต้น .* จาก ฿10/)).toBeInTheDocument();
     } finally {
       await db.setting.put(fixed!);
     }

@@ -5,10 +5,11 @@
   --color-paper: #faf6ee; /* warm off-white — app background */
   --color-paper-sunk: #f0e9db; /* recessed surfaces */
   --color-ink: #1a1512; /* body text — near black on warm paper */
-  --color-ink-soft: #4a4038; /* the lightest text allowed; still ~8:1 */
-  --color-line: #d9cdb8; /* hairlines */
+  --color-ink-soft: #4a4038; /* the lightest text allowed; still ~8:1. Also the edge of anything tappable. */
+  --color-line: #d9cdb8; /* hairline dividers ONLY — 1.6:1, too faint for the edge of a button */
   --color-brand: #8c2f1f; /* red tea */
   --color-brand-2: #1f5c4a; /* white tea / go */
+  --color-qr: #0e3d67; /* PromptPay navy — never mistaken for the cash buttons */
 
   /* Menu buttons. Assigned by menu order, not by product id, so a third drink
      gets the next colour without a code change. Every text/background pair
@@ -18,13 +19,13 @@
   --color-drink-2: #7c4410; /* warm amber — สาลี่ขาว, 7.8:1 */
   --color-drink-3: #1f5c4a; /* reserved for the third drink */
   --color-bottle: #33302c; /* bottles are not a drink button */
-  --color-soldout: #565049; /* 8:1 on white — never grey-on-grey */
+  /* A sold-out drink is paper-sunk with a dashed ink edge: told apart from the
+     drink colours by lightness, not by hue, which sunlight washes out. */
 
   /* Shelf life on the open-day screen. Loud means a filled block, not a
      tinted word: tinted text disappears in direct sun. */
   --color-expired: #a1170c; /* white text, 7:1 */
   --color-today: #f5c21b; /* ink text, 11:1 */
-  --color-fresh: #1f5c4a; /* white tea green, used as an outline */
 
   --font-sans:
     'Noto Sans Thai', 'IBM Plex Sans Thai', -apple-system, BlinkMacSystemFont, 'Segoe UI',
@@ -115,9 +116,46 @@ button,
   padding-right: env(safe-area-inset-right);
 }
 
-/* Nothing animates for longer than 100ms: the operator is mid-pour. */
-button {
-  transition-duration: 80ms;
+@layer base {
+  /* Nothing animates for longer than 100ms: the operator is mid-pour. Only the
+     colours move — never `all`, which would ease layout too. */
+  button,
+  [role='button'] {
+    transition-property: background-color, border-color, color, box-shadow, filter;
+    transition-duration: 70ms;
+    transition-timing-function: ease-out;
+  }
+
+  /* Pressed: a visible dip on every button, so a wet tap is never a guess.
+     No scale — WebKit hit-tests the shrunk box, and a thumb on the edge of a
+     pressed button would lose the tap. Dark fills lighten instead
+     (`press-light`); this darkening is for the light ones. */
+  :where(button, [role='button']):not(:disabled):active,
+  label:has(> input[type='file']):active {
+    filter: brightness(0.86);
+    box-shadow: inset 0 3px 0 rgb(0 0 0 / 0.28);
+  }
+
+  /* Keyboard focus (an iPad with a keyboard case): a thick ink ring. */
+  :where(button, [role='button'], a, input, textarea, select):focus-visible {
+    outline: 3px solid var(--color-ink);
+    outline-offset: 2px;
+  }
+}
+
+/* A dark button pressed: lighter, so the press shows on a dark fill. */
+@utility press-light {
+  &:not(:disabled):active {
+    filter: brightness(1.3);
+  }
+}
+
+/* A bordered box around a bare input: the ring goes on the box. */
+@utility field-focus {
+  &:focus-within {
+    outline: 3px solid var(--color-ink);
+    outline-offset: 2px;
+  }
 }
 
 /* No mains power, 8-hour day: honour the OS setting and keep motion cheap. */

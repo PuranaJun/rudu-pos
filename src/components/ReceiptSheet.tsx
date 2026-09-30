@@ -1,24 +1,30 @@
 import { formatTHB } from '../lib/money.ts';
 import { formatBangkok } from '../lib/datetime.ts';
 import { DISCOUNT_REASON_TH } from '../domain/promotions.ts';
+import { ScreenFooter, type BackTo } from './Screen.tsx';
 import type { DiscountReason } from '../db/types.ts';
 import type { Receipt } from '../db/sale-repo.ts';
 
 interface Props {
   receipt: Receipt;
-  onClose: () => void;
+  back: BackTo;
+  /** Set when the bill was voided afterwards: said above everything else. */
+  voidReason?: string | null | undefined;
 }
 
 /**
  * A receipt, shown only when asked for.
  *
- * Receipts are rarely wanted, so nothing prompts for one — this opens from the
- * completed-sale toast and nowhere else (CLAUDE.md §5).
+ * Receipts are rarely wanted, so nothing prompts for one — it opens from the
+ * completed-sale line and from the day's bills (CLAUDE.md §5).
+ *
+ * Laid out as the customer reads it, shop name on top, so it is the one
+ * screen without the usual title. The way out is where it always is.
  *
  * There is no VAT line and there is no tax arithmetic, because the shop is not
  * VAT registered. The price is simply the price.
  */
-export default function ReceiptSheet({ receipt, onClose }: Props) {
+export default function ReceiptSheet({ receipt, back, voidReason = null }: Props) {
   return (
     <div
       role="dialog"
@@ -26,8 +32,16 @@ export default function ReceiptSheet({ receipt, onClose }: Props) {
       className="safe-x fixed inset-0 z-30 flex flex-col bg-white text-ink"
     >
       <div className="safe-top min-h-0 flex-1 overflow-y-auto px-5 pb-4">
+        {voidReason !== null ? (
+          <p
+            role="alert"
+            className="bg-expired mt-3 rounded-xl px-4 py-3 text-xl font-bold text-white"
+          >
+            บิลนี้ยกเลิกแล้ว — {voidReason}
+          </p>
+        ) : null}
         <div className="py-4 text-center">
-          <p className="text-3xl font-bold">ฤดูชา</p>
+          <h1 className="text-3xl font-bold">ฤดูชา</h1>
           {receipt.brandingLineTh ? (
             <p className="text-ink-soft text-lg font-bold">{receipt.brandingLineTh}</p>
           ) : null}
@@ -94,15 +108,7 @@ export default function ReceiptSheet({ receipt, onClose }: Props) {
         </dl>
       </div>
 
-      <footer className="safe-bottom border-line border-t px-4 pt-3">
-        <button
-          type="button"
-          onClick={onClose}
-          className="bg-ink text-paper min-h-touch-lg w-full rounded-2xl py-4 text-2xl font-bold"
-        >
-          ปิด
-        </button>
-      </footer>
+      <ScreenFooter back={back} />
     </div>
   );
 }

@@ -14,6 +14,7 @@ import { loadStockSnapshot, recordBatch } from '../db/stock-repo.ts';
 import { batchRemaining } from '../domain/stock.ts';
 import { toBangkokInput } from '../lib/datetime.ts';
 import type { BatchState, ComponentBatch } from '../db/types.ts';
+import { BACK } from '../test/helpers.ts';
 
 const HOUR = 3_600_000;
 const at = (hoursFromNow: number) => new Date(Date.now() + hoursFromNow * HOUR).toISOString();
@@ -50,12 +51,10 @@ beforeEach(async () => {
   await db.cash_session.clear();
 });
 
-const noop = () => {};
-
 describe('recording a batch', () => {
   it('prefills the catalog quantity, shows the recipe, and starts a steep', async () => {
     const user = userEvent.setup();
-    render(<ProductionScreen onClose={noop} />);
+    render(<ProductionScreen back={BACK} />);
 
     await user.click(await screen.findByRole('button', { name: 'ชาแดงสกัดเย็น 2x' }));
 
@@ -80,7 +79,7 @@ describe('recording a batch', () => {
 
   it('takes an edited made-at time, in Bangkok time', async () => {
     const user = userEvent.setup();
-    render(<ProductionScreen onClose={noop} />);
+    render(<ProductionScreen back={BACK} />);
 
     await user.click(await screen.findByRole('button', { name: 'หัวเชื้อมะขาม' }));
     const madeAt = screen.getByLabelText('เวลาที่ทำ');
@@ -100,7 +99,7 @@ describe('white-tea jelly', () => {
     await onHand('TEA_NEW', 'COMP_TEA_WHITE', 4000, { expiresInHours: 60 });
     await onHand('TEA_OLD', 'COMP_TEA_WHITE', 2000, { expiresInHours: 20 });
     const user = userEvent.setup();
-    render(<ProductionScreen onClose={noop} />);
+    render(<ProductionScreen back={BACK} />);
 
     await user.click(await screen.findByRole('button', { name: 'เยลลี่ชาขาวฝังเก๋ากี้' }));
     expect(screen.getByText('ใช้ชาขาวสกัดเย็น 2x 500 ml จากถัง')).toBeInTheDocument();
@@ -127,7 +126,7 @@ describe('white-tea jelly', () => {
   it('warns when the batch holds less than 500 ml, and records anyway', async () => {
     await onHand('TEA_LOW', 'COMP_TEA_WHITE', 300);
     const user = userEvent.setup();
-    render(<ProductionScreen onClose={noop} />);
+    render(<ProductionScreen back={BACK} />);
 
     await user.click(await screen.findByRole('button', { name: 'เยลลี่ชาขาวฝังเก๋ากี้' }));
 
@@ -142,7 +141,7 @@ describe('white-tea jelly', () => {
 
   it('cannot be recorded with no white tea to take it from', async () => {
     const user = userEvent.setup();
-    render(<ProductionScreen onClose={noop} />);
+    render(<ProductionScreen back={BACK} />);
 
     await user.click(await screen.findByRole('button', { name: 'เยลลี่ชาขาวฝังเก๋ากี้' }));
 
@@ -155,7 +154,7 @@ describe('the batch list', () => {
   it('counts down to expiry, loud on the last day', async () => {
     await onHand('TEA_RED', 'COMP_TEA_RED', 5000, { expiresInHours: 30.5 });
     await onHand('PEAR', 'COMP_PEAR_FRESH', 420, { expiresInHours: 5.5 });
-    render(<ProductionScreen onClose={noop} />);
+    render(<ProductionScreen back={BACK} />);
 
     const list = await screen.findByRole('region', { name: 'ของที่ทำไว้' });
     expect(await within(list).findByText('เหลือ 1 วัน')).toBeInTheDocument();
@@ -165,7 +164,7 @@ describe('the batch list', () => {
   it('blanches soaked peach gum with one tap', async () => {
     await onHand('GUM', 'COMP_PEACH_GUM', 350, { state: 'SOAKING' });
     const user = userEvent.setup();
-    render(<ProductionScreen onClose={noop} />);
+    render(<ProductionScreen back={BACK} />);
 
     await user.click(await screen.findByRole('button', { name: 'ลวกแล้ว ยางพีช' }));
 
@@ -188,7 +187,7 @@ describe('prep reminders on the home screen', () => {
 
     // The banner goes straight to the form for it.
     await user.click(banner);
-    const production = await screen.findByRole('dialog', { name: 'การผลิต' });
+    const production = await screen.findByRole('dialog', { name: 'ผลิต' });
     await user.click(within(production).getByRole('button', { name: 'เตือนเตรียมของพรุ่งนี้' }));
     await user.click(within(production).getByRole('button', { name: 'บันทึก' }));
 

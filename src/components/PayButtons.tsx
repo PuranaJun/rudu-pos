@@ -1,5 +1,6 @@
 import { formatTHB } from '../lib/money.ts';
 import type { Satang } from '../lib/money.ts';
+import { buttonClass } from './button.ts';
 
 interface Props {
   due: Satang;
@@ -10,8 +11,8 @@ interface Props {
   onQr: () => void;
 }
 
-/** More than this and the buttons stop fitting two rows in thumb reach. */
-const MAX_NOTES = 4;
+/** The notes row always has this many places, used or not. */
+const NOTE_SLOTS = 4;
 
 /**
  * Payment, one tap (CLAUDE.md §6.1: "Tap drink → Tap CASH → Done").
@@ -22,47 +23,57 @@ const MAX_NOTES = 4;
  * in cash is two taps, and the drawer comes out the same — a sale adds its
  * net whatever note came in.
  *
- * Only notes that cover the bill are offered, so a ฿50 cannot be taken for
- * a ฿59 pear. QR still asks for the operator's confirmation, because the
- * system never claims to have seen a transfer (CLAUDE.md §4).
+ * Nothing moves between sales. พอดี and QR hold the top row, always in the
+ * same place, so the thumb learns them; the notes fill a fixed row of four
+ * under them. Only notes that cover the bill are offered, so a ฿50 cannot be
+ * taken for a ฿59 pear — the places they leave stay empty rather than let
+ * the rest slide over. QR still asks for the operator's confirmation,
+ * because the system never claims to have seen a transfer (CLAUDE.md §4).
  */
 export default function PayButtons({ due, quickTender, disabled, onCash, onQr }: Props) {
   const notes = [...new Set(quickTender)]
     .filter((amount) => amount > due)
     .sort((a, b) => a - b)
-    .slice(0, MAX_NOTES);
+    .slice(0, NOTE_SLOTS);
+  const empty = NOTE_SLOTS - notes.length;
 
   return (
-    <div role="group" aria-label="รับเงิน" className="grid grid-cols-3 gap-2">
-      <button
-        type="button"
-        onClick={() => onCash(due)}
-        disabled={disabled}
-        className="bg-brand-2 min-h-touch-lg w-full rounded-2xl text-2xl font-bold text-white active:brightness-90 disabled:bg-paper-sunk disabled:text-ink-soft disabled:border-line"
-      >
-        พอดี
-      </button>
-
-      {notes.map((amount) => (
+    <div role="group" aria-label="รับเงิน" className="flex flex-col gap-2">
+      <div className="grid grid-cols-2 gap-2">
         <button
-          key={amount}
           type="button"
-          onClick={() => onCash(amount)}
+          onClick={() => onCash(due)}
           disabled={disabled}
-          className="border-brand-2 text-ink min-h-touch-lg w-full rounded-2xl border-2 bg-white text-2xl font-bold tabular-nums disabled:bg-paper-sunk disabled:text-ink-soft disabled:border-line"
+          className={`${buttonClass('primary', 'lg')} w-full`}
         >
-          {formatTHB(amount)}
+          พอดี
         </button>
-      ))}
+        <button
+          type="button"
+          onClick={onQr}
+          disabled={disabled}
+          className={`${buttonClass('qr', 'lg')} w-full`}
+        >
+          QR
+        </button>
+      </div>
 
-      <button
-        type="button"
-        onClick={onQr}
-        disabled={disabled}
-        className="bg-ink min-h-touch-lg w-full rounded-2xl text-2xl font-bold text-white active:brightness-90 disabled:bg-paper-sunk disabled:text-ink-soft disabled:border-line"
-      >
-        QR
-      </button>
+      <div className="grid grid-cols-4 gap-2">
+        {notes.map((amount) => (
+          <button
+            key={amount}
+            type="button"
+            onClick={() => onCash(amount)}
+            disabled={disabled}
+            className={`${buttonClass('cash', 'md', { tight: true })} w-full tabular-nums`}
+          >
+            {formatTHB(amount)}
+          </button>
+        ))}
+        {Array.from({ length: empty }, (_, index) => (
+          <span key={`empty-${index}`} aria-hidden="true" className="min-h-touch-lg" />
+        ))}
+      </div>
     </div>
   );
 }

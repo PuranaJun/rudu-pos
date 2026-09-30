@@ -1,5 +1,9 @@
 import { screen, waitFor } from '@testing-library/react';
 import { expect } from 'vitest';
+import type { BackTo } from '../components/Screen.tsx';
+
+/** A back button for a screen rendered on its own, going nowhere. */
+export const BACK: BackTo = { label: 'กลับไปขาย', onClick: () => {} };
 
 /**
  * A button, once it can be pressed.

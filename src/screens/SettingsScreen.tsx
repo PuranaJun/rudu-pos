@@ -5,10 +5,14 @@ import PackagingSettings from './settings/PackagingSettings.tsx';
 import ModifierSettings from './settings/ModifierSettings.tsx';
 import ShopSettings from './settings/ShopSettings.tsx';
 import DataSettings from './settings/DataSettings.tsx';
+import { ChoiceChip } from '../components/Button.tsx';
+import LeaveGuardProvider from '../components/LeaveGuardProvider.tsx';
+import { useLeaveGuard } from '../components/leave-guard.ts';
+import { Screen, ScreenBody, ScreenFooter, type BackTo } from '../components/Screen.tsx';
 import { useCostCatalog, useSettings } from '../db/hooks.ts';
 
 const TABS = [
-  ['MENU', 'เมนู'],
+  ['MENU', 'เครื่องดื่ม'],
   ['COMPONENTS', 'ส่วนประกอบ'],
   ['PACKAGING', 'บรรจุภัณฑ์'],
   ['MODIFIERS', 'ท็อปปิ้ง'],
@@ -24,62 +28,63 @@ type Tab = (typeof TABS)[number][0];
  * The recipes have not been taste-tested and will change, so nothing about
  * them lives in the code — it lives here. Every change applies from the next
  * sale on; what was already sold keeps the price and cost it was sold at.
+ *
+ * All six sections are on screen at once — a row that scrolls sideways hides
+ * the last ones, and the last one is the backup. Each section draws its own
+ * body and footer: a list's footer leaves settings, an editor's footer goes
+ * back to its list and saves. Nothing typed is lost without being asked.
  */
-export default function SettingsScreen({ onClose }: { onClose: () => void }) {
+export default function SettingsScreen({ back }: { back: BackTo }) {
+  return (
+    <LeaveGuardProvider>
+      <Settings back={back} />
+    </LeaveGuardProvider>
+  );
+}
+
+function Settings({ back }: { back: BackTo }) {
   const catalog = useCostCatalog();
   const settings = useSettings();
+  const guard = useLeaveGuard();
   const [tab, setTab] = useState<Tab>('MENU');
 
   return (
-    <div
-      role="dialog"
-      aria-label="ตั้งค่า"
-      className="safe-x text-ink fixed inset-0 z-30 flex flex-col bg-white"
-    >
-      <header className="safe-top border-line border-b px-4 pb-2">
-        <div className="flex items-center justify-between gap-3">
-          <h1 className="text-3xl font-bold">ตั้งค่า</h1>
-          <button
-            type="button"
-            onClick={onClose}
-            className="bg-ink min-h-touch rounded-xl px-5 text-lg font-bold text-white"
-          >
-            เสร็จ
-          </button>
-        </div>
-        <nav aria-label="หมวด" className="-mx-4 mt-2 flex gap-2 overflow-x-auto px-4">
+    <Screen
+      title="ตั้งค่า"
+      below={
+        <nav aria-label="หมวด" className="tablet:grid-cols-6 mt-2 grid grid-cols-2 gap-2">
           {TABS.map(([id, label]) => (
-            <button
+            <ChoiceChip
               key={id}
-              type="button"
-              aria-pressed={tab === id}
-              onClick={() => setTab(id)}
-              className={`min-h-touch shrink-0 rounded-xl border-2 px-3 text-lg font-bold ${
-                tab === id ? 'bg-ink border-ink text-white' : 'border-line'
-              }`}
+              selected={tab === id}
+              onClick={() => guard.leave(() => setTab(id))}
             >
               {label}
-            </button>
+            </ChoiceChip>
           ))}
         </nav>
-      </header>
-
-      {/* No footer bar here, so the list itself keeps clear of the home indicator. */}
-      <main className="safe-bottom min-h-0 flex-1 overflow-y-auto px-4">
-        {!catalog || !settings ? null : tab === 'MENU' ? (
-          <MenuSettings catalog={catalog} />
-        ) : tab === 'COMPONENTS' ? (
-          <ComponentSettings catalog={catalog} />
-        ) : tab === 'PACKAGING' ? (
-          <PackagingSettings catalog={catalog} />
-        ) : tab === 'MODIFIERS' ? (
-          <ModifierSettings catalog={catalog} />
-        ) : tab === 'SHOP' ? (
-          <ShopSettings catalog={catalog} settings={settings} />
-        ) : (
-          <DataSettings />
-        )}
-      </main>
-    </div>
+      }
+    >
+      {!catalog || !settings ? (
+        <>
+          <ScreenBody>
+            <p className="py-6 text-lg font-bold">กำลังโหลด…</p>
+          </ScreenBody>
+          <ScreenFooter back={back} />
+        </>
+      ) : tab === 'MENU' ? (
+        <MenuSettings catalog={catalog} exit={back} />
+      ) : tab === 'COMPONENTS' ? (
+        <ComponentSettings catalog={catalog} exit={back} />
+      ) : tab === 'PACKAGING' ? (
+        <PackagingSettings catalog={catalog} exit={back} />
+      ) : tab === 'MODIFIERS' ? (
+        <ModifierSettings catalog={catalog} exit={back} />
+      ) : tab === 'SHOP' ? (
+        <ShopSettings catalog={catalog} settings={settings} exit={back} />
+      ) : (
+        <DataSettings exit={back} />
+      )}
+    </Screen>
   );
 }

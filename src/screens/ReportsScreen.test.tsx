@@ -15,6 +15,7 @@ import { addDrink, clearCart, loadCart } from '../db/cart-repo.ts';
 import { completeSale, priceCart } from '../db/sale-repo.ts';
 import { openSession, sessionBusinessDate } from '../db/session-repo.ts';
 import { closeDay } from '../db/close-repo.ts';
+import { BACK } from '../test/helpers.ts';
 
 const HOUR = 3_600_000;
 const hoursAgo = (hours: number) => new Date(Date.now() - hours * HOUR).toISOString();
@@ -78,7 +79,7 @@ describe('past days', () => {
     await tradedDay(50, 1);
     await tradedDay(26, 3);
     const user = userEvent.setup();
-    render(<ReportsScreen onClose={() => {}} />);
+    render(<ReportsScreen back={BACK} />);
 
     const list = await screen.findByRole('region', { name: 'วันที่ปิดแล้ว' });
     await waitFor(() => expect(within(list).getAllByRole('button')).toHaveLength(2));
@@ -94,7 +95,7 @@ describe('past days', () => {
     );
     // Re-reading an old day is not the moment to nag about a backup.
     expect(within(summary).queryByRole('button', { name: /สำรองข้อมูล/ })).not.toBeInTheDocument();
-    await user.click(within(summary).getByRole('button', { name: 'กลับ' }));
+    await user.click(within(summary).getByRole('button', { name: 'กลับไปรายงาน' }));
 
     expect(screen.queryByRole('dialog', { name: 'สรุปวัน' })).not.toBeInTheDocument();
     expect(screen.getByRole('dialog', { name: 'รายงาน' })).toBeInTheDocument();
@@ -102,7 +103,7 @@ describe('past days', () => {
 
   it('leaves out the day still open', async () => {
     await openSession({ operatorId: 'เจ้าของ', openingFloat: 150_000, rainyDay: false }, db);
-    render(<ReportsScreen onClose={() => {}} />);
+    render(<ReportsScreen back={BACK} />);
 
     expect(await screen.findByText('ยังไม่มีวันที่ปิดร้าน')).toBeInTheDocument();
   });
@@ -113,7 +114,7 @@ describe('the year against the VAT threshold', () => {
   // year even when the suite runs on the first of January.
   it('shows the running total, with no tax worked out anywhere', async () => {
     await tradedDay(3, 2);
-    render(<ReportsScreen onClose={() => {}} />);
+    render(<ReportsScreen back={BACK} />);
 
     const card = await screen.findByRole('status', { name: 'ยอดขายทั้งปี' });
     await waitFor(() => expect(card).toHaveTextContent('฿80'));
@@ -124,7 +125,7 @@ describe('the year against the VAT threshold', () => {
   it('warns from three-quarters of the way, and says so once over', async () => {
     await tradedDay(3, 2); // ฿80
     await db.setting.put({ key: 'annual_revenue_warn_threshold', value: 10_000, synced_at: null });
-    render(<ReportsScreen onClose={() => {}} />);
+    render(<ReportsScreen back={BACK} />);
 
     // ฿80 of ฿100.
     const card = await screen.findByRole('status', { name: 'ยอดขายทั้งปี' });

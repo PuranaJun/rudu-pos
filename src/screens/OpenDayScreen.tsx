@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import VersionStamp from '../components/VersionStamp.tsx';
 import ShelfBadge from '../components/ShelfBadge.tsx';
 import PrepBanner from '../components/PrepBanner.tsx';
-import ProductionScreen from './ProductionScreen.tsx';
-import ReportsScreen from './ReportsScreen.tsx';
-import SettingsScreen from './SettingsScreen.tsx';
+import UpdateBanner from '../components/UpdateBanner.tsx';
 import AnnualRevenueCard from '../components/AnnualRevenueCard.tsx';
+import MenuButton from '../nav/MenuButton.tsx';
+import { Button, ChoiceChip } from '../components/Button.tsx';
+import { choiceClass } from '../components/button.ts';
+import { useNav } from '../nav/nav-store.ts';
 import { prepReminders } from '../domain/production.ts';
 import { formatTHB, toSatang } from '../lib/money.ts';
 import { formatQty, unitLabel } from '../lib/quantity.ts';
@@ -20,6 +21,7 @@ import {
   type JellyToCut,
 } from '../domain/open-day.ts';
 import {
+  useCart,
   useCostCatalog,
   useLastOperator,
   useSettings,
@@ -49,6 +51,8 @@ export default function OpenDayScreen() {
   const settings = useSettings();
   const lastOperator = useLastOperator();
   const storageNote = useStorageNote();
+  const cart = useCart();
+  const openScreen = useNav((state) => state.open);
 
   const [now] = useState(nowIso);
   const [operator, setOperator] = useState<string | null>(null);
@@ -56,9 +60,6 @@ export default function OpenDayScreen() {
   const [rainyDay, setRainyDay] = useState(false);
   const [opening, setOpening] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showProduction, setShowProduction] = useState(false);
-  const [showReports, setShowReports] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
 
   if (!catalog || !stock || !settings || lastOperator === undefined) {
     return (
@@ -107,47 +108,29 @@ export default function OpenDayScreen() {
           <h1 className="text-3xl font-bold">เปิดร้าน</h1>
           <p className="text-ink-soft text-lg font-bold">{bangkokWeekday(now)}</p>
         </div>
-        <div className="flex flex-wrap justify-end gap-2">
-          <button
-            type="button"
-            onClick={() => setShowSettings(true)}
-            className="border-line min-h-touch rounded-xl border-2 px-3 text-lg font-bold"
-          >
-            ตั้งค่า
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowReports(true)}
-            className="border-line min-h-touch rounded-xl border-2 px-3 text-lg font-bold"
-          >
-            รายงาน
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowProduction(true)}
-            className="border-line min-h-touch rounded-xl border-2 px-3 text-lg font-bold"
-          >
-            ผลิต
-          </button>
-        </div>
+        <MenuButton />
       </header>
 
-      <PrepBanner reminders={reminders} onTap={() => setShowProduction(true)} />
+      <PrepBanner reminders={reminders} onTap={() => openScreen('PRODUCTION')} />
 
       <main className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
+        {/* Only with an empty cart: switching versions reloads the page. */}
+        <UpdateBanner canApply={cart !== undefined && cart.length === 0} />
+
         {storageNote ? (
           <div role="alert" className="bg-today mt-3 rounded-xl px-4 py-3">
             <p className="text-lg font-bold">
               เครื่องนี้ไม่รับประกันว่าจะเก็บข้อมูลไว้ถาวร — ถ้าพื้นที่เต็ม ข้อมูลอาจหาย
             </p>
             <p className="text-lg font-bold">เปิดแอปจากไอคอนบนหน้าจอโฮมเสมอ และสำรองข้อมูลทุกวัน</p>
-            <button
-              type="button"
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={() => void dismissStorageNote()}
-              className="bg-ink min-h-touch mt-2 w-full rounded-xl text-lg font-bold text-white"
+              className="mt-2 w-full"
             >
               รับทราบ
-            </button>
+            </Button>
           </div>
         ) : null}
 
@@ -175,17 +158,14 @@ export default function OpenDayScreen() {
           <h2 className="text-2xl font-bold">คนขายวันนี้</h2>
           <div className="mt-2 flex flex-wrap gap-2">
             {operators.map((name) => (
-              <button
+              <ChoiceChip
                 key={name}
-                type="button"
-                aria-pressed={name === chosenOperator}
+                selected={name === chosenOperator}
+                size="md"
                 onClick={() => setOperator(name)}
-                className={`min-h-touch-lg rounded-xl border-2 px-5 text-xl font-bold ${
-                  name === chosenOperator ? 'bg-ink border-ink text-white' : 'border-line'
-                }`}
               >
                 {name}
-              </button>
+              </ChoiceChip>
             ))}
           </div>
         </section>
@@ -197,13 +177,12 @@ export default function OpenDayScreen() {
 
         {rainyVariant ? (
           <section aria-label="โปรวันฝนตก" className="pt-4">
+            {/* A switch, said in words: on shows ✓ and "ใช้อยู่", off says "ไม่ใช้". */}
             <button
               type="button"
               aria-pressed={rainyDay}
               onClick={() => setRainyDay((on) => !on)}
-              className={`min-h-touch-lg flex w-full items-center justify-between gap-3 rounded-xl border-2 px-4 py-3 text-left ${
-                rainyDay ? 'bg-ink border-ink text-white' : 'border-line'
-              }`}
+              className={`${choiceClass(rainyDay, 'neutral', 'md')} flex w-full items-center justify-between gap-3 py-3 text-left`}
             >
               <span>
                 <span className="block text-xl font-bold">โปรวันฝนตก</span>
@@ -212,7 +191,15 @@ export default function OpenDayScreen() {
                   {formatTHB(rainyPrice - settings.rainyDayAmount)}
                 </span>
               </span>
-              <span className="shrink-0 text-xl font-bold">{rainyDay ? 'เปิด' : 'ปิด'}</span>
+              <span className="shrink-0 text-xl font-bold">
+                {rainyDay ? (
+                  <>
+                    <span aria-hidden="true">✓ </span>ใช้อยู่
+                  </>
+                ) : (
+                  'ไม่ใช้'
+                )}
+              </span>
             </button>
           </section>
         ) : null}
@@ -254,36 +241,32 @@ export default function OpenDayScreen() {
             ))}
           </ul>
         </section>
-
-        {error ? (
-          <p role="alert" className="pt-4 text-lg font-bold">
-            {error}
-          </p>
-        ) : null}
       </main>
 
       <footer className="safe-bottom border-line border-t px-4 pt-3">
+        {error ? (
+          <p
+            role="alert"
+            className="bg-expired mb-2 rounded-xl px-4 py-3 text-lg font-bold text-white"
+          >
+            {error}
+          </p>
+        ) : null}
         {mustCut.length > 0 ? (
-          <p className="mb-2 text-lg font-bold">
+          <p className="bg-today mb-2 rounded-xl px-3 py-2 text-lg font-bold">
             ต้องตัด{mustCut.map((entry) => entry.component.name_th).join(' และ ')}ก่อนเปิดร้าน
           </p>
         ) : null}
-        <button
-          type="button"
+        <Button
+          variant="primary"
+          size="lg"
           onClick={open}
           disabled={opening || mustCut.length > 0}
-          className="bg-brand-2 disabled:bg-paper-sunk disabled:text-ink disabled:border-line min-h-touch-lg w-full rounded-2xl border-2 border-transparent py-4 text-2xl font-bold text-white"
+          className="w-full py-4"
         >
           เปิดร้าน
-        </button>
-        <div className="mt-1 flex justify-center">
-          <VersionStamp />
-        </div>
+        </Button>
       </footer>
-
-      {showProduction ? <ProductionScreen onClose={() => setShowProduction(false)} /> : null}
-      {showReports ? <ReportsScreen onClose={() => setShowReports(false)} /> : null}
-      {showSettings ? <SettingsScreen onClose={() => setShowSettings(false)} /> : null}
     </div>
   );
 }
@@ -300,21 +283,21 @@ function FloatEditor({ value, onChange }: { value: number; onChange: (satang: nu
     return (
       <div className="mt-2 flex items-center justify-between gap-3">
         <p className="text-4xl font-bold tabular-nums">{formatTHB(value)}</p>
-        <button
-          type="button"
+        <Button
+          variant="secondary"
+          size="sm"
           aria-label="แก้เงินทอนเริ่มต้น"
           onClick={() => setEditing(String(value / 100))}
-          className="border-line min-h-touch rounded-xl border-2 px-5 text-xl font-bold"
         >
           แก้
-        </button>
+        </Button>
       </div>
     );
   }
 
   return (
     <div className="mt-2 flex gap-2">
-      <label className="border-line flex min-w-0 flex-1 items-center rounded-xl border-2 px-3">
+      <label className="border-ink-soft field-focus flex min-w-0 flex-1 items-center rounded-xl border-2 px-3">
         <span className="text-2xl font-bold">฿</span>
         <input
           type="text"
@@ -326,17 +309,17 @@ function FloatEditor({ value, onChange }: { value: number; onChange: (satang: nu
           className="min-h-touch-lg w-full min-w-0 bg-transparent text-2xl font-bold tabular-nums outline-none"
         />
       </label>
-      <button
-        type="button"
+      <Button
+        variant="primary"
         disabled={!valid}
         onClick={() => {
           onChange(toSatang(baht));
           setEditing(null);
         }}
-        className="bg-brand-2 min-h-touch-lg shrink-0 rounded-xl px-4 text-xl font-bold text-white disabled:bg-paper-sunk disabled:text-ink-soft disabled:border-line"
+        className="shrink-0"
       >
         ตกลง
-      </button>
+      </Button>
     </div>
   );
 }
@@ -404,7 +387,7 @@ function SlabCutter({
         <ShelfBadge status={slab.status} expiresAt={slab.expiresAt} />
       </div>
       <div className="mt-2 flex gap-2">
-        <label className="border-line flex min-w-0 flex-1 items-center rounded-xl border-2 px-3">
+        <label className="border-ink-soft field-focus flex min-w-0 flex-1 items-center rounded-xl border-2 px-3">
           <input
             type="text"
             inputMode="numeric"
@@ -415,14 +398,15 @@ function SlabCutter({
           />
           <span className="text-xl font-bold">{unitLabel(component.unit)}</span>
         </label>
-        <button
-          type="button"
+        {/* A routine step, not a danger: green like every other "do it". */}
+        <Button
+          variant="primary"
           disabled={!valid}
           onClick={() => onCut(value)}
-          className="bg-brand min-h-touch-lg shrink-0 rounded-xl px-5 text-xl font-bold text-white disabled:bg-paper-sunk disabled:text-ink-soft disabled:border-line"
+          className="shrink-0"
         >
           ตัด {valid ? formatQty(value, component.unit) : ''}
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -446,7 +430,7 @@ function BatchRow({
   if (editing !== null) {
     return (
       <div className="mt-2 flex gap-2">
-        <label className="border-line flex min-w-0 flex-1 items-center rounded-xl border-2 px-3">
+        <label className="border-ink-soft field-focus flex min-w-0 flex-1 items-center rounded-xl border-2 px-3">
           <input
             type="text"
             inputMode="numeric"
@@ -458,24 +442,20 @@ function BatchRow({
           />
           <span className="text-xl font-bold">{unitLabel(component.unit)}</span>
         </label>
-        <button
-          type="button"
+        <Button variant="secondary" onClick={() => setEditing(null)} className="shrink-0">
+          ยกเลิก
+        </Button>
+        <Button
+          variant="primary"
           disabled={!valid}
           onClick={() => {
             onAdjust(value);
             setEditing(null);
           }}
-          className="bg-brand-2 min-h-touch-lg shrink-0 rounded-xl px-4 text-xl font-bold text-white disabled:bg-paper-sunk disabled:text-ink-soft disabled:border-line"
+          className="shrink-0"
         >
           บันทึก
-        </button>
-        <button
-          type="button"
-          onClick={() => setEditing(null)}
-          className="border-line min-h-touch-lg shrink-0 rounded-xl border-2 px-4 text-xl font-bold"
-        >
-          ยกเลิก
-        </button>
+        </Button>
       </div>
     );
   }
@@ -483,14 +463,17 @@ function BatchRow({
   return (
     <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
       <ShelfBadge status={entry.status} expiresAt={entry.expiresAt} />
-      <button
-        type="button"
+      {/* A number that edits says so: "แก้" beside it. */}
+      <Button
+        variant="secondary"
+        size="sm"
         aria-label={`แก้จำนวน ${component.name_th}`}
         onClick={() => setEditing(String(Math.round(entry.remaining)))}
-        className="border-line min-h-touch rounded-xl border-2 px-4 text-xl font-bold tabular-nums"
+        className="tabular-nums"
       >
         {formatQty(entry.remaining, component.unit)}
-      </button>
+        <span className="text-ink-soft text-lg"> แก้</span>
+      </Button>
     </div>
   );
 }

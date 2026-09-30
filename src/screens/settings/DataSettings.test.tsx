@@ -11,6 +11,7 @@ import { ensureSeeded } from '../../db/seed.ts';
 import { ensureDeviceId } from '../../db/device.ts';
 import { LAST_BACKUP_KEY, exportBackup } from '../../db/backup.ts';
 import type { Sale } from '../../db/types.ts';
+import { BACK } from '../../test/helpers.ts';
 
 let shared: File[] = [];
 let shareOutcome: 'ok' | 'cancel' = 'ok';
@@ -62,7 +63,7 @@ function sale(id: string, net: number, date = new Date().toISOString()): Sale {
 }
 
 async function openData(user: ReturnType<typeof userEvent.setup>) {
-  render(<SettingsScreen onClose={() => {}} />);
+  render(<SettingsScreen back={BACK} />);
   await user.click(await screen.findByRole('button', { name: 'ข้อมูล' }));
 }
 

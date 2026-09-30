@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import UpdateToast from './UpdateToast.tsx';
+import UpdateBanner from './UpdateBanner.tsx';
 
 const update = { ready: true, apply: vi.fn() };
 vi.mock('../lib/useUpdateReady.ts', () => ({ useUpdateReady: () => update }));
@@ -11,10 +11,10 @@ beforeEach(() => {
   update.apply.mockClear();
 });
 
-describe('the update toast', () => {
+describe('the update banner', () => {
   it('says a new version is ready, and switches only when asked', async () => {
     const user = userEvent.setup();
-    render(<UpdateToast canApply />);
+    render(<UpdateBanner canApply />);
 
     expect(screen.getByRole('status', { name: 'อัปเดต' })).toHaveTextContent('อัปเดตแล้ว');
     expect(update.apply).not.toHaveBeenCalled();
@@ -24,19 +24,19 @@ describe('the update toast', () => {
   });
 
   it('is not offered mid-sale, when switching would reload over a cart', () => {
-    render(<UpdateToast canApply={false} />);
+    render(<UpdateBanner canApply={false} />);
     expect(screen.queryByRole('status', { name: 'อัปเดต' })).not.toBeInTheDocument();
   });
 
   it('can be put off, and says nothing when there is nothing new', async () => {
     const user = userEvent.setup();
-    const { unmount } = render(<UpdateToast canApply />);
+    const { unmount } = render(<UpdateBanner canApply />);
     await user.click(screen.getByRole('button', { name: 'ไว้ทีหลัง' }));
     expect(screen.queryByRole('status', { name: 'อัปเดต' })).not.toBeInTheDocument();
     unmount();
 
     update.ready = false;
-    render(<UpdateToast canApply />);
+    render(<UpdateBanner canApply />);
     expect(screen.queryByRole('status', { name: 'อัปเดต' })).not.toBeInTheDocument();
   });
 });

@@ -1,10 +1,12 @@
 import { formatTHB } from '../lib/money.ts';
 import type { Satang } from '../lib/money.ts';
+import { Screen, ScreenBody, ScreenFooter } from './Screen.tsx';
 
 interface Props {
   due: Satang;
   qrImage: string | null;
   onConfirm: () => void;
+  /** Back to the sell screen, cart intact. */
   onCancel: () => void;
   busy: boolean;
 }
@@ -20,19 +22,11 @@ interface Props {
  */
 export default function PromptPayPanel({ due, qrImage, onConfirm, onCancel, busy }: Props) {
   return (
-    <div className="safe-x fixed inset-0 z-20 flex flex-col bg-white text-ink">
-      <header className="safe-top border-line flex items-center justify-between border-b px-4 pb-3">
-        <button
-          type="button"
-          onClick={onCancel}
-          className="min-h-touch-lg min-w-touch-lg text-ink-soft pr-3 text-xl font-bold"
-        >
-          ← กลับ
-        </button>
-        <p className="text-4xl font-bold tabular-nums">{formatTHB(due)}</p>
-      </header>
-
-      <div className="flex flex-1 flex-col items-center justify-center gap-4 p-4">
+    <Screen
+      title="จ่ายด้วย QR"
+      aside={<p className="text-4xl font-bold tabular-nums">{formatTHB(due)}</p>}
+    >
+      <ScreenBody className="flex flex-col items-center justify-center gap-4 pt-4">
         {qrImage ? (
           <img
             src={qrImage}
@@ -40,26 +34,21 @@ export default function PromptPayPanel({ due, qrImage, onConfirm, onCancel, busy
             className="max-h-[60vh] w-auto max-w-full rounded-2xl"
           />
         ) : (
-          <div className="border-line flex flex-col items-center gap-2 rounded-2xl border-4 border-dashed p-8 text-center">
+          <div className="border-ink-soft flex flex-col items-center gap-2 rounded-2xl border-4 border-dashed p-8 text-center">
             <p className="text-3xl font-bold">ใช้ QR ที่พิมพ์ไว้</p>
             <p className="text-ink-soft text-lg font-bold">ยังไม่ได้ใส่รูป QR ในตั้งค่า</p>
           </div>
         )}
-      </div>
+      </ScreenBody>
 
-      <footer className="safe-bottom border-line border-t px-4 pt-3">
-        <p className="mb-2 text-center text-lg font-bold">
+      <ScreenFooter
+        back={{ label: 'กลับไปขาย', onClick: onCancel }}
+        primary={{ label: 'ลูกค้าจ่ายแล้ว', onClick: onConfirm, disabled: busy }}
+      >
+        <p className="bg-today mb-3 rounded-xl px-3 py-2 text-center text-lg font-bold">
           ⚠ ระบบไม่ได้ตรวจสอบการโอน — ดูสลิปในมือถือลูกค้าก่อนกด
         </p>
-        <button
-          type="button"
-          onClick={onConfirm}
-          disabled={busy}
-          className="bg-ink min-h-touch-lg text-paper w-full rounded-2xl py-5 text-3xl font-bold active:brightness-90 disabled:bg-paper-sunk disabled:text-ink-soft disabled:border-line"
-        >
-          ลูกค้าจ่ายแล้ว
-        </button>
-      </footer>
-    </div>
+      </ScreenFooter>
+    </Screen>
   );
 }

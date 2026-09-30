@@ -334,3 +334,61 @@ export async function loadSalesForDate(
       voidReason: sale.void_reason,
     }));
 }
+
+/**
+ * A past sale's receipt, rebuilt from what was recorded, for the customer
+ * who comes back asking for one. Prices, discounts and change are the ones
+ * the sale stored; the drink and topping names and the line under the shop
+ * name are today's, which is what a reprint on the day would show anyway.
+ * The void reason comes with it, so a voided bill never reprints as if it
+ * stood.
+ */
+export async function loadReceipt(
+  catalog: CostCatalog,
+  saleId: string,
+  brandingLineTh: string,
+  db: RuduPosDB = defaultDb,
+): Promise<{ receipt: Receipt; voidReason: string | null } | null> {
+  const sale = await db.sale.get(saleId);
+  if (!sale) return null;
+
+  const lines = await db.sale_line.where('sale_id').equals(saleId).toArray();
+  const lineIds = lines.map((line) => line.id);
+  const [mods, discounts] = await Promise.all([
+    db.sale_line_mod.where('sale_line_id').anyOf(lineIds).toArray(),
+    db.sale_line_discount.where('sale_line_id').anyOf(lineIds).toArray(),
+  ]);
+
+  const receiptLines: ReceiptLine[] = lines.map((line) => {
+    const variant = catalog.variants.get(line.variant_id);
+    const product = variant ? catalog.products.get(variant.product_id) : undefined;
+    return {
+      name: product?.name_short_th ?? line.variant_id,
+      qty: line.qty,
+      unitPrice: line.unit_price,
+      net: line.unit_price * line.qty - line.line_discount,
+      modifiers: mods
+        .filter((mod) => mod.sale_line_id === line.id)
+        .map((mod) => catalog.modifiers.get(mod.modifier_id)?.name_th ?? mod.modifier_id),
+      discounts: discounts
+        .filter((discount) => discount.sale_line_id === line.id)
+        .map((discount) => ({ label: discount.reason, amount: discount.amount })),
+    };
+  });
+
+  return {
+    receipt: {
+      saleId: sale.id,
+      createdAt: sale.created_at,
+      brandingLineTh,
+      lines: receiptLines,
+      totalGross: sale.total_gross,
+      totalDiscount: sale.total_discount,
+      totalNet: sale.total_net,
+      paymentMethod: sale.payment_method,
+      cashReceived: sale.cash_received,
+      cashChange: sale.cash_change,
+    },
+    voidReason: sale.is_voided ? sale.void_reason : null,
+  };
+}

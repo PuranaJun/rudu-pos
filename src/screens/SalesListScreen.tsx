@@ -1,92 +1,81 @@
 import { useState } from 'react';
+import { Button } from '../components/Button.tsx';
+import ReceiptSheet from '../components/ReceiptSheet.tsx';
+import { Screen, ScreenBody, ScreenFooter, type BackTo } from '../components/Screen.tsx';
 import { formatTHB } from '../lib/money.ts';
 import { bangkokTime } from '../lib/datetime.ts';
-import type { SaleSummary } from '../db/sale-repo.ts';
-import type { Breakeven, DayTotals } from '../domain/reporting.ts';
-
-interface Props {
-  sales: SaleSummary[];
-  totals: DayTotals;
-  breakeven?: Breakeven;
-  voidReasons: readonly string[];
-  onVoid: (saleId: string, reason: string) => void;
-  onClose: () => void;
-  /** Close day lives here, beside the day's sales — off the sell screen, one tap away. */
-  onCloseDay?: () => void;
-  /** Past days' summaries and the year's takings. */
-  onReports?: () => void;
-  onSettings?: () => void;
-}
+import { breakeven, EMPTY_DAY_TOTALS } from '../domain/reporting.ts';
+import { useCostCatalog, useSessionTotals, useSettings, useTodaySales } from '../db/hooks.ts';
+import { sessionBusinessDate } from '../db/session-repo.ts';
+import { voidSale } from '../db/stock-repo.ts';
+import { loadReceipt, type Receipt } from '../db/sale-repo.ts';
+import type { CashSession } from '../db/types.ts';
 
 /**
- * The day's sales, newest first.
+ * บิลวันนี้ — the day's bills, newest first.
  *
  * There is no edit here and there never will be. A mistake is voided with a
  * reason and re-rung, which restores every component it deducted and leaves a
- * record of what happened (CLAUDE.md §10). A voided sale stays in the list,
+ * record of what happened (CLAUDE.md §10). A voided bill stays in the list,
  * struck through, saying why.
+ *
+ * Any bill's receipt is here too, for the customer who comes back for one —
+ * the sell screen only offers it until the next drink is tapped.
  */
-export default function SalesListScreen({
-  sales,
-  totals,
-  breakeven,
-  voidReasons,
-  onVoid,
-  onClose,
-  onCloseDay,
-  onReports,
-  onSettings,
-}: Props) {
+export default function SalesListScreen({ session, back }: { session: CashSession; back: BackTo }) {
+  const catalog = useCostCatalog();
+  const settings = useSettings();
+  const sales = useTodaySales(catalog, sessionBusinessDate(session));
+  const totals = useSessionTotals(session) ?? EMPTY_DAY_TOTALS;
+
   const [voiding, setVoiding] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [receipt, setReceipt] = useState<{ receipt: Receipt; voidReason: string | null } | null>(
+    null,
+  );
+
+  const even = settings
+    ? breakeven(totals, settings.fixedCostPerDay, settings.breakevenCups)
+    : null;
+
+  function confirmVoid(saleId: string, reason: string) {
+    setVoiding(null);
+    setError(null);
+    voidSale(saleId, reason).catch((cause: unknown) =>
+      setError(`ยกเลิกบิลไม่สำเร็จ: ${String(cause)}`),
+    );
+  }
+
+  function showReceipt(saleId: string) {
+    if (!catalog || !settings) return;
+    setError(null);
+    loadReceipt(catalog, saleId, settings.brandingLineTh)
+      .then((found) => (found ? setReceipt(found) : setError('ไม่พบบิลนี้')))
+      .catch((cause: unknown) => setError(`เปิดใบเสร็จไม่สำเร็จ: ${String(cause)}`));
+  }
 
   return (
-    <div
-      role="dialog"
-      aria-label="รายการขายวันนี้"
-      className="safe-x text-ink fixed inset-0 z-20 flex flex-col bg-white"
-    >
-      <header className="safe-top border-line border-b px-4 pb-2">
-        <div className="flex items-baseline justify-between gap-3">
-          <p className="text-2xl font-bold">รายการขายวันนี้</p>
-          <p className="text-3xl font-bold tabular-nums">{formatTHB(totals.revenue)}</p>
-        </div>
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-ink-soft text-base font-bold">
-            {totals.units} แก้ว · {totals.saleCount} บิล
-            {totals.voidedCount > 0 ? ` · ยกเลิก ${totals.voidedCount}` : ''}
-          </p>
-          <div className="flex gap-2">
-            {onReports ? (
-              <button
-                type="button"
-                onClick={onReports}
-                className="border-line min-h-touch rounded-xl border-2 px-3 text-lg font-bold"
-              >
-                ย้อนหลัง
-              </button>
-            ) : null}
-            {onSettings ? (
-              <button
-                type="button"
-                onClick={onSettings}
-                className="border-line min-h-touch rounded-xl border-2 px-3 text-lg font-bold"
-              >
-                ตั้งค่า
-              </button>
-            ) : null}
-          </div>
-        </div>
-        {breakeven ? (
+    <Screen
+      title="บิลวันนี้"
+      subtitle={
+        <>
+          {totals.units} แก้ว · {totals.saleCount} บิล
+          {totals.voidedCount > 0 ? ` · ยกเลิก ${totals.voidedCount}` : ''}
+        </>
+      }
+      aside={<p className="text-3xl font-bold tabular-nums">{formatTHB(totals.revenue)}</p>}
+      below={
+        even ? (
           <p className="text-lg font-bold tabular-nums">
-            กำไรขั้นต้น {formatTHB(breakeven.grossProfit)} จาก {formatTHB(breakeven.fixedCost)}
-            {breakeven.past ? ' · ผ่านจุดคุ้มทุน' : ''}
+            กำไรขั้นต้น {formatTHB(even.grossProfit)} จาก {formatTHB(even.fixedCost)}
+            {even.past ? ' · ผ่านจุดคุ้มทุน' : ''}
           </p>
-        ) : null}
-      </header>
-
-      <main className="min-h-0 flex-1 overflow-y-auto px-4">
-        {sales.length === 0 ? (
-          <p className="text-ink-soft py-8 text-center text-lg font-bold">ยังไม่มีการขายวันนี้</p>
+        ) : null
+      }
+    >
+      <ScreenBody>
+        {!sales ? null : sales.length === 0 ? (
+          <p className="text-ink-soft py-8 text-center text-lg font-bold">ยังไม่มีบิลวันนี้</p>
         ) : (
           <ul>
             {sales.map((sale) => (
@@ -112,67 +101,77 @@ export default function SalesListScreen({
                 </p>
 
                 {sale.isVoided ? (
-                  <p className="mt-1 text-lg font-bold">ยกเลิกแล้ว — {sale.voidReason}</p>
-                ) : voiding === sale.id ? (
-                  <div className="mt-2">
-                    <p className="text-lg font-bold">ยกเลิกเพราะอะไร?</p>
-                    <div className="mt-1 flex flex-wrap gap-2">
-                      {voidReasons.map((reason) => (
-                        <button
+                  <p className="bg-paper-sunk mt-2 rounded-xl px-3 py-2 text-lg font-bold">
+                    ยกเลิกแล้ว — {sale.voidReason}
+                  </p>
+                ) : null}
+
+                {voiding === sale.id ? (
+                  <div className="border-expired mt-2 rounded-xl border-2 p-3">
+                    <p className="text-xl font-bold">ยกเลิกบิลนี้เพราะอะไร?</p>
+                    <p className="text-lg font-bold">แตะเหตุผล — ของจะคืนเข้าสต็อก</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <Button variant="secondary" size="sm" onClick={() => setVoiding(null)}>
+                        ไม่ยกเลิกบิล
+                      </Button>
+                      {(settings?.voidReasons ?? []).map((reason) => (
+                        <Button
                           key={reason}
-                          type="button"
-                          onClick={() => {
-                            setVoiding(null);
-                            onVoid(sale.id, reason);
-                          }}
-                          className="bg-brand text-paper min-h-touch rounded-xl px-4 text-lg font-bold"
+                          variant="danger"
+                          size="sm"
+                          onClick={() => confirmVoid(sale.id, reason)}
                         >
                           {reason}
-                        </button>
+                        </Button>
                       ))}
-                      <button
-                        type="button"
-                        onClick={() => setVoiding(null)}
-                        className="border-line min-h-touch rounded-xl border-2 px-4 text-lg font-bold"
-                      >
-                        ไม่ยกเลิก
-                      </button>
                     </div>
                   </div>
                 ) : (
-                  <button
-                    type="button"
-                    onClick={() => setVoiding(sale.id)}
-                    aria-label={`ยกเลิกบิล ${bangkokTime(sale.createdAt)}`}
-                    className="border-line min-h-touch mt-2 rounded-xl border-2 px-4 text-lg font-bold"
-                  >
-                    ยกเลิกบิล
-                  </button>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => showReceipt(sale.id)}
+                      aria-label={`ใบเสร็จ ${bangkokTime(sale.createdAt)}`}
+                    >
+                      ใบเสร็จ
+                    </Button>
+                    {sale.isVoided ? null : (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => setVoiding(sale.id)}
+                        aria-label={`ยกเลิกบิล ${bangkokTime(sale.createdAt)}`}
+                      >
+                        ยกเลิกบิล
+                      </Button>
+                    )}
+                  </div>
                 )}
               </li>
             ))}
           </ul>
         )}
-      </main>
+      </ScreenBody>
 
-      <footer className="safe-bottom border-line flex gap-2 border-t px-4 pt-3">
-        {onCloseDay ? (
-          <button
-            type="button"
-            onClick={onCloseDay}
-            className="border-line min-h-touch-lg rounded-2xl border-2 px-5 text-xl font-bold"
+      <ScreenFooter back={back}>
+        {error ? (
+          <p
+            role="alert"
+            className="bg-expired mb-3 rounded-xl px-4 py-3 text-lg font-bold text-white"
           >
-            ปิดร้าน
-          </button>
+            {error}
+          </p>
         ) : null}
-        <button
-          type="button"
-          onClick={onClose}
-          className="bg-ink text-paper min-h-touch-lg flex-1 rounded-2xl py-4 text-2xl font-bold"
-        >
-          กลับไปขาย
-        </button>
-      </footer>
-    </div>
+      </ScreenFooter>
+
+      {receipt ? (
+        <ReceiptSheet
+          receipt={receipt.receipt}
+          voidReason={receipt.voidReason}
+          back={{ label: 'กลับไปบิลวันนี้', onClick: () => setReceipt(null) }}
+        />
+      ) : null}
+    </Screen>
   );
 }

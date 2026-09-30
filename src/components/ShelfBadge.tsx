@@ -4,12 +4,14 @@ import type { ShelfStatus } from '../domain/open-day.ts';
 const SHELF_STYLE: Record<ShelfStatus, string> = {
   EXPIRED: 'bg-expired text-white',
   TODAY: 'bg-today text-ink',
-  OK: 'border-fresh text-fresh border-2',
+  OK: 'bg-paper-sunk text-ink',
 };
 
 /**
  * Shelf life as a filled block, not a tinted word: tinted text disappears in
- * direct sun. Red once gone, amber on its last day.
+ * direct sun. Red once gone, amber on its last day, a quiet grey block while
+ * it is fine. Filled and edgeless whatever the state: a label, never mistaken
+ * for a button beside the ones that are.
  */
 export default function ShelfBadge({
   status,

@@ -1,5 +1,8 @@
 import { useState } from 'react';
 import ShelfBadge from '../components/ShelfBadge.tsx';
+import { ChoiceChip } from '../components/Button.tsx';
+import { buttonClass } from '../components/button.ts';
+import { Screen, ScreenBody, ScreenFooter, type BackTo } from '../components/Screen.tsx';
 import { formatTHB, toSatang } from '../lib/money.ts';
 import { formatQty, unitLabel } from '../lib/quantity.ts';
 import { bangkokShort } from '../lib/datetime.ts';
@@ -21,7 +24,8 @@ import type { CashSession, WasteReason } from '../db/types.ts';
 
 interface Props {
   session: CashSession;
-  onCancel: () => void;
+  /** Leave without closing — nothing has been written yet. */
+  back: BackTo;
   onClosed: (sessionId: string) => void;
 }
 
@@ -45,7 +49,7 @@ interface Override {
  *
  * Nothing is written until ปิดร้าน, and then all of it at once.
  */
-export default function CloseDayScreen({ session, onCancel, onClosed }: Props) {
+export default function CloseDayScreen({ session, back, onClosed }: Props) {
   const catalog = useCostCatalog();
   const stock = useStockSnapshot();
   const cart = useCart();
@@ -63,7 +67,14 @@ export default function CloseDayScreen({ session, onCancel, onClosed }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   if (!catalog || !stock || !cart || expected === undefined) {
-    return <div role="dialog" aria-label="ปิดร้าน" className="fixed inset-0 z-30 bg-white" />;
+    return (
+      <Screen title="ปิดร้าน" subtitle="ขั้นที่ 1 จาก 2 · ของที่เหลือ">
+        <ScreenBody>
+          <p className="py-6 text-lg font-bold">กำลังโหลด…</p>
+        </ScreenBody>
+        <ScreenFooter back={back} />
+      </Screen>
+    );
   }
 
   const lines = closingLines(catalog, stock, now);
@@ -108,19 +119,11 @@ export default function CloseDayScreen({ session, onCancel, onClosed }: Props) {
   }
 
   return (
-    <div
-      role="dialog"
-      aria-label="ปิดร้าน"
-      className="safe-x text-ink fixed inset-0 z-30 flex flex-col bg-white"
+    <Screen
+      title="ปิดร้าน"
+      subtitle={step === 'STOCK' ? 'ขั้นที่ 1 จาก 2 · ของที่เหลือ' : 'ขั้นที่ 2 จาก 2 · นับเงิน'}
     >
-      <header className="safe-top border-line border-b px-4 pb-2">
-        <h1 className="text-3xl font-bold">ปิดร้าน</h1>
-        <p className="text-ink-soft text-lg font-bold">
-          {step === 'STOCK' ? '1 · ของที่เหลือ' : '2 · นับเงิน'}
-        </p>
-      </header>
-
-      <main className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
+      <ScreenBody>
         {step === 'STOCK' ? (
           lines.length === 0 ? (
             <p className="py-6 text-lg font-bold">ไม่มีของเหลือ</p>
@@ -148,7 +151,7 @@ export default function CloseDayScreen({ session, onCancel, onClosed }: Props) {
                       </div>
 
                       {editing === line.batch.id ? (
-                        <label className="border-line flex w-32 shrink-0 items-center rounded-xl border-2 px-2">
+                        <label className="border-ink-soft field-focus flex w-32 shrink-0 items-center rounded-xl border-2 px-2">
                           <input
                             type="text"
                             inputMode="numeric"
@@ -166,13 +169,15 @@ export default function CloseDayScreen({ session, onCancel, onClosed }: Props) {
                           </span>
                         </label>
                       ) : (
+                        // A number that edits says so: "แก้" beside it.
                         <button
                           type="button"
                           aria-label={`แก้จำนวน ${name}`}
                           onClick={() => setEditing(line.batch.id)}
-                          className="border-line min-h-touch shrink-0 rounded-xl border-2 px-3 text-xl font-bold tabular-nums"
+                          className={`${buttonClass('secondary', 'sm')} shrink-0 tabular-nums`}
                         >
                           {row.valid ? formatQty(row.counted, line.component.unit) : '—'}
+                          <span className="text-ink-soft text-lg"> แก้</span>
                         </button>
                       )}
                     </div>
@@ -182,46 +187,36 @@ export default function CloseDayScreen({ session, onCancel, onClosed }: Props) {
                       role="group"
                       aria-label={`${name} เก็บหรือทิ้ง`}
                     >
-                      <button
-                        type="button"
-                        aria-pressed={row.decision === 'CARRY'}
+                      <ChoiceChip
+                        selected={row.decision === 'CARRY'}
+                        tone="keep"
+                        size="md"
                         onClick={() => change(line.batch.id, { decision: 'CARRY' })}
-                        className={`min-h-touch-lg flex-1 rounded-xl border-2 text-xl font-bold ${
-                          row.decision === 'CARRY'
-                            ? 'bg-brand-2 border-brand-2 text-white'
-                            : 'border-line'
-                        }`}
+                        className="flex-1"
                       >
                         เก็บไว้
-                      </button>
-                      <button
-                        type="button"
-                        aria-pressed={row.decision === 'DISCARD'}
+                      </ChoiceChip>
+                      <ChoiceChip
+                        selected={row.decision === 'DISCARD'}
+                        tone="discard"
+                        size="md"
                         onClick={() => change(line.batch.id, { decision: 'DISCARD' })}
-                        className={`min-h-touch-lg flex-1 rounded-xl border-2 text-xl font-bold ${
-                          row.decision === 'DISCARD'
-                            ? 'bg-expired border-expired text-white'
-                            : 'border-line'
-                        }`}
+                        className="flex-1"
                       >
                         ทิ้ง {formatTHB(row.valid ? wasteCost(line.component, row.counted) : 0)}
-                      </button>
+                      </ChoiceChip>
                     </div>
 
                     {row.decision === 'DISCARD' ? (
                       <div className="mt-2 flex flex-wrap gap-2" role="group" aria-label="เหตุผล">
                         {WASTE_REASONS.map((reason) => (
-                          <button
+                          <ChoiceChip
                             key={reason}
-                            type="button"
-                            aria-pressed={row.reason === reason}
+                            selected={row.reason === reason}
                             onClick={() => change(line.batch.id, { reason })}
-                            className={`min-h-touch rounded-xl border-2 px-3 text-lg font-bold ${
-                              row.reason === reason ? 'bg-ink border-ink text-white' : 'border-line'
-                            }`}
                           >
                             {WASTE_REASON_TH[reason]}
-                          </button>
+                          </ChoiceChip>
                         ))}
                       </div>
                     ) : null}
@@ -254,22 +249,20 @@ export default function CloseDayScreen({ session, onCancel, onClosed }: Props) {
                   ['NOTES', 'นับทีละใบ'],
                 ] as const
               ).map(([mode, label]) => (
-                <button
+                <ChoiceChip
                   key={mode}
-                  type="button"
-                  aria-pressed={cashMode === mode}
+                  selected={cashMode === mode}
+                  size="md"
                   onClick={() => setCashMode(mode)}
-                  className={`min-h-touch-lg flex-1 rounded-xl border-2 text-xl font-bold ${
-                    cashMode === mode ? 'bg-ink border-ink text-white' : 'border-line'
-                  }`}
+                  className="flex-1"
                 >
                   {label}
-                </button>
+                </ChoiceChip>
               ))}
             </div>
 
             {cashMode === 'TOTAL' ? (
-              <label className="border-line mt-3 flex items-center rounded-xl border-2 px-3">
+              <label className="border-ink-soft field-focus mt-3 flex items-center rounded-xl border-2 px-3">
                 <span className="text-2xl font-bold">฿</span>
                 <input
                   type="text"
@@ -301,7 +294,7 @@ export default function CloseDayScreen({ session, onCancel, onClosed }: Props) {
                             [denomination]: event.target.value,
                           }))
                         }
-                        className="border-line min-h-touch w-20 rounded-xl border-2 px-2 text-xl font-bold tabular-nums"
+                        className="border-ink-soft min-h-touch w-20 rounded-xl border-2 px-2 text-xl font-bold tabular-nums"
                       />
                       <span className="ml-auto text-lg font-bold tabular-nums">
                         {Number.isFinite(count) && count > 0 ? formatTHB(count * denomination) : ''}
@@ -317,7 +310,7 @@ export default function CloseDayScreen({ session, onCancel, onClosed }: Props) {
               aria-label="ผลต่าง"
               className={`mt-4 rounded-xl px-4 py-3 ${
                 variance === null
-                  ? 'border-line border-2'
+                  ? 'border-ink-soft border-2 border-dashed'
                   : variance === 0
                     ? 'bg-brand-2 text-white'
                     : 'bg-today'
@@ -344,7 +337,7 @@ export default function CloseDayScreen({ session, onCancel, onClosed }: Props) {
                 aria-label="หมายเหตุ"
                 value={note}
                 onChange={(event) => setNote(event.target.value)}
-                className="border-line min-h-touch mt-1 w-full rounded-xl border-2 px-3 text-lg"
+                className="border-ink-soft min-h-touch mt-1 w-full rounded-xl border-2 px-3 text-lg"
               />
             </label>
 
@@ -355,64 +348,42 @@ export default function CloseDayScreen({ session, onCancel, onClosed }: Props) {
             ) : null}
           </section>
         )}
+      </ScreenBody>
 
-        {error ? (
-          <p role="alert" className="pt-4 text-lg font-bold">
-            {error}
+      {step === 'STOCK' ? (
+        <ScreenFooter
+          back={back}
+          primary={{
+            label: 'ต่อไป: นับเงิน',
+            disabled: !stockValid,
+            onClick: () => {
+              setEditing(null);
+              setStep('CASH');
+            },
+          }}
+        >
+          <p
+            className={`mb-3 rounded-lg px-3 py-1 text-xl font-bold ${totalWaste > 0 ? 'bg-today' : ''}`}
+          >
+            ทิ้งรวม {formatTHB(totalWaste)}
           </p>
-        ) : null}
-      </main>
-
-      <footer className="safe-bottom border-line border-t px-4 pt-3">
-        {step === 'STOCK' ? (
-          <>
+        </ScreenFooter>
+      ) : (
+        <ScreenFooter
+          back={{ label: 'กลับไปขั้น 1', onClick: () => setStep('STOCK') }}
+          primary={{ label: 'ยืนยันปิดร้าน', disabled: counted === null || busy, onClick: close }}
+        >
+          {error ? (
             <p
-              className={`mb-2 rounded-lg px-3 py-1 text-xl font-bold ${totalWaste > 0 ? 'bg-today' : ''}`}
+              role="alert"
+              className="bg-expired mb-3 rounded-xl px-4 py-3 text-lg font-bold text-white"
             >
-              ทิ้งรวม {formatTHB(totalWaste)}
+              {error}
             </p>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={onCancel}
-                className="border-line min-h-touch-lg rounded-2xl border-2 px-5 text-xl font-bold"
-              >
-                ยกเลิก
-              </button>
-              <button
-                type="button"
-                disabled={!stockValid}
-                onClick={() => {
-                  setEditing(null);
-                  setStep('CASH');
-                }}
-                className="bg-ink min-h-touch-lg flex-1 rounded-2xl text-2xl font-bold text-white disabled:bg-paper-sunk disabled:text-ink-soft disabled:border-line"
-              >
-                ต่อไป: นับเงิน
-              </button>
-            </div>
-          </>
-        ) : (
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => setStep('STOCK')}
-              className="border-line min-h-touch-lg rounded-2xl border-2 px-5 text-xl font-bold"
-            >
-              ย้อนกลับ
-            </button>
-            <button
-              type="button"
-              disabled={counted === null || busy}
-              onClick={close}
-              className="bg-brand min-h-touch-lg flex-1 rounded-2xl text-2xl font-bold text-white disabled:bg-paper-sunk disabled:text-ink-soft disabled:border-line"
-            >
-              ปิดร้าน
-            </button>
-          </div>
-        )}
-      </footer>
-    </div>
+          ) : null}
+        </ScreenFooter>
+      )}
+    </Screen>
   );
 }
 

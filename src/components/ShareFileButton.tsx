@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { shareFile, type ShareOutcome } from '../lib/share.ts';
+import { buttonClass } from './button.ts';
 
 interface Props {
   label: string;
@@ -65,16 +66,13 @@ export default function ShareFileButton({
     );
   }
 
-  const styles =
-    tone === 'primary' ? 'bg-brand-2 border-brand-2 text-white' : 'border-line text-ink bg-white';
-
   return (
     <div className="w-full">
       <button
         type="button"
         onClick={tap}
         disabled={!file}
-        className={`min-h-touch-lg w-full rounded-2xl border-2 px-4 text-xl font-bold disabled:bg-paper-sunk disabled:text-ink-soft disabled:border-line ${styles}`}
+        className={`${buttonClass(tone === 'primary' ? 'primary' : 'secondary', 'md')} w-full`}
       >
         {file ? (state === 'done' ? `${label} แล้ว ✓` : label) : 'กำลังเตรียมไฟล์…'}
       </button>

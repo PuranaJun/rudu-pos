@@ -38,6 +38,21 @@ export interface AvailableCups {
   limitingComponentId: string | null;
 }
 
+/**
+ * At or under this many cups, a drink is running low and the sell screen
+ * says so loudly — time to push the other drink or start the next batch.
+ */
+export const LOW_STOCK_CUPS = 5;
+
+export type StockLevel = 'UNLIMITED' | 'OK' | 'LOW' | 'OUT';
+
+/** How worried the sell screen should look about a drink's available cups. */
+export function stockLevel(cups: number, low: number = LOW_STOCK_CUPS): StockLevel {
+  if (!Number.isFinite(cups)) return 'UNLIMITED';
+  if (cups <= 0) return 'OUT';
+  return cups <= low ? 'LOW' : 'OK';
+}
+
 export interface Shortfall {
   componentId: string;
   /** How much could not be sourced from any batch, in the component's unit. */

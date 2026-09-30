@@ -37,6 +37,18 @@ export interface DayTotals {
   voidedCount: number;
 }
 
+/** A day before its first sale. */
+export const EMPTY_DAY_TOTALS: DayTotals = {
+  units: 0,
+  revenue: 0,
+  cogs: 0,
+  grossProfit: 0,
+  discountsByReason: [],
+  totalDiscount: 0,
+  saleCount: 0,
+  voidedCount: 0,
+};
+
 export function dayTotals(
   sales: readonly Sale[],
   lines: readonly SaleLine[],

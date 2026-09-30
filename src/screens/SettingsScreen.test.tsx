@@ -13,7 +13,7 @@ import { ensureDeviceId } from '../db/device.ts';
 import { recordProduction } from '../db/stock-repo.ts';
 import { loadSettings } from '../db/settings-repo.ts';
 import type { CashSession } from '../db/types.ts';
-import { enabledButton } from '../test/helpers.ts';
+import { enabledButton, BACK } from '../test/helpers.ts';
 
 const SESSION: CashSession = {
   id: 'SESSION_SETTINGS',
@@ -44,7 +44,7 @@ async function typeInto(user: User, label: string, text: string) {
 describe('a third drink, through settings alone', () => {
   it('appears on the sell screen with the right available cups and cost — no code change', async () => {
     const user = userEvent.setup();
-    render(<SettingsScreen onClose={() => {}} />);
+    render(<SettingsScreen back={BACK} />);
 
     // 1. A new component: a clear, caffeine-free flower tea.
     await user.click(await screen.findByRole('button', { name: 'ส่วนประกอบ' }));
@@ -60,8 +60,8 @@ describe('a third drink, through settings alone', () => {
     expect(await screen.findByText('บันทึกแล้ว')).toBeInTheDocument();
 
     // 2. A new menu item at ฿40, in the iced cup.
-    await user.click(screen.getByRole('button', { name: 'เมนู' }));
-    await user.click(screen.getByRole('button', { name: '+ เพิ่มเมนู' }));
+    await user.click(screen.getByRole('button', { name: 'เครื่องดื่ม' }));
+    await user.click(screen.getByRole('button', { name: '+ เพิ่มเครื่องดื่ม' }));
     await typeInto(user, 'ชื่อสั้น (บนปุ่ม)', 'ดอกไม้');
     await typeInto(user, 'ชื่อเต็ม (ป้ายเมนู)', 'ชาดอกไม้ตามฤดู');
     await typeInto(user, 'ราคา', '40');
@@ -115,13 +115,15 @@ describe('a third drink, through settings alone', () => {
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'ดอกไม้ ฿40' })).toHaveTextContent('เหลือ 19 แก้ว'),
     );
-  });
+    // The whole setup of a new drink, end to end: 2.5 s alone, and more when
+    // the full suite is running beside it.
+  }, 15_000);
 });
 
 describe('editing what is there', () => {
   it('saves a new price, and says why it will not save a bad one', async () => {
     const user = userEvent.setup();
-    render(<SettingsScreen onClose={() => {}} />);
+    render(<SettingsScreen back={BACK} />);
 
     await user.click(await screen.findByRole('button', { name: /^มะขามแดง/ }));
     await typeInto(user, 'ราคา', '45');
@@ -145,7 +147,7 @@ describe('editing what is there', () => {
 
   it('changes a recipe quantity per variant, leaving the other variants alone', async () => {
     const user = userEvent.setup();
-    render(<SettingsScreen onClose={() => {}} />);
+    render(<SettingsScreen back={BACK} />);
 
     await user.click(await screen.findByRole('button', { name: /^สาลี่ขาว/ }));
     await user.click(await screen.findByRole('button', { name: /^สาลี่ขาว \(ร้อน\)/ }));
@@ -163,7 +165,7 @@ describe('editing what is there', () => {
 
   it('changes the shop: tender buttons, operators, fixed cost', async () => {
     const user = userEvent.setup();
-    render(<SettingsScreen onClose={() => {}} />);
+    render(<SettingsScreen back={BACK} />);
 
     await user.click(await screen.findByRole('button', { name: 'ร้าน' }));
     await typeInto(user, 'ปุ่มรับเงิน', '40, 59, 100, 500');
@@ -183,7 +185,7 @@ describe('editing what is there', () => {
 describe('the PromptPay QR', () => {
   it('is uploaded once and shown from then on, and can be taken away', async () => {
     const user = userEvent.setup();
-    render(<SettingsScreen onClose={() => {}} />);
+    render(<SettingsScreen back={BACK} />);
     await user.click(await screen.findByRole('button', { name: 'ร้าน' }));
 
     const qr = new File([new Uint8Array([137, 80, 78, 71])], 'qr.png', { type: 'image/png' });

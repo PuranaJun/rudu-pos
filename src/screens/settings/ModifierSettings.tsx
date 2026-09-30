@@ -1,12 +1,22 @@
 import { useState } from 'react';
-import { Choice, Editor, ListRow, NumberField, TextField } from '../../components/form.tsx';
+import { ChoiceChip } from '../../components/Button.tsx';
+import {
+  Choice,
+  Editor,
+  ListPage,
+  ListRow,
+  NumberField,
+  TextField,
+} from '../../components/form.tsx';
+import type { BackTo } from '../../components/Screen.tsx';
+import { useDirty } from '../../components/use-dirty.ts';
 import { numberText, parseNumber } from '../../lib/number.ts';
 import { bahtInput, formatTHB, parseBaht } from '../../lib/money.ts';
 import { unitLabel } from '../../lib/quantity.ts';
 import type { CostCatalog } from '../../domain/cost.ts';
 import { createModifier, saveModifier } from '../../db/catalog-repo.ts';
 import type { ComponentRole, Modifier, ModifierKind } from '../../db/types.ts';
-import { AddButton, Saved } from './shared.tsx';
+import { AddButton } from './shared.tsx';
 import { problemsOf } from './problems.ts';
 
 const KINDS = [
@@ -29,7 +39,13 @@ type View = { kind: 'LIST' } | { kind: 'EDIT'; id: string };
  * fields — adds a component, replaces the amount of one by role, leaves out a
  * packaging item — so the engine never has to recognise one by name.
  */
-export default function ModifierSettings({ catalog }: { catalog: CostCatalog }) {
+export default function ModifierSettings({
+  catalog,
+  exit,
+}: {
+  catalog: CostCatalog;
+  exit: BackTo;
+}) {
   const [view, setView] = useState<View>({ kind: 'LIST' });
   const [problems, setProblems] = useState<string[]>([]);
 
@@ -41,7 +57,7 @@ export default function ModifierSettings({ catalog }: { catalog: CostCatalog }) 
         key={modifier.id}
         catalog={catalog}
         modifier={modifier}
-        onBack={() => setView({ kind: 'LIST' })}
+        back={{ label: 'กลับไปรายการ', onClick: () => setView({ kind: 'LIST' }) }}
       />
     );
   }
@@ -49,43 +65,48 @@ export default function ModifierSettings({ catalog }: { catalog: CostCatalog }) 
   const modifiers = [...catalog.modifiers.values()].sort((a, b) => a.sort_order - b.sort_order);
 
   return (
-    <section aria-label="ท็อปปิ้ง">
-      <ul>
-        {modifiers.map((modifier) => (
-          <ListRow
-            key={modifier.id}
-            title={modifier.name_th}
-            detail={modifier.price_delta > 0 ? `+${formatTHB(modifier.price_delta)}` : 'ฟรี'}
-            muted={modifier.applies_to_variant_ids.length === 0}
-            onOpen={() => setView({ kind: 'EDIT', id: modifier.id })}
-          />
-        ))}
-      </ul>
-      {problems.length > 0 ? (
-        <p role="alert" className="mt-2 text-lg font-bold">
-          {problems.join(' · ')}
-        </p>
-      ) : null}
-      <AddButton
-        label="เพิ่มท็อปปิ้ง"
-        onClick={() => {
-          createModifier('ท็อปปิ้งใหม่')
-            .then((modifier) => setView({ kind: 'EDIT', id: modifier.id }))
-            .catch((cause: unknown) => setProblems(problemsOf(cause)));
-        }}
-      />
-    </section>
+    <ListPage exit={exit}>
+      <section aria-label="ท็อปปิ้ง">
+        <ul>
+          {modifiers.map((modifier) => (
+            <ListRow
+              key={modifier.id}
+              title={modifier.name_th}
+              detail={modifier.price_delta > 0 ? `+${formatTHB(modifier.price_delta)}` : 'ฟรี'}
+              muted={modifier.applies_to_variant_ids.length === 0}
+              onOpen={() => setView({ kind: 'EDIT', id: modifier.id })}
+            />
+          ))}
+        </ul>
+        {problems.length > 0 ? (
+          <p
+            role="alert"
+            className="bg-expired mt-2 rounded-xl px-4 py-3 text-lg font-bold text-white"
+          >
+            {problems.join(' · ')}
+          </p>
+        ) : null}
+        <AddButton
+          label="เพิ่มท็อปปิ้ง"
+          onClick={() => {
+            createModifier('ท็อปปิ้งใหม่')
+              .then((modifier) => setView({ kind: 'EDIT', id: modifier.id }))
+              .catch((cause: unknown) => setProblems(problemsOf(cause)));
+          }}
+        />
+      </section>
+    </ListPage>
   );
 }
 
 function ModifierEditor({
   catalog,
   modifier,
-  onBack,
+  back,
 }: {
   catalog: CostCatalog;
   modifier: Modifier;
-  onBack: () => void;
+  back: BackTo;
 }) {
   const variants = [...catalog.variants.values()].sort((a, b) =>
     a.name_th.localeCompare(b.name_th, 'th'),
@@ -107,13 +128,25 @@ function ModifierEditor({
   const [advisory, setAdvisory] = useState(modifier.advisory_th ?? '');
   const [sortOrder, setSortOrder] = useState(String(modifier.sort_order));
   const [problems, setProblems] = useState<string[]>([]);
-  const [saved, setSaved] = useState(false);
+  const form = useDirty({
+    name,
+    kind,
+    price,
+    cost,
+    applies,
+    componentId,
+    qty,
+    role,
+    removes,
+    advisory,
+    sortOrder,
+  });
 
   const component = componentId === 'NONE' ? undefined : catalog.components.get(componentId);
   // A quantity means something when a component is added or one is replaced by role.
   const needsQty = component !== undefined || role !== 'NONE';
 
-  function save() {
+  function save(): Promise<boolean> {
     const priceDelta = parseBaht(price);
     const costDelta = parseBaht(cost);
     const sort = parseNumber(sortOrder);
@@ -124,10 +157,11 @@ function ModifierEditor({
       sort === null ||
       (qty.trim() !== '' && perCup === null)
     ) {
-      return setProblems(['ช่องตัวเลขต้องเป็นตัวเลข']);
+      setProblems(['ช่องตัวเลขต้องเป็นตัวเลข']);
+      return Promise.resolve(false);
     }
 
-    saveModifier({
+    return saveModifier({
       ...modifier,
       name_th: name.trim(),
       kind,
@@ -141,41 +175,49 @@ function ModifierEditor({
       removes_packaging_item_id: removes === 'NONE' ? null : removes,
       advisory_th: advisory.trim() || null,
       sort_order: sort,
-    })
-      .then(() => {
+    }).then(
+      () => {
         setProblems([]);
-        setSaved(true);
-      })
-      .catch((cause: unknown) => setProblems(problemsOf(cause)));
+        form.markSaved();
+        return true;
+      },
+      (cause: unknown) => {
+        setProblems(problemsOf(cause));
+        return false;
+      },
+    );
   }
 
   return (
-    <Editor title={modifier.name_th} problems={problems} onSave={save} onBack={onBack}>
+    <Editor
+      title={modifier.name_th}
+      problems={problems}
+      onSave={save}
+      back={back}
+      dirty={form.dirty}
+      justSaved={form.justSaved}
+    >
       <TextField label="ชื่อ" value={name} onChange={setName} />
       <Choice label="ประเภท" value={kind} options={KINDS} onChange={setKind} />
       <NumberField label="ราคาเพิ่ม" value={price} onChange={setPrice} suffix="บาท" />
 
       <div className="mt-3" role="group" aria-label="ใช้กับ">
-        <span className="text-lg font-bold">ใช้กับ</span>
+        <span className="text-lg font-bold">ใช้กับ (เลือกได้หลายแบบ)</span>
         <div className="mt-1 flex flex-wrap gap-2">
           {variants.map((variant) => {
             const on = applies.includes(variant.id);
             return (
-              <button
+              <ChoiceChip
                 key={variant.id}
-                type="button"
-                aria-pressed={on}
+                selected={on}
                 onClick={() =>
                   setApplies((current) =>
                     on ? current.filter((id) => id !== variant.id) : [...current, variant.id],
                   )
                 }
-                className={`min-h-touch rounded-xl border-2 px-3 text-lg font-bold ${
-                  on ? 'bg-ink border-ink text-white' : 'border-line'
-                }`}
               >
                 {variant.name_th}
-              </button>
+              </ChoiceChip>
             );
           })}
         </div>
@@ -223,7 +265,6 @@ function ModifierEditor({
         hint="แสดงและอ่านออกเสียงตอนขาย เช่น มีเมล็ด ระวังสำลัก"
       />
       <NumberField label="ลำดับ" value={sortOrder} onChange={setSortOrder} />
-      <Saved show={saved} />
     </Editor>
   );
 }

@@ -1,11 +1,21 @@
 import { useState } from 'react';
-import { Choice, Editor, ListRow, NumberField, TextField, Toggle } from '../../components/form.tsx';
+import {
+  Choice,
+  Editor,
+  ListPage,
+  ListRow,
+  NumberField,
+  TextField,
+  Toggle,
+} from '../../components/form.tsx';
+import type { BackTo } from '../../components/Screen.tsx';
+import { useDirty } from '../../components/use-dirty.ts';
 import { numberText, parseNumber } from '../../lib/number.ts';
 import { unitLabel } from '../../lib/quantity.ts';
 import type { CostCatalog } from '../../domain/cost.ts';
 import { createComponent, saveComponent } from '../../db/catalog-repo.ts';
 import type { Component, ComponentRole, Lifecycle, Unit } from '../../db/types.ts';
-import { AddButton, Saved } from './shared.tsx';
+import { AddButton } from './shared.tsx';
 import { problemsOf } from './problems.ts';
 
 const UNITS = [
@@ -35,13 +45,20 @@ type View = { kind: 'LIST' } | { kind: 'NEW' } | { kind: 'EDIT'; id: string };
  * batch, clock and cost per ml or gram (CLAUDE.md §2, §3). Every number the
  * stock and cost engines use comes from here.
  */
-export default function ComponentSettings({ catalog }: { catalog: CostCatalog }) {
+export default function ComponentSettings({
+  catalog,
+  exit,
+}: {
+  catalog: CostCatalog;
+  exit: BackTo;
+}) {
   const [view, setView] = useState<View>({ kind: 'LIST' });
+  const toList = () => setView({ kind: 'LIST' });
 
   if (view.kind === 'NEW') {
     return (
       <NewComponentForm
-        onBack={() => setView({ kind: 'LIST' })}
+        back={{ label: 'ยกเลิก', onClick: toList }}
         onCreated={(id) => setView({ kind: 'EDIT', id })}
       />
     );
@@ -55,7 +72,7 @@ export default function ComponentSettings({ catalog }: { catalog: CostCatalog })
         key={component.id}
         catalog={catalog}
         component={component}
-        onBack={() => setView({ kind: 'LIST' })}
+        back={{ label: 'กลับไปรายการ', onClick: toList }}
       />
     );
   }
@@ -63,27 +80,29 @@ export default function ComponentSettings({ catalog }: { catalog: CostCatalog })
   const components = [...catalog.components.values()].sort((a, b) => a.sort_order - b.sort_order);
 
   return (
-    <section aria-label="ส่วนประกอบ">
-      <ul>
-        {components.map((component) => (
-          <ListRow
-            key={component.id}
-            title={component.name_th}
-            detail={`฿${component.cost_per_unit}/${unitLabel(component.unit)}`}
-            onOpen={() => setView({ kind: 'EDIT', id: component.id })}
-          />
-        ))}
-      </ul>
-      <AddButton label="เพิ่มส่วนประกอบ" onClick={() => setView({ kind: 'NEW' })} />
-    </section>
+    <ListPage exit={exit}>
+      <section aria-label="ส่วนประกอบ">
+        <ul>
+          {components.map((component) => (
+            <ListRow
+              key={component.id}
+              title={component.name_th}
+              detail={`฿${component.cost_per_unit}/${unitLabel(component.unit)}`}
+              onOpen={() => setView({ kind: 'EDIT', id: component.id })}
+            />
+          ))}
+        </ul>
+        <AddButton label="เพิ่มส่วนประกอบ" onClick={() => setView({ kind: 'NEW' })} />
+      </section>
+    </ListPage>
   );
 }
 
 function NewComponentForm({
-  onBack,
+  back,
   onCreated,
 }: {
-  onBack: () => void;
+  back: BackTo;
   onCreated: (componentId: string) => void;
 }) {
   const [name, setName] = useState('');
@@ -91,17 +110,30 @@ function NewComponentForm({
   const [lifecycle, setLifecycle] = useState<Lifecycle>('SIMPLE');
   const [role, setRole] = useState<ComponentRole>('TEA_BASE');
   const [problems, setProblems] = useState<string[]>([]);
+  const form = useDirty({ name, unit, lifecycle, role });
+
+  function save(): Promise<boolean> {
+    return createComponent({ name_th: name, unit, lifecycle, role }).then(
+      (component) => {
+        form.markSaved();
+        onCreated(component.id);
+        return true;
+      },
+      (cause: unknown) => {
+        setProblems(problemsOf(cause));
+        return false;
+      },
+    );
+  }
 
   return (
     <Editor
       title="ส่วนประกอบใหม่"
       problems={problems}
-      onBack={onBack}
-      onSave={() => {
-        createComponent({ name_th: name, unit, lifecycle, role })
-          .then((component) => onCreated(component.id))
-          .catch((cause: unknown) => setProblems(problemsOf(cause)));
-      }}
+      back={back}
+      onSave={save}
+      dirty={form.dirty}
+      justSaved={form.justSaved}
     >
       <TextField label="ชื่อ" value={name} onChange={setName} />
       <Choice label="หน่วย" value={unit} options={UNITS} onChange={setUnit} />
@@ -114,11 +146,11 @@ function NewComponentForm({
 function ComponentEditor({
   catalog,
   component,
-  onBack,
+  back,
 }: {
   catalog: CostCatalog;
   component: Component;
-  onBack: () => void;
+  back: BackTo;
 }) {
   const [name, setName] = useState(component.name_th);
   const [unit, setUnit] = useState<Unit>(component.unit);
@@ -136,12 +168,28 @@ function ComponentEditor({
   const [sourceQty, setSourceQty] = useState(numberText(component.source_qty_per_unit));
   const [prepStartBy, setPrepStartBy] = useState(component.prep_start_by ?? '');
   const [problems, setProblems] = useState<string[]>([]);
-  const [saved, setSaved] = useState(false);
+  const form = useDirty({
+    name,
+    unit,
+    batchQty,
+    yieldCups,
+    shelfLife,
+    cutShelfLife,
+    leadTime,
+    cost,
+    lifecycle,
+    role,
+    note,
+    tracked,
+    source,
+    sourceQty,
+    prepStartBy,
+  });
 
   const others = [...catalog.components.values()].filter((other) => other.id !== component.id);
   const sourceComponent = source === 'NONE' ? undefined : catalog.components.get(source);
 
-  function save() {
+  function save(): Promise<boolean> {
     // Blank means "not set" for the optional numbers; anything else must parse.
     const optional = (text: string) => (text.trim() === '' ? null : parseNumber(text));
     const required = parseNumber(cost);
@@ -153,10 +201,10 @@ function ComponentEditor({
       fields.some((text) => text.trim() !== '' && parseNumber(text) === null)
     ) {
       setProblems(['ช่องตัวเลขต้องเป็นตัวเลข']);
-      return;
+      return Promise.resolve(false);
     }
 
-    saveComponent({
+    return saveComponent({
       ...component,
       name_th: name.trim(),
       unit,
@@ -173,16 +221,28 @@ function ComponentEditor({
       source_component_id: source === 'NONE' ? null : source,
       source_qty_per_unit: source === 'NONE' ? null : optional(sourceQty),
       prep_start_by: prepStartBy.trim() || null,
-    })
-      .then(() => {
+    }).then(
+      () => {
         setProblems([]);
-        setSaved(true);
-      })
-      .catch((cause: unknown) => setProblems(problemsOf(cause)));
+        form.markSaved();
+        return true;
+      },
+      (cause: unknown) => {
+        setProblems(problemsOf(cause));
+        return false;
+      },
+    );
   }
 
   return (
-    <Editor title={component.name_th} problems={problems} onSave={save} onBack={onBack}>
+    <Editor
+      title={component.name_th}
+      problems={problems}
+      onSave={save}
+      back={back}
+      dirty={form.dirty}
+      justSaved={form.justSaved}
+    >
       <TextField label="ชื่อ" value={name} onChange={setName} />
       <Choice label="หน่วย" value={unit} options={UNITS} onChange={setUnit} />
       <NumberField
@@ -242,7 +302,6 @@ function ComponentEditor({
           hint="เช่น เยลลี่ 1,000 g ใช้ชาขาว 500 ml = 0.5"
         />
       ) : null}
-      <Saved show={saved} />
     </Editor>
   );
 }

@@ -5,13 +5,13 @@ import { DISCOUNT_REASON_TH } from '../domain/promotions.ts';
 import { useDaySummary } from '../db/hooks.ts';
 import { backupAsFile, markBackedUp } from '../db/backup.ts';
 import ShareFileButton from '../components/ShareFileButton.tsx';
+import { Screen, ScreenBody, ScreenFooter, type BackTo } from '../components/Screen.tsx';
 import type { Satang } from '../lib/money.ts';
 
 interface Props {
   sessionId: string;
-  onDone: () => void;
-  /** เสร็จ straight after a close; กลับ when opened from the reports. */
-  doneLabel?: string;
+  /** To open day straight after a close; to the list when opened from reports. */
+  back: BackTo;
   /**
    * Straight after a close: offer the day's backup, one tap. This is the
    * routine that keeps the records alive (CLAUDE.md §13).
@@ -27,33 +27,27 @@ interface Props {
  * away, and whether the drawer is right. Waste sits beside profit, not under
  * it — it is where this shop actually loses money. The detail follows below.
  */
-export default function DaySummaryScreen({
-  sessionId,
-  onDone,
-  doneLabel = 'เสร็จ',
-  promptBackup = false,
-}: Props) {
+export default function DaySummaryScreen({ sessionId, back, promptBackup = false }: Props) {
   const summary = useDaySummary(sessionId);
 
   if (!summary) {
-    return <div role="dialog" aria-label="สรุปวัน" className="fixed inset-0 z-30 bg-white" />;
+    // Loading: the title and the way out are there from the first frame.
+    return (
+      <Screen title="สรุปวัน">
+        <ScreenBody>
+          <p className="py-6 text-lg font-bold">กำลังโหลด…</p>
+        </ScreenBody>
+        <ScreenFooter back={back} />
+      </Screen>
+    );
   }
 
   const { totals, breakeven, cash } = summary;
   const dayDate = new Date(`${summary.businessDate}T12:00:00+07:00`).toISOString();
 
   return (
-    <div
-      role="dialog"
-      aria-label="สรุปวัน"
-      className="safe-x text-ink fixed inset-0 z-30 flex flex-col bg-white"
-    >
-      <header className="safe-top border-line border-b px-4 pb-2">
-        <h1 className="text-3xl font-bold">สรุปวัน</h1>
-        <p className="text-ink-soft text-lg font-bold">{bangkokWeekday(dayDate)}</p>
-      </header>
-
-      <main className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
+    <Screen title="สรุปวัน" subtitle={bangkokWeekday(dayDate)}>
+      <ScreenBody>
         <div
           role="status"
           aria-label="จุดคุ้มทุน"
@@ -132,11 +126,11 @@ export default function DaySummaryScreen({
             <Row label="ผลต่าง" value={varianceLabel(cash.variance)} />
           </Section>
         ) : null}
-      </main>
+      </ScreenBody>
 
-      <footer className="safe-bottom border-line border-t px-4 pt-3">
+      <ScreenFooter back={back}>
         {promptBackup ? (
-          <div className="mb-2">
+          <div className="mb-3">
             <ShareFileButton
               label="สำรองข้อมูลวันนี้"
               build={() => backupAsFile()}
@@ -144,15 +138,8 @@ export default function DaySummaryScreen({
             />
           </div>
         ) : null}
-        <button
-          type="button"
-          onClick={onDone}
-          className="bg-ink min-h-touch-lg w-full rounded-2xl py-4 text-2xl font-bold text-white"
-        >
-          {doneLabel}
-        </button>
-      </footer>
-    </div>
+      </ScreenFooter>
+    </Screen>
   );
 }
 

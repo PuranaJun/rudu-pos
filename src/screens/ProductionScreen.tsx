@@ -1,5 +1,8 @@
 import { useState } from 'react';
 import PrepBanner from '../components/PrepBanner.tsx';
+import { Button, ChoiceChip } from '../components/Button.tsx';
+import { buttonClass } from '../components/button.ts';
+import { Screen, ScreenBody, ScreenFooter, type BackTo } from '../components/Screen.tsx';
 import { formatQty, unitLabel } from '../lib/quantity.ts';
 import { bangkokShort, formatSpan, fromBangkokInput, toBangkokInput } from '../lib/datetime.ts';
 import { nowIso } from '../lib/id.ts';
@@ -36,7 +39,7 @@ const STATE_TH: Record<BatchState, string> = {
  * Opened over whichever home screen is showing; nothing about it is on the
  * path of a sale.
  */
-export default function ProductionScreen({ onClose }: { onClose: () => void }) {
+export default function ProductionScreen({ back }: { back: BackTo }) {
   const catalog = useCostCatalog();
   const stock = useStockSnapshot();
 
@@ -47,7 +50,14 @@ export default function ProductionScreen({ onClose }: { onClose: () => void }) {
   const [error, setError] = useState<string | null>(null);
 
   if (!catalog || !stock) {
-    return <div role="dialog" aria-label="การผลิต" className="fixed inset-0 z-30 bg-white" />;
+    return (
+      <Screen title="ผลิต">
+        <ScreenBody>
+          <p className="py-6 text-lg font-bold">กำลังโหลด…</p>
+        </ScreenBody>
+        <ScreenFooter back={back} />
+      </Screen>
+    );
   }
 
   const components = [...catalog.components.values()]
@@ -56,19 +66,42 @@ export default function ProductionScreen({ onClose }: { onClose: () => void }) {
   const batches = batchList(catalog, stock, now);
   const reminders = prepReminders(catalog, stock, now);
 
-  return (
-    <div
-      role="dialog"
-      aria-label="การผลิต"
-      className="safe-x text-ink fixed inset-0 z-30 flex flex-col bg-white"
-    >
-      <header className="safe-top border-line border-b px-4 pb-2">
-        <h1 className="text-3xl font-bold">การผลิต</h1>
-      </header>
+  if (making) {
+    // Recording a batch is its own step, with its own way out — the list's
+    // back button never disappears from under the operator.
+    return (
+      <Screen title={`ทำ${making.name_th}`} subtitle="ผลิต · บันทึกของที่ทำ">
+        <NewBatchForm
+          key={making.id}
+          catalog={catalog}
+          stock={stock}
+          component={making}
+          error={error}
+          onCancel={() => {
+            setError(null);
+            setMaking(null);
+          }}
+          onRecord={(input) => {
+            setError(null);
+            recordProduction(making, input)
+              .then(() => {
+                setSaved(`บันทึก${making.name_th} ${formatQty(input.qty, making.unit)} แล้ว`);
+                setMaking(null);
+                setNow(nowIso());
+              })
+              .catch((cause: unknown) => setError(`บันทึกไม่สำเร็จ: ${String(cause)}`));
+          }}
+        />
+      </Screen>
+    );
+  }
 
-      <main className="min-h-0 flex-1 overflow-y-auto pb-4">
+  return (
+    <Screen title="ผลิต">
+      <ScreenBody flush>
         <PrepBanner
           reminders={reminders}
+          actionLabel="บันทึกเลย ›"
           onTap={() => {
             setSaved(null);
             setMaking(reminders[0]?.component ?? null);
@@ -77,54 +110,38 @@ export default function ProductionScreen({ onClose }: { onClose: () => void }) {
 
         <div className="px-4">
           {saved ? (
-            <p role="status" className="pt-3 text-lg font-bold">
+            <p role="status" className="bg-paper-sunk mt-3 rounded-xl px-4 py-3 text-lg font-bold">
+              <span aria-hidden="true">✓ </span>
               {saved}
             </p>
           ) : null}
           {error ? (
-            <p role="alert" className="pt-3 text-lg font-bold">
+            <p
+              role="alert"
+              className="bg-expired mt-3 rounded-xl px-4 py-3 text-lg font-bold text-white"
+            >
               {error}
             </p>
           ) : null}
 
-          {making ? (
-            <NewBatchForm
-              key={making.id}
-              catalog={catalog}
-              stock={stock}
-              component={making}
-              onCancel={() => setMaking(null)}
-              onRecord={(input) => {
-                setError(null);
-                recordProduction(making, input)
-                  .then(() => {
-                    setSaved(`บันทึก${making.name_th} ${formatQty(input.qty, making.unit)} แล้ว`);
-                    setMaking(null);
-                    setNow(nowIso());
-                  })
-                  .catch((cause: unknown) => setError(`บันทึกไม่สำเร็จ: ${String(cause)}`));
-              }}
-            />
-          ) : (
-            <section aria-label="ทำใหม่" className="pt-4">
-              <h2 className="text-2xl font-bold">ทำใหม่</h2>
-              <div className="mt-2 grid grid-cols-2 gap-2">
-                {components.map((component) => (
-                  <button
-                    key={component.id}
-                    type="button"
-                    onClick={() => {
-                      setSaved(null);
-                      setMaking(component);
-                    }}
-                    className="border-line min-h-touch-lg rounded-xl border-2 px-3 py-2 text-left text-lg leading-snug font-bold"
-                  >
-                    {component.name_th}
-                  </button>
-                ))}
-              </div>
-            </section>
-          )}
+          <section aria-label="ทำใหม่" className="pt-4">
+            <h2 className="text-2xl font-bold">ทำใหม่</h2>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              {components.map((component) => (
+                <button
+                  key={component.id}
+                  type="button"
+                  onClick={() => {
+                    setSaved(null);
+                    setMaking(component);
+                  }}
+                  className={`${buttonClass('secondary', 'md')} py-2 text-left`}
+                >
+                  {component.name_th}
+                </button>
+              ))}
+            </div>
+          </section>
 
           <section aria-label="ของที่ทำไว้" className="pt-6">
             <h2 className="text-2xl font-bold">ของที่ทำไว้</h2>
@@ -147,20 +164,10 @@ export default function ProductionScreen({ onClose }: { onClose: () => void }) {
             )}
           </section>
         </div>
-      </main>
+      </ScreenBody>
 
-      {making ? null : (
-        <footer className="safe-bottom border-line border-t px-4 pt-3">
-          <button
-            type="button"
-            onClick={onClose}
-            className="bg-ink min-h-touch-lg w-full rounded-2xl py-4 text-2xl font-bold text-white"
-          >
-            กลับ
-          </button>
-        </footer>
-      )}
-    </div>
+      <ScreenFooter back={back} />
+    </Screen>
   );
 }
 
@@ -176,12 +183,14 @@ function NewBatchForm({
   catalog,
   stock,
   component,
+  error,
   onCancel,
   onRecord,
 }: {
   catalog: CostCatalog;
   stock: StockSnapshot;
   component: Component;
+  error: string | null;
   onCancel: () => void;
   onRecord: (input: NewBatch) => void;
 }) {
@@ -205,120 +214,117 @@ function NewBatchForm({
   const canRecord = qtyValid && madeAt !== null && (!source || chosen !== null);
 
   return (
-    <section aria-label={`ทำ${component.name_th}`} className="pt-4">
-      <h2 className="text-2xl font-bold">{component.name_th}</h2>
-
-      {component.recipe_note_th ? (
-        // A reminder, not a form field: the recipe is edited in settings.
-        <p className="bg-paper-sunk mt-2 rounded-xl px-4 py-3 text-lg leading-relaxed font-bold">
-          {component.recipe_note_th}
-        </p>
-      ) : null}
-
-      <label className="mt-4 block">
-        <span className="text-xl font-bold">จำนวนที่ทำ</span>
-        <span className="border-line mt-1 flex items-center rounded-xl border-2 px-3">
-          <input
-            type="text"
-            inputMode="numeric"
-            aria-label="จำนวนที่ทำ"
-            value={qtyText}
-            onChange={(event) => setQtyText(event.target.value)}
-            className="min-h-touch-lg w-full min-w-0 bg-transparent text-2xl font-bold tabular-nums outline-none"
-          />
-          <span className="text-xl font-bold">{unitLabel(component.unit)}</span>
-        </span>
-      </label>
-
-      <label className="mt-4 block">
-        <span className="text-xl font-bold">เวลาที่ทำ</span>
-        <input
-          type="datetime-local"
-          aria-label="เวลาที่ทำ"
-          value={madeAtText}
-          onChange={(event) => setMadeAtText(event.target.value)}
-          className="border-line min-h-touch-lg mt-1 w-full rounded-xl border-2 bg-transparent px-3 text-xl font-bold"
-        />
-      </label>
-
-      {clocks ? (
-        <p className="mt-3 text-lg font-bold">
-          {STATE_TH[clocks.state]}
-          {clocks.ready_at !== madeAt ? ` · พร้อม ${bangkokShort(clocks.ready_at)}` : ''}
-          {component.shelf_life_hours !== null
-            ? ` · หมดอายุ ${bangkokShort(clocks.expires_at)}`
-            : ''}
-        </p>
-      ) : null}
-
-      {source ? (
-        <div className="mt-4">
-          <p className="text-xl font-bold">
-            ใช้{source.name_th}
-            {sourceNeeded !== null ? ` ${formatQty(sourceNeeded, source.unit)}` : ''} จากถัง
+    <>
+      <ScreenBody>
+        {component.recipe_note_th ? (
+          // A reminder, not a form field: the recipe is edited in settings.
+          <p className="bg-paper-sunk mt-3 rounded-xl px-4 py-3 text-lg leading-relaxed font-bold">
+            {component.recipe_note_th}
           </p>
+        ) : null}
 
-          {options.length === 0 ? (
-            <p
-              role="alert"
-              className="bg-expired mt-2 rounded-lg px-3 py-2 text-lg font-bold text-white"
-            >
-              ไม่มี{source.name_th}พร้อมใช้ — บันทึก{source.name_th}ก่อน
+        <label className="mt-4 block">
+          <span className="text-xl font-bold">จำนวนที่ทำ</span>
+          <span className="border-ink-soft field-focus mt-1 flex items-center rounded-xl border-2 px-3">
+            <input
+              type="text"
+              inputMode="numeric"
+              aria-label="จำนวนที่ทำ"
+              value={qtyText}
+              onChange={(event) => setQtyText(event.target.value)}
+              className="min-h-touch-lg w-full min-w-0 bg-transparent text-2xl font-bold tabular-nums outline-none"
+            />
+            <span className="text-xl font-bold">{unitLabel(component.unit)}</span>
+          </span>
+        </label>
+
+        <label className="mt-4 block">
+          <span className="text-xl font-bold">เวลาที่ทำ</span>
+          <input
+            type="datetime-local"
+            aria-label="เวลาที่ทำ"
+            value={madeAtText}
+            onChange={(event) => setMadeAtText(event.target.value)}
+            className="border-ink-soft min-h-touch-lg mt-1 w-full rounded-xl border-2 bg-transparent px-3 text-xl font-bold"
+          />
+        </label>
+
+        {clocks ? (
+          <p className="mt-3 text-lg font-bold">
+            {STATE_TH[clocks.state]}
+            {clocks.ready_at !== madeAt ? ` · พร้อม ${bangkokShort(clocks.ready_at)}` : ''}
+            {component.shelf_life_hours !== null
+              ? ` · หมดอายุ ${bangkokShort(clocks.expires_at)}`
+              : ''}
+          </p>
+        ) : null}
+
+        {source ? (
+          <div className="mt-4">
+            <p className="text-xl font-bold">
+              ใช้{source.name_th}
+              {sourceNeeded !== null ? ` ${formatQty(sourceNeeded, source.unit)}` : ''} จากถัง
             </p>
-          ) : (
-            <div className="mt-2 flex flex-col gap-2">
-              {options.map((option) => (
-                <button
-                  key={option.batch.id}
-                  type="button"
-                  aria-pressed={option.batch.id === chosen?.batch.id}
-                  onClick={() => setPickedSource(option.batch.id)}
-                  className={`min-h-touch-lg rounded-xl border-2 px-4 py-2 text-left text-lg font-bold ${
-                    option.batch.id === chosen?.batch.id
-                      ? 'bg-ink border-ink text-white'
-                      : 'border-line'
-                  }`}
-                >
-                  ทำ {bangkokShort(option.batch.made_at)} · เหลือ{' '}
-                  {formatQty(option.remaining, source.unit)}
-                </button>
-              ))}
-            </div>
-          )}
 
-          {chosen && !chosen.enough && sourceNeeded !== null ? (
-            // Warn, never block: the jelly was made, and the ledger should
-            // say where its tea came from even if the count was off.
-            <p role="alert" className="bg-today mt-2 rounded-lg px-3 py-2 text-lg font-bold">
-              ถังนี้เหลือ {formatQty(chosen.remaining, source.unit)} — ไม่ถึง{' '}
-              {formatQty(sourceNeeded, source.unit)}
-            </p>
-          ) : null}
-        </div>
-      ) : null}
+            {options.length === 0 ? (
+              <p
+                role="alert"
+                className="bg-expired mt-2 rounded-lg px-3 py-2 text-lg font-bold text-white"
+              >
+                ไม่มี{source.name_th}พร้อมใช้ — บันทึก{source.name_th}ก่อน
+              </p>
+            ) : (
+              <div className="mt-2 flex flex-col gap-2">
+                {options.map((option) => (
+                  <ChoiceChip
+                    key={option.batch.id}
+                    selected={option.batch.id === chosen?.batch.id}
+                    size="md"
+                    onClick={() => setPickedSource(option.batch.id)}
+                    align="start"
+                    className="py-2"
+                  >
+                    ทำ {bangkokShort(option.batch.made_at)} · เหลือ{' '}
+                    {formatQty(option.remaining, source.unit)}
+                  </ChoiceChip>
+                ))}
+              </div>
+            )}
 
-      {/* Kept in thumb reach however long the recipe note runs. */}
-      <div className="safe-bottom sticky bottom-0 mt-6 flex gap-2 bg-white pt-3">
-        <button
-          type="button"
-          disabled={!canRecord}
-          onClick={() => {
+            {chosen && !chosen.enough && sourceNeeded !== null ? (
+              // Warn, never block: the jelly was made, and the ledger should
+              // say where its tea came from even if the count was off.
+              <p role="alert" className="bg-today mt-2 rounded-lg px-3 py-2 text-lg font-bold">
+                ถังนี้เหลือ {formatQty(chosen.remaining, source.unit)} — ไม่ถึง{' '}
+                {formatQty(sourceNeeded, source.unit)}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+      </ScreenBody>
+
+      {/* In thumb reach however long the recipe note runs. ยกเลิก: nothing is recorded. */}
+      <ScreenFooter
+        back={{ label: 'ยกเลิก', onClick: onCancel }}
+        primary={{
+          label: 'บันทึก',
+          disabled: !canRecord,
+          onClick: () => {
             if (!canRecord || !madeAt) return;
             onRecord({ qty, madeAt, sourceBatchId: chosen?.batch.id ?? null });
-          }}
-          className="bg-brand-2 min-h-touch-lg flex-1 rounded-2xl text-2xl font-bold text-white disabled:bg-paper-sunk disabled:text-ink-soft disabled:border-line"
-        >
-          บันทึก
-        </button>
-        <button
-          type="button"
-          onClick={onCancel}
-          className="border-line min-h-touch-lg rounded-2xl border-2 px-5 text-xl font-bold"
-        >
-          ยกเลิก
-        </button>
-      </div>
-    </section>
+          },
+        }}
+      >
+        {error ? (
+          <p
+            role="alert"
+            className="bg-expired mb-3 rounded-xl px-4 py-3 text-lg font-bold text-white"
+          >
+            {error}
+          </p>
+        ) : null}
+      </ScreenFooter>
+    </>
   );
 }
 
@@ -337,22 +343,22 @@ function BatchListRow({ entry, onBlanch }: { entry: BatchListEntry; onBlanch: ()
       </div>
 
       <div className="mt-1 flex flex-wrap items-center gap-2">
-        <span className="border-ink rounded-lg border-2 px-2 text-base font-bold">
-          {STATE_TH[state]}
-        </span>
+        {/* A state, not a button: filled and flat, no edge to press. */}
+        <span className="bg-paper-sunk rounded-lg px-2 text-base font-bold">{STATE_TH[state]}</span>
         <Clock entry={entry} />
         <span className="text-ink-soft text-base font-bold">ทำ {bangkokShort(batch.made_at)}</span>
       </div>
 
       {state === 'SOAKING' ? (
-        <button
-          type="button"
+        <Button
+          variant="primary"
+          size="sm"
           onClick={onBlanch}
           aria-label={`ลวกแล้ว ${component.name_th}`}
-          className="bg-brand min-h-touch mt-2 rounded-xl px-5 text-lg font-bold text-white"
+          className="mt-2"
         >
           ลวกแล้ว
-        </button>
+        </Button>
       ) : null}
     </li>
   );

@@ -1,12 +1,15 @@
 import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import ShareFileButton from '../../components/ShareFileButton.tsx';
-import { Choice } from '../../components/form.tsx';
+import BackupCard from '../../components/BackupCard.tsx';
+import { Choice, ListPage } from '../../components/form.tsx';
+import { Button } from '../../components/Button.tsx';
+import { buttonClass } from '../../components/button.ts';
+import type { BackTo } from '../../components/Screen.tsx';
 import { formatTHB } from '../../lib/money.ts';
 import { formatBangkok } from '../../lib/datetime.ts';
 import { revenuePeriods } from '../../domain/sales-csv.ts';
 import { db } from '../../db/database.ts';
-import { useLastBackup } from '../../db/hooks.ts';
 import {
   BackupError,
   backupAsFile,
@@ -20,51 +23,29 @@ import {
   type BackupFile,
 } from '../../db/backup.ts';
 
-const DAY = 86_400_000;
-
 /**
  * The data (CLAUDE.md §13): this phone holds the only copy of the business's
  * records, and a backup is what keeps them alive.
  */
-export default function DataSettings() {
+export default function DataSettings({ exit }: { exit: BackTo }) {
   return (
-    <div className="pb-6">
+    <ListPage exit={exit}>
       <BackupSection />
       <TaxSection />
       <RestoreSection />
-    </div>
+    </ListPage>
   );
 }
 
 function BackupSection() {
-  const lastBackup = useLastBackup();
-  // Judged against when the screen opened; nothing here needs to tick.
-  const [openedAt] = useState(() => Date.now());
-  const stale =
-    lastBackup === null ||
-    (lastBackup !== undefined && openedAt - Date.parse(lastBackup) > 2 * DAY);
-
   return (
     <section aria-label="สำรองข้อมูล" className="pt-4">
       <h2 className="text-2xl font-bold">สำรองข้อมูล</h2>
-      <p
-        className={`mt-2 rounded-xl px-4 py-3 text-lg font-bold ${stale ? 'bg-today' : 'bg-paper-sunk'}`}
-      >
-        {lastBackup === undefined
-          ? '…'
-          : lastBackup === null
-            ? 'ยังไม่เคยสำรองข้อมูล'
-            : `สำรองล่าสุด ${formatBangkok(lastBackup)}`}
-      </p>
       <p className="mt-2 text-lg font-bold">
         ทุกอย่างในเครื่องเป็นไฟล์เดียว — ส่งไป iCloud Drive, Files หรือ LINE
       </p>
       <div className="mt-3">
-        <ShareFileButton
-          label="บันทึกไฟล์สำรอง"
-          build={() => backupAsFile()}
-          onDone={() => void markBackedUp()}
-        />
+        <BackupCard />
       </div>
     </section>
   );
@@ -142,7 +123,9 @@ function RestoreSection() {
       ) : null}
 
       {!pending ? (
-        <label className="border-ink min-h-touch-lg mt-3 flex w-full items-center justify-center rounded-2xl border-2 text-xl font-bold">
+        <label
+          className={`${buttonClass('secondary', 'md')} mt-3 flex w-full items-center justify-center`}
+        >
           เลือกไฟล์สำรอง
           <input
             type="file"
@@ -210,15 +193,11 @@ function RestoreSection() {
           </div>
 
           <div className="mt-4 flex gap-2">
-            <button
-              type="button"
-              onClick={() => setPending(null)}
-              className="border-line min-h-touch-lg rounded-2xl border-2 px-5 text-xl font-bold"
-            >
+            <Button variant="secondary" onClick={() => setPending(null)} className="flex-1">
               ยกเลิก
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
+              variant="danger"
               disabled={busy}
               onClick={() => {
                 setBusy(true);
@@ -230,16 +209,19 @@ function RestoreSection() {
                   .catch((cause: unknown) => setError(`กู้คืนไม่สำเร็จ: ${String(cause)}`))
                   .finally(() => setBusy(false));
               }}
-              className="bg-expired min-h-touch-lg flex-1 rounded-2xl text-xl font-bold text-white disabled:bg-paper-sunk disabled:text-ink-soft"
+              className="flex-[1.6]"
             >
               แทนที่ข้อมูลในเครื่อง
-            </button>
+            </Button>
           </div>
         </div>
       )}
 
       {error ? (
-        <p role="alert" className="bg-today mt-3 rounded-xl px-4 py-3 text-lg font-bold">
+        <p
+          role="alert"
+          className="bg-expired mt-3 rounded-xl px-4 py-3 text-lg font-bold text-white"
+        >
           {error}
         </p>
       ) : null}

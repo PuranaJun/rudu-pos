@@ -1,6 +1,18 @@
 import { useState } from 'react';
 import DrinkButton from '../../components/DrinkButton.tsx';
-import { Choice, Editor, ListRow, NumberField, TextField, Toggle } from '../../components/form.tsx';
+import { Button } from '../../components/Button.tsx';
+import {
+  Choice,
+  Editor,
+  ListPage,
+  ListRow,
+  NumberField,
+  TextField,
+  Toggle,
+} from '../../components/form.tsx';
+import { useLeaveGuard } from '../../components/leave-guard.ts';
+import type { BackTo } from '../../components/Screen.tsx';
+import { useDirty } from '../../components/use-dirty.ts';
 import { numberText, parseNumber } from '../../lib/number.ts';
 import { bahtInput, formatTHB, parseBaht } from '../../lib/money.ts';
 import { unitLabel } from '../../lib/quantity.ts';
@@ -15,7 +27,7 @@ import {
   saveVariant,
 } from '../../db/catalog-repo.ts';
 import type { Bom, Product, ProductKind, Temp, Variant } from '../../db/types.ts';
-import { AddButton, Saved } from './shared.tsx';
+import { AddButton } from './shared.tsx';
 import { problemsOf } from './problems.ts';
 
 type View =
@@ -25,7 +37,7 @@ type View =
   | { kind: 'VARIANT'; id: string };
 
 const KINDS = [
-  ['DRINK', 'เครื่องดื่ม'],
+  ['DRINK', 'แก้ว'],
   ['BOTTLE', 'ขวด'],
 ] as const;
 
@@ -34,14 +46,15 @@ const KINDS = [
  * §2.1.1 — the BOM is per variant, never per product). A third drink is added
  * here and nowhere else.
  */
-export default function MenuSettings({ catalog }: { catalog: CostCatalog }) {
+export default function MenuSettings({ catalog, exit }: { catalog: CostCatalog; exit: BackTo }) {
   const [view, setView] = useState<View>({ kind: 'LIST' });
+  const toList: BackTo = { label: 'กลับไปรายการ', onClick: () => setView({ kind: 'LIST' }) };
 
   if (view.kind === 'NEW') {
     return (
       <NewProductForm
         catalog={catalog}
-        onBack={() => setView({ kind: 'LIST' })}
+        back={{ label: 'ยกเลิก', onClick: toList.onClick }}
         onCreated={(id) => setView({ kind: 'PRODUCT', id })}
       />
     );
@@ -55,7 +68,7 @@ export default function MenuSettings({ catalog }: { catalog: CostCatalog }) {
         key={product.id}
         catalog={catalog}
         product={product}
-        onBack={() => setView({ kind: 'LIST' })}
+        back={toList}
         onOpenVariant={(id) => setView({ kind: 'VARIANT', id })}
       />
     );
@@ -64,12 +77,16 @@ export default function MenuSettings({ catalog }: { catalog: CostCatalog }) {
   if (view.kind === 'VARIANT') {
     const variant = catalog.variants.get(view.id);
     if (!variant) return null;
+    const product = catalog.products.get(variant.product_id);
     return (
       <VariantEditor
         key={variant.id}
         catalog={catalog}
         variant={variant}
-        onBack={() => setView({ kind: 'PRODUCT', id: variant.product_id })}
+        back={{
+          label: `กลับไป${product?.name_short_th ?? 'เครื่องดื่ม'}`,
+          onClick: () => setView({ kind: 'PRODUCT', id: variant.product_id }),
+        }}
       />
     );
   }
@@ -77,20 +94,22 @@ export default function MenuSettings({ catalog }: { catalog: CostCatalog }) {
   const products = [...catalog.products.values()].sort((a, b) => a.sort_order - b.sort_order);
 
   return (
-    <section aria-label="เมนู">
-      <ul>
-        {products.map((product) => (
-          <ListRow
-            key={product.id}
-            title={product.name_short_th}
-            detail={formatTHB(product.base_price)}
-            muted={!product.is_active}
-            onOpen={() => setView({ kind: 'PRODUCT', id: product.id })}
-          />
-        ))}
-      </ul>
-      <AddButton label="เพิ่มเมนู" onClick={() => setView({ kind: 'NEW' })} />
-    </section>
+    <ListPage exit={exit}>
+      <section aria-label="เครื่องดื่ม">
+        <ul>
+          {products.map((product) => (
+            <ListRow
+              key={product.id}
+              title={product.name_short_th}
+              detail={formatTHB(product.base_price)}
+              muted={!product.is_active}
+              onOpen={() => setView({ kind: 'PRODUCT', id: product.id })}
+            />
+          ))}
+        </ul>
+        <AddButton label="เพิ่มเครื่องดื่ม" onClick={() => setView({ kind: 'NEW' })} />
+      </section>
+    </ListPage>
   );
 }
 
@@ -98,11 +117,11 @@ export default function MenuSettings({ catalog }: { catalog: CostCatalog }) {
 
 function NewProductForm({
   catalog,
-  onBack,
+  back,
   onCreated,
 }: {
   catalog: CostCatalog;
-  onBack: () => void;
+  back: BackTo;
   onCreated: (productId: string) => void;
 }) {
   const sets = [...catalog.packagingSets.values()];
@@ -112,26 +131,42 @@ function NewProductForm({
   const [kind, setKind] = useState<ProductKind>('DRINK');
   const [packaging, setPackaging] = useState(sets[0]?.id ?? '');
   const [problems, setProblems] = useState<string[]>([]);
+  const form = useDirty({ shortName, fullName, price, kind, packaging });
 
-  function save() {
+  function save(): Promise<boolean> {
     const basePrice = parseBaht(price);
     if (basePrice === null) {
       setProblems(['ราคาต้องเป็นตัวเลข']);
-      return;
+      return Promise.resolve(false);
     }
-    createProduct({
+    return createProduct({
       name_short_th: shortName,
       name_full_th: fullName,
       base_price: basePrice,
       kind,
       packaging_set_id: packaging,
-    })
-      .then(({ product }) => onCreated(product.id))
-      .catch((cause: unknown) => setProblems(problemsOf(cause)));
+    }).then(
+      ({ product }) => {
+        form.markSaved();
+        onCreated(product.id);
+        return true;
+      },
+      (cause: unknown) => {
+        setProblems(problemsOf(cause));
+        return false;
+      },
+    );
   }
 
   return (
-    <Editor title="เมนูใหม่" problems={problems} onSave={save} onBack={onBack}>
+    <Editor
+      title="เครื่องดื่มใหม่"
+      problems={problems}
+      onSave={save}
+      back={back}
+      dirty={form.dirty}
+      justSaved={form.justSaved}
+    >
       <TextField
         label="ชื่อสั้น (บนปุ่ม)"
         value={shortName}
@@ -156,14 +191,15 @@ function NewProductForm({
 function ProductEditor({
   catalog,
   product,
-  onBack,
+  back,
   onOpenVariant,
 }: {
   catalog: CostCatalog;
   product: Product;
-  onBack: () => void;
+  back: BackTo;
   onOpenVariant: (variantId: string) => void;
 }) {
+  const guard = useLeaveGuard();
   const [shortName, setShortName] = useState(product.name_short_th);
   const [fullName, setFullName] = useState(product.name_full_th);
   const [nameEn, setNameEn] = useState(product.name_en);
@@ -173,21 +209,21 @@ function ProductEditor({
   const [active, setActive] = useState(product.is_active);
   const [sortOrder, setSortOrder] = useState(String(product.sort_order));
   const [problems, setProblems] = useState<string[]>([]);
-  const [saved, setSaved] = useState(false);
+  const form = useDirty({ shortName, fullName, nameEn, price, kind, advisory, active, sortOrder });
 
   const variants = [...catalog.variants.values()]
     .filter((variant) => variant.product_id === product.id)
     .sort((a, b) => a.sort_order - b.sort_order);
   const previewPrice = parseBaht(price) ?? product.base_price;
 
-  function save() {
+  function save(): Promise<boolean> {
     const basePrice = parseBaht(price);
     const sort = parseNumber(sortOrder);
     if (basePrice === null || sort === null) {
       setProblems(['ราคาและลำดับต้องเป็นตัวเลข']);
-      return;
+      return Promise.resolve(false);
     }
-    saveProduct({
+    return saveProduct({
       ...product,
       name_short_th: shortName.trim(),
       name_full_th: fullName.trim(),
@@ -197,16 +233,28 @@ function ProductEditor({
       advisory_th: advisory.trim() || null,
       is_active: active,
       sort_order: sort,
-    })
-      .then(() => {
+    }).then(
+      () => {
         setProblems([]);
-        setSaved(true);
-      })
-      .catch((cause: unknown) => setProblems(problemsOf(cause)));
+        form.markSaved();
+        return true;
+      },
+      (cause: unknown) => {
+        setProblems(problemsOf(cause));
+        return false;
+      },
+    );
   }
 
   return (
-    <Editor title={product.name_short_th} problems={problems} onSave={save} onBack={onBack}>
+    <Editor
+      title={product.name_short_th}
+      problems={problems}
+      onSave={save}
+      back={back}
+      dirty={form.dirty}
+      justSaved={form.justSaved}
+    >
       {/* What the operator will actually see. A name that does not fit is the
           wrong name — it is never truncated (CLAUDE.md §9). */}
       <p className="mt-3 text-lg font-bold">ตัวอย่างปุ่ม</p>
@@ -235,7 +283,6 @@ function ProductEditor({
       />
       <Toggle label="ขายอยู่" value={active} onChange={setActive} />
       <NumberField label="ลำดับบนหน้าขาย" value={sortOrder} onChange={setSortOrder} />
-      <Saved show={saved} />
 
       <h3 className="mt-6 text-xl font-bold">แบบและสูตร</h3>
       <ul>
@@ -245,17 +292,19 @@ function ProductEditor({
             title={variant.name_th}
             detail={`${formatTHB(unitPrice(catalog, variant.id))}${variant.is_default ? ' · ค่าเริ่มต้น' : ''}`}
             muted={!variant.is_active}
-            onOpen={() => onOpenVariant(variant.id)}
+            onOpen={() => guard.leave(() => onOpenVariant(variant.id))}
           />
         ))}
       </ul>
       <AddButton
         label="เพิ่มแบบ (เช่น ร้อน)"
-        onClick={() => {
-          createVariant(product.id)
-            .then((variant) => onOpenVariant(variant.id))
-            .catch((cause: unknown) => setProblems(problemsOf(cause)));
-        }}
+        onClick={() =>
+          guard.leave(() => {
+            createVariant(product.id)
+              .then((variant) => onOpenVariant(variant.id))
+              .catch((cause: unknown) => setProblems(problemsOf(cause)));
+          })
+        }
       />
     </Editor>
   );
@@ -272,11 +321,11 @@ const TEMPS = [
 function VariantEditor({
   catalog,
   variant,
-  onBack,
+  back,
 }: {
   catalog: CostCatalog;
   variant: Variant;
-  onBack: () => void;
+  back: BackTo;
 }) {
   const [name, setName] = useState(variant.name_th);
   const [temp, setTemp] = useState<Temp | 'NONE'>(variant.temp ?? 'NONE');
@@ -288,20 +337,20 @@ function VariantEditor({
   const [active, setActive] = useState(variant.is_active);
   const [sortOrder, setSortOrder] = useState(String(variant.sort_order));
   const [problems, setProblems] = useState<string[]>([]);
-  const [saved, setSaved] = useState(false);
+  const form = useDirty({ name, temp, priceOverride, packaging, isDefault, active, sortOrder });
 
   const rows = catalog.bomByVariant.get(variant.id) ?? [];
   const price = unitPrice(catalog, variant.id);
   const cost = lineCost(catalog, variant.id);
 
-  function save() {
+  function save(): Promise<boolean> {
     const override = priceOverride.trim() === '' ? null : parseBaht(priceOverride);
     const sort = parseNumber(sortOrder);
     if ((priceOverride.trim() !== '' && override === null) || sort === null) {
       setProblems(['ราคาและลำดับต้องเป็นตัวเลข']);
-      return;
+      return Promise.resolve(false);
     }
-    saveVariant({
+    return saveVariant({
       ...variant,
       name_th: name.trim(),
       temp: temp === 'NONE' ? null : temp,
@@ -310,16 +359,28 @@ function VariantEditor({
       is_default: isDefault,
       is_active: active,
       sort_order: sort,
-    })
-      .then(() => {
+    }).then(
+      () => {
         setProblems([]);
-        setSaved(true);
-      })
-      .catch((cause: unknown) => setProblems(problemsOf(cause)));
+        form.markSaved();
+        return true;
+      },
+      (cause: unknown) => {
+        setProblems(problemsOf(cause));
+        return false;
+      },
+    );
   }
 
   return (
-    <Editor title={variant.name_th} problems={problems} onSave={save} onBack={onBack}>
+    <Editor
+      title={variant.name_th}
+      problems={problems}
+      onSave={save}
+      back={back}
+      dirty={form.dirty}
+      justSaved={form.justSaved}
+    >
       {/* The number the recipe is for: what a cup costs and what it leaves. */}
       <p
         role="status"
@@ -337,7 +398,7 @@ function VariantEditor({
         value={priceOverride}
         onChange={setPriceOverride}
         suffix="บาท"
-        hint="เว้นว่าง = ใช้ราคาของเมนู"
+        hint="เว้นว่าง = ใช้ราคาของเครื่องดื่ม"
       />
       <Choice
         label="บรรจุภัณฑ์"
@@ -348,7 +409,6 @@ function VariantEditor({
       <Toggle label="แบบที่กดแล้วได้เลย" value={isDefault} onChange={setIsDefault} />
       <Toggle label="ขายอยู่" value={active} onChange={setActive} />
       <NumberField label="ลำดับ" value={sortOrder} onChange={setSortOrder} />
-      <Saved show={saved} />
 
       <h3 className="mt-6 text-xl font-bold">สูตรต่อแก้ว</h3>
       <ul aria-label="สูตรต่อแก้ว">
@@ -390,8 +450,9 @@ function BomRowEditor({
         />
       </div>
       {changed ? (
-        <button
-          type="button"
+        <Button
+          variant="primary"
+          size="sm"
           onClick={() => {
             const value = parseNumber(qty);
             if (value === null) return onProblems(['ปริมาณต้องเป็นตัวเลข']);
@@ -399,19 +460,18 @@ function BomRowEditor({
               .then(() => onProblems([]))
               .catch((cause: unknown) => onProblems(problemsOf(cause)));
           }}
-          className="bg-brand-2 min-h-touch rounded-xl px-3 text-lg font-bold text-white"
         >
           บันทึก
-        </button>
+        </Button>
       ) : null}
-      <button
-        type="button"
+      <Button
+        variant="secondary"
+        size="sm"
         aria-label={`เอา${component?.name_th ?? ''}ออกจากสูตร`}
         onClick={() => void removeBomRow(row.id)}
-        className="border-line min-h-touch rounded-xl border-2 px-3 text-lg font-bold"
       >
         ลบ
-      </button>
+      </Button>
     </li>
   );
 }
@@ -451,8 +511,9 @@ function AddBomRow({
         onChange={setQty}
         suffix={unitLabel(component.unit)}
       />
-      <button
-        type="button"
+      <Button
+        variant="secondary"
+        size="sm"
         onClick={() => {
           const value = parseNumber(qty);
           if (value === null) return onProblems(['ปริมาณต้องเป็นตัวเลข']);
@@ -463,10 +524,10 @@ function AddBomRow({
             })
             .catch((cause: unknown) => onProblems(problemsOf(cause)));
         }}
-        className="bg-ink min-h-touch mt-3 w-full rounded-xl text-lg font-bold text-white"
+        className="mt-3 w-full"
       >
         เพิ่มในสูตร
-      </button>
+      </Button>
     </div>
   );
 }

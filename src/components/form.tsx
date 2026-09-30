@@ -6,10 +6,14 @@
  * field. Values are held as the text typed, and only turned into numbers on
  * save — a half-typed "1." is not an error until the operator says it is done.
  */
-import type { ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
+import { ChoiceChip } from './Button.tsx';
+import { choiceClass } from './button.ts';
+import { ScreenBody, ScreenFooter, type BackTo } from './Screen.tsx';
+import { useLeaveGuard } from './leave-guard.ts';
 
 const INPUT =
-  'border-line min-h-touch w-full min-w-0 rounded-xl border-2 bg-white px-3 text-xl font-bold';
+  'border-ink-soft min-h-touch w-full min-w-0 rounded-xl border-2 bg-white px-3 text-xl font-bold';
 
 export function TextField({
   label,
@@ -65,7 +69,7 @@ export function NumberField({
   return (
     <label className="mt-3 block">
       <span className="text-lg font-bold">{label}</span>
-      <span className="border-line flex items-center rounded-xl border-2 bg-white px-3">
+      <span className="border-ink-soft field-focus flex items-center rounded-xl border-2 bg-white px-3">
         <input
           type="text"
           inputMode="decimal"
@@ -98,23 +102,16 @@ export function Choice<T extends string>({
       <span className="text-lg font-bold">{label}</span>
       <div className="mt-1 flex flex-wrap gap-2">
         {options.map(([option, text]) => (
-          <button
-            key={option}
-            type="button"
-            aria-pressed={value === option}
-            onClick={() => onChange(option)}
-            className={`min-h-touch rounded-xl border-2 px-3 text-lg font-bold ${
-              value === option ? 'bg-ink border-ink text-white' : 'border-line'
-            }`}
-          >
+          <ChoiceChip key={option} selected={value === option} onClick={() => onChange(option)}>
             {text}
-          </button>
+          </ChoiceChip>
         ))}
       </div>
     </div>
   );
 }
 
+/** On or off, said in words beside the ✓ — never by colour alone. */
 export function Toggle({
   label,
   value,
@@ -129,73 +126,110 @@ export function Toggle({
       type="button"
       aria-pressed={value}
       onClick={() => onChange(!value)}
-      className={`min-h-touch mt-3 flex w-full items-center justify-between rounded-xl border-2 px-4 text-lg font-bold ${
-        value ? 'bg-ink border-ink text-white' : 'border-line'
-      }`}
+      className={`${choiceClass(value)} mt-3 flex w-full items-center justify-between gap-3 text-left`}
     >
       <span>{label}</span>
-      <span>{value ? 'เปิด' : 'ปิด'}</span>
+      <span className="shrink-0">
+        {value ? (
+          <>
+            <span aria-hidden="true">✓ </span>เปิด
+          </>
+        ) : (
+          'ปิด'
+        )}
+      </span>
     </button>
   );
 }
 
 /**
- * One thing being edited: its fields, what is wrong with them, and save and
- * back in thumb reach at the bottom.
+ * One thing being edited: its fields, and save and back in thumb reach at the
+ * bottom of the screen.
+ *
+ * Whatever needs saying about the save is said next to the button that did
+ * it — what is wrong, in red, or that it is saved — never at the foot of a
+ * form four screens long. Leaving with unsaved changes asks first (see
+ * leave-guard.ts), and บันทึก cannot be pressed twice while a save is on its
+ * way, so a double tap never creates a thing twice.
  */
 export function Editor({
   title,
   problems,
   onSave,
-  onBack,
+  back,
+  dirty,
+  justSaved,
   children,
 }: {
   title: string;
   problems: readonly string[];
-  onSave: () => void;
-  /** Absent when there is nothing to go back to. */
-  onBack?: () => void;
+  /** Resolves true once saved; false when there is something to fix. */
+  onSave: () => Promise<boolean>;
+  back: BackTo;
+  dirty: boolean;
+  justSaved: boolean;
   children: ReactNode;
 }) {
+  const guard = useLeaveGuard();
+  const [saving, setSaving] = useState(false);
+
+  function save(): Promise<boolean> {
+    if (saving) return Promise.resolve(false);
+    setSaving(true);
+    return onSave().finally(() => setSaving(false));
+  }
+
+  // Every render: the guard always holds this form's latest state.
+  useEffect(() => {
+    guard.register({ dirty, save });
+  });
+  useEffect(() => () => guard.register(null), [guard]);
+
   return (
-    <section aria-label={title} className="pb-4">
-      <h2 className="pt-3 text-2xl font-bold">{title}</h2>
-      {children}
+    <>
+      <ScreenBody>
+        <section aria-label={title}>
+          <h2 className="pt-3 text-2xl font-bold">{title}</h2>
+          {children}
+        </section>
+      </ScreenBody>
 
-      {problems.length > 0 ? (
-        <ul
-          role="alert"
-          className="bg-expired mt-4 rounded-xl px-4 py-3 text-lg font-bold text-white"
-        >
-          {problems.map((problem) => (
-            <li key={problem}>{problem}</li>
-          ))}
-        </ul>
-      ) : null}
-
-      <div className="safe-bottom sticky bottom-0 mt-4 flex gap-2 bg-white pt-3">
-        {onBack ? (
-          <button
-            type="button"
-            onClick={onBack}
-            className="border-line min-h-touch-lg rounded-2xl border-2 px-5 text-xl font-bold"
+      <ScreenFooter
+        back={{ label: back.label, onClick: () => guard.leave(back.onClick) }}
+        primary={{ label: 'บันทึก', onClick: () => void save(), disabled: saving }}
+      >
+        {problems.length > 0 ? (
+          <ul
+            role="alert"
+            className="bg-expired mb-3 rounded-xl px-4 py-3 text-lg font-bold text-white"
           >
-            กลับ
-          </button>
+            {problems.map((problem) => (
+              <li key={problem}>{problem}</li>
+            ))}
+          </ul>
+        ) : justSaved ? (
+          <p role="status" className="bg-paper-sunk mb-3 rounded-xl px-4 py-2 text-lg font-bold">
+            <span aria-hidden="true">✓ </span>บันทึกแล้ว
+          </p>
+        ) : dirty ? (
+          <p className="text-ink-soft mb-3 text-lg font-bold">ยังไม่ได้บันทึก</p>
         ) : null}
-        <button
-          type="button"
-          onClick={onSave}
-          className="bg-brand-2 min-h-touch-lg flex-1 rounded-2xl text-2xl font-bold text-white"
-        >
-          บันทึก
-        </button>
-      </div>
-    </section>
+      </ScreenFooter>
+    </>
   );
 }
 
-/** A tappable row in a settings list. */
+/** A list and the way out of it, for a settings section that is not a form. */
+export function ListPage({ exit, children }: { exit: BackTo; children: ReactNode }) {
+  return (
+    <>
+      <ScreenBody>{children}</ScreenBody>
+      <ScreenFooter back={exit} />
+    </>
+  );
+}
+
+/** A tappable row in a settings list. The › says it opens something. */
 export function ListRow({
   title,
   detail,
@@ -212,12 +246,17 @@ export function ListRow({
       <button
         type="button"
         onClick={onOpen}
-        className="min-h-touch-lg flex w-full items-baseline justify-between gap-3 py-2 text-left"
+        className="min-h-touch-lg flex w-full items-center justify-between gap-3 py-2 text-left"
       >
-        <span className={`text-xl font-bold ${muted ? 'text-ink-soft line-through' : ''}`}>
+        <span className={`min-w-0 text-xl font-bold ${muted ? 'text-ink-soft line-through' : ''}`}>
           {title}
         </span>
-        {detail ? <span className="shrink-0 text-lg font-bold tabular-nums">{detail}</span> : null}
+        <span className="flex shrink-0 items-center gap-2">
+          {detail ? <span className="text-lg font-bold tabular-nums">{detail}</span> : null}
+          <span aria-hidden="true" className="text-3xl font-bold">
+            ›
+          </span>
+        </span>
       </button>
     </li>
   );

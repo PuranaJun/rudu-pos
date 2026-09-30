@@ -26,6 +26,8 @@ import {
   productionMovement,
   reverseForSale,
   sellableStates,
+  stockLevel,
+  LOW_STOCK_CUPS,
   type StockSnapshot,
 } from '../stock.ts';
 
@@ -744,3 +746,20 @@ function totalsByComponent(catalog: CostCatalog, snapshot: StockSnapshot): Recor
   }
   return totals;
 }
+
+describe('stock level on the sell screen', () => {
+  it('is unlimited when nothing batch-tracked limits the drink', () => {
+    expect(stockLevel(Infinity)).toBe('UNLIMITED');
+  });
+
+  it('is out at zero or below — an override can take it negative', () => {
+    expect(stockLevel(0)).toBe('OUT');
+    expect(stockLevel(-2)).toBe('OUT');
+  });
+
+  it(`is low from one cup up to ${LOW_STOCK_CUPS}, and fine above`, () => {
+    expect(stockLevel(1)).toBe('LOW');
+    expect(stockLevel(LOW_STOCK_CUPS)).toBe('LOW');
+    expect(stockLevel(LOW_STOCK_CUPS + 1)).toBe('OK');
+  });
+});

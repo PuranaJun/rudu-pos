@@ -52,19 +52,61 @@ const PAIRS: Array<[string, string]> = [
   ['white', 'drink-2'],
   ['white', 'drink-3'],
   ['white', 'bottle'],
-  ['white', 'soldout'],
   ['white', 'expired'],
-  ['fresh', 'white'],
+  ['white', 'qr'],
+];
+
+/**
+ * [edge, surface]: the outline of something tappable against what it sits
+ * on. WCAG asks 3:1 for the boundary of a control; a button whose edge fades
+ * into the page in sunlight reads as a label, not a thing to press.
+ */
+const EDGES: Array<[string, string]> = [
+  ['ink-soft', 'white'], // secondary buttons, unselected chips, inputs
+  ['ink-soft', 'paper'],
+  ['ink', 'white'], // selected chips, the warning button's edge
+  ['brand-2', 'white'],
+  ['expired', 'white'],
+  ['qr', 'white'],
+];
+
+/**
+ * [a, b]: two states that must not be mistaken for each other at a glance,
+ * told apart by lightness — hue is the first thing direct sun washes out.
+ */
+const DISTINCT: Array<[string, string]> = [
+  // A sold-out drink against every drink that is still selling.
+  ['paper-sunk', 'drink-1'],
+  ['paper-sunk', 'drink-2'],
+  ['paper-sunk', 'drink-3'],
+  ['paper-sunk', 'bottle'],
+  // The "running low" block on a drink button.
+  ['today', 'drink-1'],
+  ['today', 'drink-2'],
+  ['today', 'drink-3'],
+  ['today', 'bottle'],
 ];
 
 describe('sunlight contrast', () => {
   const palette = tokens();
 
+  function ratio(a: string, b: string): number {
+    const first = palette.get(a);
+    const second = palette.get(b);
+    expect(first, `--color-${a}`).toBeDefined();
+    expect(second, `--color-${b}`).toBeDefined();
+    return contrast(first!, second!);
+  }
+
   it.each(PAIRS)('%s on %s is 7:1 or better', (text, background) => {
-    const fg = palette.get(text);
-    const bg = palette.get(background);
-    expect(fg, `--color-${text}`).toBeDefined();
-    expect(bg, `--color-${background}`).toBeDefined();
-    expect(contrast(fg!, bg!)).toBeGreaterThanOrEqual(7);
+    expect(ratio(text, background)).toBeGreaterThanOrEqual(7);
+  });
+
+  it.each(EDGES)('a %s edge on %s is 3:1 or better', (edge, surface) => {
+    expect(ratio(edge, surface)).toBeGreaterThanOrEqual(3);
+  });
+
+  it.each(DISTINCT)('%s and %s differ by 3:1 or more in lightness', (a, b) => {
+    expect(ratio(a, b)).toBeGreaterThanOrEqual(3);
   });
 });

@@ -6,6 +6,11 @@ import { modifiersFor, variantsOf } from '../domain/cart.ts';
 import type { CartItem } from '../db/cart-repo.ts';
 import { DISCOUNT_REASON_TH, MANUAL_DISCOUNT_REASONS } from '../domain/promotions.ts';
 import type { DiscountReason } from '../db/types.ts';
+import { Button, ChoiceChip } from './Button.tsx';
+
+/** The quantity stepper: square, the secondary look, − and + at full size. */
+const STEPPER =
+  'size-touch-lg rounded-2xl border-2 border-ink-soft bg-white text-2xl font-bold text-ink';
 
 interface Props {
   catalog: CostCatalog;
@@ -21,8 +26,11 @@ interface Props {
  *
  * Temperature is a row on the line, not a blocking modal — pear rings ICED on
  * the first tap and HOT costs one more, which keeps the common sale at two
- * taps (CLAUDE.md §6.1). Paid modifiers hide behind a single "+" so they cost
- * nothing on the standard path.
+ * taps (CLAUDE.md §6.1). Paid modifiers hide behind one "ท็อปปิ้ง" button so
+ * they cost nothing on the standard path, and so does giving a cup away.
+ *
+ * Every control says what it does in words. − and + are only ever the
+ * quantity; opening a list is a word with an arrow.
  */
 export default function CartLineRow({
   catalog,
@@ -74,12 +82,7 @@ export default function CartLineRow({
         </span>
 
         <div className="flex items-center gap-1">
-          <button
-            type="button"
-            aria-label="ลดจำนวน"
-            onClick={() => onStep(-1)}
-            className="border-line size-touch-lg rounded-xl border-2 text-2xl font-bold active:bg-paper-sunk"
-          >
+          <button type="button" aria-label="ลดจำนวน" onClick={() => onStep(-1)} className={STEPPER}>
             −
           </button>
           <span className="w-8 text-center text-2xl font-bold tabular-nums">{item.line.qty}</span>
@@ -87,7 +90,7 @@ export default function CartLineRow({
             type="button"
             aria-label="เพิ่มจำนวน"
             onClick={() => onStep(1)}
-            className="border-line size-touch-lg rounded-xl border-2 text-2xl font-bold active:bg-paper-sunk"
+            className={STEPPER}
           >
             +
           </button>
@@ -97,80 +100,70 @@ export default function CartLineRow({
       <div className="mt-1 flex flex-wrap items-center gap-2">
         {siblings.length > 1
           ? siblings.map((sibling) => (
-              <button
+              <ChoiceChip
                 key={sibling.id}
-                type="button"
+                selected={sibling.id === variant.id}
+                size="md"
                 onClick={() =>
                   onSetVariant(
                     sibling.id,
                     modifiersFor(catalog, sibling.id).map((modifier) => modifier.id),
                   )
                 }
-                aria-pressed={sibling.id === variant.id}
-                className={`min-h-touch-lg min-w-touch-lg rounded-xl px-4 text-lg font-bold ${
-                  sibling.id === variant.id ? 'bg-ink text-paper' : 'border-line text-ink border-2'
-                }`}
               >
                 {sibling.temp === 'HOT' ? 'ร้อน' : 'เย็น'}
-              </button>
+              </ChoiceChip>
             ))
           : null}
 
         {offerable.length > 0 ? (
-          <button
-            type="button"
+          <Button
+            variant="secondary"
+            size="md"
             onClick={() => setShowModifiers((open) => !open)}
             aria-expanded={showModifiers}
             aria-label="เพิ่มท็อปปิ้ง"
-            className="border-line min-h-touch-lg min-w-touch-lg text-ink rounded-xl border-2 px-4 text-lg font-bold"
           >
-            {showModifiers ? '−' : '+'}
-          </button>
+            ท็อปปิ้ง <span aria-hidden="true">{showModifiers ? '▴' : '▾'}</span>
+          </Button>
         ) : null}
 
-        <button
-          type="button"
+        <Button
+          variant="secondary"
+          size="md"
           onClick={() => setShowReasons((open) => !open)}
           aria-expanded={showReasons}
-          aria-label="ลดราคา"
-          className="border-line min-h-touch-lg min-w-touch-lg text-ink rounded-xl border-2 px-4 text-lg font-bold"
         >
-          ฿0
-        </button>
+          ฟรี <span aria-hidden="true">{showReasons ? '▴' : '▾'}</span>
+        </Button>
       </div>
 
       {showReasons ? (
-        <div className="mt-2 flex flex-wrap gap-2">
+        <div className="mt-2 flex flex-wrap gap-2" role="group" aria-label="ฟรีเพราะ">
           {MANUAL_DISCOUNT_REASONS.map((reason) => (
-            <button
+            <ChoiceChip
               key={reason}
-              type="button"
+              selected={givenAway === reason}
+              size="md"
               onClick={() => onSetDiscountReason(givenAway === reason ? null : reason)}
-              aria-pressed={givenAway === reason}
-              className={`min-h-touch-lg min-w-touch-lg rounded-xl px-4 text-lg font-bold ${
-                givenAway === reason ? 'bg-ink text-paper' : 'border-line text-ink border-2'
-              }`}
             >
               {DISCOUNT_REASON_TH[reason]}
-            </button>
+            </ChoiceChip>
           ))}
         </div>
       ) : null}
 
       {showModifiers ? (
-        <div className="mt-2 flex flex-wrap gap-2">
+        <div className="mt-2 flex flex-wrap gap-2" role="group" aria-label="ท็อปปิ้ง">
           {offerable.map((modifier) => (
-            <button
+            <ChoiceChip
               key={modifier.id}
-              type="button"
+              selected={chosen.has(modifier.id)}
+              size="md"
               onClick={() => onToggleModifier(modifier.id)}
-              aria-pressed={chosen.has(modifier.id)}
-              className={`min-h-touch-lg min-w-touch-lg rounded-xl px-4 text-lg font-bold ${
-                chosen.has(modifier.id) ? 'bg-ink text-paper' : 'border-line text-ink border-2'
-              }`}
             >
               {modifier.name_th} +{formatTHB(modifier.price_delta)}
-            </button>
+            </ChoiceChip>
           ))}
         </div>
       ) : null}
@@ -183,9 +176,10 @@ export default function CartLineRow({
         <p
           key={advisory.id}
           role="alert"
-          className="bg-brand text-paper mt-2 rounded-xl px-3 py-2 text-lg font-bold"
+          className="bg-today border-ink mt-2 rounded-xl border-2 px-3 py-2 text-lg font-bold"
         >
-          ⚠ {advisory.text} — บอกลูกค้าด้วย
+          <span aria-hidden="true">⚠ </span>
+          {advisory.text} — บอกลูกค้าด้วย
         </p>
       ))}
     </li>

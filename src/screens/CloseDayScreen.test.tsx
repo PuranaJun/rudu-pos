@@ -1,6 +1,6 @@
 /**
- * Close day, from the sell screen, the way the operator reaches it: the
- * day's totals → ปิดร้าน → leftovers → count the drawer → the day's summary.
+ * Close day, from the sell screen, the way the operator reaches it: เมนู →
+ * ปิดร้าน → leftovers → count the drawer → the day's summary.
  */
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
@@ -57,7 +57,7 @@ beforeEach(async () => {
 
 async function toCloseDay(user: ReturnType<typeof userEvent.setup>) {
   render(<App />);
-  await user.click(await screen.findByLabelText('รายการขายวันนี้'));
+  await user.click(await screen.findByRole('button', { name: 'เมนู' }));
   await user.click(await screen.findByRole('button', { name: 'ปิดร้าน' }));
   return screen.findByRole('dialog', { name: 'ปิดร้าน' });
 }
@@ -112,7 +112,7 @@ describe('the leftovers', () => {
 
     await user.click(within(dialog).getByRole('button', { name: 'ต่อไป: นับเงิน' }));
     await user.type(within(dialog).getByLabelText('เงินที่นับได้ (บาท)'), '1500');
-    await user.click(within(dialog).getByRole('button', { name: 'ปิดร้าน' }));
+    await user.click(within(dialog).getByRole('button', { name: 'ยืนยันปิดร้าน' }));
 
     await screen.findByRole('dialog', { name: 'สรุปวัน' });
     const waste = await db.waste_event.where('component_batch_id').equals('TEA_RED').toArray();
@@ -141,11 +141,11 @@ describe('the drawer', () => {
     await user.click(within(dialog).getByRole('button', { name: 'ต่อไป: นับเงิน' }));
 
     // Nothing counted, nothing to close on.
-    expect(within(dialog).getByRole('button', { name: 'ปิดร้าน' })).toBeDisabled();
+    expect(within(dialog).getByRole('button', { name: 'ยืนยันปิดร้าน' })).toBeDisabled();
 
     await user.type(within(dialog).getByLabelText('เงินที่นับได้ (บาท)'), '1300');
     expect(within(dialog).getByRole('status', { name: 'ผลต่าง' })).toHaveTextContent('ขาด ฿200');
-    await user.click(within(dialog).getByRole('button', { name: 'ปิดร้าน' }));
+    await user.click(within(dialog).getByRole('button', { name: 'ยืนยันปิดร้าน' }));
 
     const summary = await screen.findByRole('dialog', { name: 'สรุปวัน' });
     expect((await within(summary).findAllByText('ขาด ฿200')).length).toBeGreaterThan(0);
@@ -159,7 +159,7 @@ describe('after the close', () => {
     const dialog = await toCloseDay(user);
     await user.click(within(dialog).getByRole('button', { name: 'ต่อไป: นับเงิน' }));
     await user.type(within(dialog).getByLabelText('เงินที่นับได้ (บาท)'), '1500');
-    await user.click(within(dialog).getByRole('button', { name: 'ปิดร้าน' }));
+    await user.click(within(dialog).getByRole('button', { name: 'ยืนยันปิดร้าน' }));
 
     const summary = await screen.findByRole('dialog', { name: 'สรุปวัน' });
     // The important numbers, at the top.
@@ -174,16 +174,18 @@ describe('after the close', () => {
     const waste = within(summary).getByRole('region', { name: 'ของเสีย' });
     expect(within(waste).getByText(/กอง B สาลี่สด 420 g/)).toBeInTheDocument();
 
-    await user.click(within(summary).getByRole('button', { name: 'เสร็จ' }));
+    await user.click(within(summary).getByRole('button', { name: 'กลับไปหน้าเปิดร้าน' }));
     expect(await screen.findByRole('button', { name: 'เปิดร้าน' })).toBeInTheDocument();
   });
 
   it('can be backed out of without writing anything', async () => {
     const user = userEvent.setup();
     const dialog = await toCloseDay(user);
-    await user.click(within(dialog).getByRole('button', { name: 'ยกเลิก' }));
+    await user.click(within(dialog).getByRole('button', { name: 'กลับไปขาย' }));
 
     expect(screen.queryByRole('dialog', { name: 'ปิดร้าน' })).not.toBeInTheDocument();
+    // Straight back to selling, not to the menu it was opened from.
+    expect(await screen.findByRole('button', { name: 'พอดี' })).toBeInTheDocument();
     expect(await db.waste_event.count()).toBe(0);
     expect(await loadOpenSession(db)).not.toBeNull();
   });
@@ -206,7 +208,7 @@ describe('the backup, straight after the close', () => {
       const dialog = await toCloseDay(user);
       await user.click(within(dialog).getByRole('button', { name: 'ต่อไป: นับเงิน' }));
       await user.type(within(dialog).getByLabelText('เงินที่นับได้ (บาท)'), '1500');
-      await user.click(within(dialog).getByRole('button', { name: 'ปิดร้าน' }));
+      await user.click(within(dialog).getByRole('button', { name: 'ยืนยันปิดร้าน' }));
 
       const summary = await screen.findByRole('dialog', { name: 'สรุปวัน' });
       await user.click(await within(summary).findByRole('button', { name: 'สำรองข้อมูลวันนี้' }));

@@ -70,6 +70,16 @@ export async function backupAsFile(
   return new File([JSON.stringify(backup)], backupFilename(now), { type: 'application/json' });
 }
 
+const STALE_AFTER_MS = 2 * 86_400_000;
+
+/**
+ * True when the last backup is old enough to nag about — or there has never
+ * been one. A day's missed backup is normal; two is how records get lost.
+ */
+export function backupIsStale(lastBackupAt: string | null, nowMs: number): boolean {
+  return lastBackupAt === null || nowMs - Date.parse(lastBackupAt) > STALE_AFTER_MS;
+}
+
 /** Remember that a backup left the phone, to show when the last one was. */
 export async function markBackedUp(
   db: RuduPosDB = defaultDb,

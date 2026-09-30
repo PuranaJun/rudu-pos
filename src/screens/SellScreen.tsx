@@ -4,18 +4,15 @@ import CartLineRow from '../components/CartLineRow.tsx';
 import PayButtons from '../components/PayButtons.tsx';
 import PromptPayPanel from '../components/PromptPayPanel.tsx';
 import ReceiptSheet from '../components/ReceiptSheet.tsx';
-import SalesListScreen from './SalesListScreen.tsx';
-import ProductionScreen from './ProductionScreen.tsx';
-import CloseDayScreen from './CloseDayScreen.tsx';
-import ReportsScreen from './ReportsScreen.tsx';
-import SettingsScreen from './SettingsScreen.tsx';
 import PrepBanner from '../components/PrepBanner.tsx';
-import VersionStamp from '../components/VersionStamp.tsx';
+import { Button } from '../components/Button.tsx';
+import MenuButton from '../nav/MenuButton.tsx';
+import { useNav } from '../nav/nav-store.ts';
 import { formatTHB } from '../lib/money.ts';
 import { defaultVariantOf } from '../domain/cart.ts';
 import { unitPrice } from '../domain/cost.ts';
 import { DISCOUNT_REASON_TH } from '../domain/promotions.ts';
-import { breakeven, type DayTotals } from '../domain/reporting.ts';
+import { breakeven, EMPTY_DAY_TOTALS } from '../domain/reporting.ts';
 import { availableCups } from '../domain/stock.ts';
 import { prepReminders } from '../domain/production.ts';
 import { nowIso } from '../lib/id.ts';
@@ -25,7 +22,6 @@ import {
   useDeviceId,
   useSettings,
   useStockSnapshot,
-  useTodaySales,
   useExpectedCash,
   useSessionTotals,
 } from '../db/hooks.ts';
@@ -38,22 +34,10 @@ import {
   toggleModifier,
 } from '../db/cart-repo.ts';
 import { CartChangedError, completeSale, priceCart, type Receipt } from '../db/sale-repo.ts';
-import { voidSale } from '../db/stock-repo.ts';
 import { sessionBusinessDate } from '../db/session-repo.ts';
 import type { CashSession, PaymentMethod, Product } from '../db/types.ts';
 
 const MENU_COLORS = ['--color-drink-1', '--color-drink-2', '--color-drink-3'];
-
-const NO_SALES: DayTotals = {
-  units: 0,
-  revenue: 0,
-  cogs: 0,
-  grossProfit: 0,
-  discountsByReason: [],
-  totalDiscount: 0,
-  saleCount: 0,
-  voidedCount: 0,
-};
 
 /**
  * The sell screen. The only workflow that has to be fast.
@@ -65,15 +49,12 @@ const NO_SALES: DayTotals = {
  *
  * Only reachable with a session open. The operator was chosen at open day and
  * is never asked again; every sale lands on the session's business date.
+ *
+ * Everything else — the day's bills, production, closing the day — is behind
+ * the one labelled เมนู button, never behind a tap on something that does
+ * not look like a button.
  */
-export default function SellScreen({
-  session,
-  onDayClosed = () => {},
-}: {
-  session: CashSession;
-  /** Called with the session once close day has written it. */
-  onDayClosed?: (sessionId: string) => void;
-}) {
+export default function SellScreen({ session }: { session: CashSession }) {
   const businessDate = sessionBusinessDate(session);
   const operatorId = session.operator_id;
 
@@ -81,10 +62,10 @@ export default function SellScreen({
   const stock = useStockSnapshot();
   const settings = useSettings();
   const cart = useCart();
-  const today = useSessionTotals(session) ?? NO_SALES;
+  const today = useSessionTotals(session) ?? EMPTY_DAY_TOTALS;
   const drawer = useExpectedCash(session);
   const deviceId = useDeviceId();
-  const sales = useTodaySales(catalog, businessDate);
+  const open = useNav((state) => state.open);
 
   const [pendingSoldOut, setPendingSoldOut] = useState<Product | null>(null);
   // Only PromptPay has a screen of its own: cash completes from the footer.
@@ -94,12 +75,9 @@ export default function SellScreen({
   // read the change at arm's length, with no timer to clear it.
   const [done, setDone] = useState<{ receipt: Receipt; shortfalls: number } | null>(null);
   const [showReceipt, setShowReceipt] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [showSales, setShowSales] = useState(false);
-  const [showProduction, setShowProduction] = useState(false);
-  const [showClose, setShowClose] = useState(false);
-  const [showReports, setShowReports] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
+  // A warning is the cart moving under a tap (the next tap rings it); danger
+  // is a sale that did not save.
+  const [error, setError] = useState<{ message: string; kind: 'warning' | 'danger' } | null>(null);
 
   if (!catalog || !stock || !cart || !settings) {
     return (
@@ -186,7 +164,9 @@ export default function SellScreen({
         // A cart that moved under the tap is not a failure to report as one:
         // the screen has the new total now, and the next tap will ring it.
         setError(
-          cause instanceof CartChangedError ? cause.message : `บันทึกไม่สำเร็จ: ${String(cause)}`,
+          cause instanceof CartChangedError
+            ? { message: cause.message, kind: 'warning' }
+            : { message: `บันทึกไม่สำเร็จ: ${String(cause)}`, kind: 'danger' },
         ),
       )
       .finally(() => setBusy(false));
@@ -206,21 +186,17 @@ export default function SellScreen({
 
   return (
     <div className="safe-x text-ink flex h-full flex-col bg-white">
-      {/* Today, live. */}
-      <div className="safe-top border-line flex items-stretch border-b">
-        <button
-          type="button"
-          onClick={() => setShowSales(true)}
-          aria-label="รายการขายวันนี้"
-          className="min-h-touch-lg flex min-w-0 flex-1 flex-col px-4 pb-2 text-left"
-        >
-          <span className="flex items-baseline justify-between gap-3">
-            <span className="text-4xl font-bold tabular-nums">
-              {today.units} <span className="text-2xl font-bold">แก้ว</span>
+      {/* Today, live — information only. The way to everything else is the
+          labelled เมนู button beside it. */}
+      <header className="safe-top border-line flex items-start gap-3 border-b px-4 pb-2">
+        <div role="group" aria-label="ยอดวันนี้" className="min-w-0 flex-1">
+          <p className="flex items-baseline justify-between gap-3">
+            <span className="text-2xl font-bold tabular-nums">
+              {today.units} <span className="text-lg font-bold">แก้ว</span>
             </span>
-            <span className="text-4xl font-bold tabular-nums">{formatTHB(today.revenue)}</span>
-          </span>
-          <span className="flex items-center justify-between gap-2 text-lg font-bold">
+            <span className="text-2xl font-bold tabular-nums">{formatTHB(today.revenue)}</span>
+          </p>
+          <p className="flex flex-wrap items-center justify-between gap-x-2 text-lg font-bold">
             <span className="tabular-nums">
               ลิ้นชัก {drawer === undefined ? '—' : formatTHB(drawer)}
             </span>
@@ -229,19 +205,13 @@ export default function SellScreen({
             >
               {even.past ? 'ผ่านจุดคุ้มทุน' : `คุ้มทุน ${even.cups}/${even.cupsTarget}`}
             </span>
-          </span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setShowProduction(true)}
-          className="border-line min-h-touch min-w-touch-lg mb-2 border-l px-3 text-lg font-bold"
-        >
-          ผลิต
-        </button>
-      </div>
+          </p>
+        </div>
+        <MenuButton />
+      </header>
 
       {/* Tomorrow's tea. Only there when something needs starting. */}
-      <PrepBanner reminders={reminders} onTap={() => setShowProduction(true)} />
+      <PrepBanner reminders={reminders} onTap={() => open('PRODUCTION')} />
 
       {/* Phone: menu, cart, pay, top to bottom. Tablet: the same three, with the
           cart and pay alongside the menu instead of under it — same flow, bigger
@@ -292,52 +262,67 @@ export default function SellScreen({
             {cart.length === 0 ? (
               <p className="text-ink-soft py-6 text-center text-lg font-bold">ยังไม่มีรายการ</p>
             ) : (
-              <ul>
-                {cart.map((item) => (
-                  <CartLineRow
-                    key={item.line.id}
-                    catalog={catalog}
-                    item={item}
-                    onStep={(delta) => void stepQty(item.line.id, delta)}
-                    onSetVariant={(variantId, allowed) =>
-                      void setVariant(item.line.id, variantId, allowed)
-                    }
-                    onToggleModifier={(modifierId) => void toggleModifier(item.line.id, modifierId)}
-                    onSetDiscountReason={(reason) =>
-                      void setLineDiscountReason(item.line.id, reason)
-                    }
-                  />
-                ))}
-              </ul>
+              <>
+                <ul>
+                  {cart.map((item) => (
+                    <CartLineRow
+                      key={item.line.id}
+                      catalog={catalog}
+                      item={item}
+                      onStep={(delta) => void stepQty(item.line.id, delta)}
+                      onSetVariant={(variantId, allowed) =>
+                        void setVariant(item.line.id, variantId, allowed)
+                      }
+                      onToggleModifier={(modifierId) =>
+                        void toggleModifier(item.line.id, modifierId)
+                      }
+                      onSetDiscountReason={(reason) =>
+                        void setLineDiscountReason(item.line.id, reason)
+                      }
+                    />
+                  ))}
+                </ul>
+                {/* At the end of the cart, well away from the pay buttons: a wet
+                    tap meant for พอดี must never empty the cart. */}
+                <div className="flex justify-end py-2">
+                  <Button variant="secondary" size="sm" onClick={() => void clearCart()}>
+                    ล้างตะกร้า
+                  </Button>
+                </div>
+              </>
             )}
           </main>
 
           {/* Payment, in thumb reach. */}
           <footer className="safe-bottom border-line border-t px-4 pt-2">
             {pendingSoldOut ? (
-              <div role="alertdialog" aria-label="เลยจำนวนที่มี" className="mb-2">
-                <p className="text-xl font-bold">เลยจำนวนที่มี — ขายต่อ?</p>
+              <div
+                role="alertdialog"
+                aria-label="เลยจำนวนที่มี"
+                className="bg-today border-ink mb-2 rounded-xl border-2 p-3"
+              >
+                <p className="text-xl font-bold">
+                  <span aria-hidden="true">⚠ </span>
+                  {pendingSoldOut.name_short_th} หมดแล้ว
+                </p>
+                <p className="text-lg font-bold">เลยจำนวนที่มี — ขายต่อ?</p>
                 <div className="mt-2 flex gap-2">
-                  <button
-                    type="button"
-                    onClick={confirmOverride}
-                    className="bg-brand text-paper min-h-touch-lg flex-1 rounded-xl text-xl font-bold"
-                  >
-                    ขายต่อ
-                  </button>
-                  <button
-                    type="button"
+                  <Button
+                    variant="secondary"
                     onClick={() => setPendingSoldOut(null)}
-                    className="border-line min-h-touch-lg flex-1 rounded-xl border-2 text-xl font-bold"
+                    className="flex-1"
                   >
-                    ยกเลิก
-                  </button>
+                    ไม่ขาย
+                  </Button>
+                  <Button variant="warning" onClick={confirmOverride} className="flex-1">
+                    ขายต่อ
+                  </Button>
                 </div>
               </div>
             ) : null}
 
             {done ? (
-              <div role="status" className="mb-2 flex items-center justify-between gap-2">
+              <div role="status" className="mb-2 flex flex-wrap items-center justify-between gap-2">
                 {done.receipt.cashChange ? (
                   // Read at arm's length with the customer watching: the
                   // largest type on the screen.
@@ -345,24 +330,31 @@ export default function SellScreen({
                     ทอน {formatTHB(done.receipt.cashChange)}
                   </p>
                 ) : (
-                  <p className="text-xl font-bold">ขายแล้ว {formatTHB(done.receipt.totalNet)}</p>
+                  <p className="text-xl font-bold">
+                    <span aria-hidden="true">✓ </span>ขายแล้ว {formatTHB(done.receipt.totalNet)}
+                  </p>
                 )}
                 {done.shortfalls > 0 ? (
-                  <p className="text-lg font-bold">สต็อกติดลบ {done.shortfalls} รายการ</p>
+                  <p className="bg-today rounded-lg px-2 text-lg font-bold">
+                    สต็อกติดลบ {done.shortfalls} รายการ
+                  </p>
                 ) : null}
-                <button
-                  type="button"
-                  onClick={() => setShowReceipt(true)}
-                  className="border-line min-h-touch-lg rounded-xl border-2 px-4 text-lg font-bold"
-                >
+                <Button variant="secondary" onClick={() => setShowReceipt(true)}>
                   ดูใบเสร็จ
-                </button>
+                </Button>
               </div>
             ) : null}
 
             {error ? (
-              <p role="alert" className="mb-2 text-lg font-bold">
-                {error}
+              // Never styled like "ขายแล้ว": a sale that did not save must not
+              // be mistaken for one that did.
+              <p
+                role="alert"
+                className={`mb-2 rounded-xl px-3 py-2 text-lg font-bold ${
+                  error.kind === 'danger' ? 'bg-expired text-white' : 'bg-today border-ink border-2'
+                }`}
+              >
+                {error.message}
               </p>
             ) : null}
 
@@ -376,17 +368,11 @@ export default function SellScreen({
               </div>
             ) : null}
 
-            <div className="mb-2 flex items-baseline justify-between">
-              <button
-                type="button"
-                onClick={() => void clearCart()}
-                disabled={cart.length === 0}
-                className="text-ink-soft min-h-touch-lg min-w-touch-lg px-3 text-lg font-bold disabled:bg-paper-sunk disabled:text-ink-soft disabled:border-line"
-              >
-                ล้าง
-              </button>
-              <p className="text-3xl font-bold tabular-nums">{formatTHB(priced.totalNet)}</p>
-            </div>
+            {/* What is due: the biggest number that is always on screen. */}
+            <p className="mb-2 flex items-baseline justify-between">
+              <span className="text-xl font-bold">ยอด</span>
+              <span className="text-4xl font-bold tabular-nums">{formatTHB(priced.totalNet)}</span>
+            </p>
 
             <PayButtons
               due={priced.totalNet}
@@ -395,53 +381,15 @@ export default function SellScreen({
               onCash={(received) => confirmPayment('CASH', received)}
               onQr={() => setShowQr(true)}
             />
-
-            <div className="mt-1 flex justify-center">
-              <VersionStamp />
-            </div>
           </footer>
         </div>
       </div>
 
-      {showSales ? (
-        <SalesListScreen
-          sales={sales ?? []}
-          totals={today}
-          breakeven={even}
-          voidReasons={settings.voidReasons}
-          onVoid={(saleId, reason) => {
-            void voidSale(saleId, reason).catch((cause: unknown) =>
-              setError(`ยกเลิกไม่สำเร็จ: ${String(cause)}`),
-            );
-          }}
-          onClose={() => setShowSales(false)}
-          onReports={() => setShowReports(true)}
-          onSettings={() => setShowSettings(true)}
-          onCloseDay={() => {
-            setShowSales(false);
-            setShowClose(true);
-          }}
-        />
-      ) : null}
-
-      {showReports ? <ReportsScreen onClose={() => setShowReports(false)} /> : null}
-      {showSettings ? <SettingsScreen onClose={() => setShowSettings(false)} /> : null}
-
-      {showClose ? (
-        <CloseDayScreen
-          session={session}
-          onCancel={() => setShowClose(false)}
-          onClosed={(sessionId) => {
-            setShowClose(false);
-            onDayClosed(sessionId);
-          }}
-        />
-      ) : null}
-
-      {showProduction ? <ProductionScreen onClose={() => setShowProduction(false)} /> : null}
-
       {showReceipt && done ? (
-        <ReceiptSheet receipt={done.receipt} onClose={() => setShowReceipt(false)} />
+        <ReceiptSheet
+          receipt={done.receipt}
+          back={{ label: 'กลับไปขาย', onClick: () => setShowReceipt(false) }}
+        />
       ) : null}
     </div>
   );

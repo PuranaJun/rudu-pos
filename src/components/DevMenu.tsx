@@ -4,6 +4,8 @@ import { stockSampleDay } from '../db/sample-day.ts';
 import { generateSampleWeek } from '../db/sample-week.ts';
 import { auditDatabase } from '../db/audit-repo.ts';
 import type { Finding } from '../domain/audit.ts';
+import { buttonClass } from './button.ts';
+import { ScreenFooter } from './Screen.tsx';
 
 /**
  * Development only: reached by a long press on the build stamp in a DEV
@@ -20,7 +22,9 @@ export default function DevMenu({ onClose }: { onClose: () => void }) {
     work().then(setStatus, (cause: unknown) => setStatus(`ไม่สำเร็จ: ${String(cause)}`));
   }
 
-  const action = 'bg-ink min-h-touch-lg w-full rounded-2xl px-4 text-lg font-bold text-white';
+  // Both resets wipe the database: danger. The audit only reads.
+  const reset = `${buttonClass('danger', 'md')} w-full`;
+  const action = `${buttonClass('secondary', 'md')} w-full`;
 
   return (
     <div
@@ -36,7 +40,7 @@ export default function DevMenu({ onClose }: { onClose: () => void }) {
       <main className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4">
         <button
           type="button"
-          className={action}
+          className={reset}
           onClick={() =>
             run('ล้างฐานข้อมูล แล้วโหลดข้อมูลตั้งต้นกับสต็อกเช้านี้?', 'กำลังโหลด…', async () => {
               await resetAndReseed();
@@ -50,7 +54,7 @@ export default function DevMenu({ onClose }: { onClose: () => void }) {
 
         <button
           type="button"
-          className={action}
+          className={reset}
           onClick={() =>
             run(
               'ล้างฐานข้อมูล แล้วสร้างข้อมูลตัวอย่าง 1 สัปดาห์?',
@@ -97,15 +101,7 @@ export default function DevMenu({ onClose }: { onClose: () => void }) {
         ) : null}
       </main>
 
-      <footer className="safe-bottom border-line border-t px-4 pt-3">
-        <button
-          type="button"
-          onClick={onClose}
-          className="border-line min-h-touch-lg w-full rounded-2xl border-2 text-xl font-bold"
-        >
-          ปิด
-        </button>
-      </footer>
+      <ScreenFooter back={{ label: 'กลับไปเมนู', onClick: onClose }} />
     </div>
   );
 }

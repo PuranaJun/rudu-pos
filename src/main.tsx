@@ -20,6 +20,10 @@ void ensureDeviceId();
 // ready; this runs once per launch, never on a timer.
 void promoteReadyBatches();
 
+// iOS Safari only applies :active — the pressed look on every button — when
+// something is listening for touches. A passive no-op costs nothing.
+document.addEventListener('touchstart', () => {}, { passive: true });
+
 const root = document.getElementById('root');
 if (!root) throw new Error('#root missing from index.html');
 
