@@ -21,8 +21,13 @@ export interface PosSettings extends PromotionSettings {
   quickTender: Satang[];
   loyaltyStampsRequired: number;
   brandingLineTh: string;
-  /** A data URL the operator uploads once. The printed QR is the real one. */
+  /** A data URL the operator uploads once — the fallback when there is no PromptPay ID. */
   promptPayQrImage: string | null;
+  /**
+   * The shop's PromptPay ID, digits only: a phone number, national ID or
+   * e-wallet ID. With it, each bill's QR carries its own amount.
+   */
+  promptPayId: string | null;
   operators: string[];
   /** One-tap choices when voiding. A void always carries one. */
   voidReasons: string[];
@@ -47,6 +52,7 @@ const FALLBACK: PosSettings = {
   loyaltyStampsRequired: 10,
   brandingLineTh: '',
   promptPayQrImage: null,
+  promptPayId: null,
   operators: [],
   voidReasons: ['ยกเลิก'],
   annualRevenueThreshold: 180_000_000,
@@ -88,6 +94,7 @@ export async function loadSettings(db: RuduPosDB = defaultDb): Promise<PosSettin
     loyaltyStampsRequired: num('loyalty_stamps_required', FALLBACK.loyaltyStampsRequired),
     brandingLineTh: str('branding_line_th', '') ?? '',
     promptPayQrImage: str('promptpay_qr_image', null),
+    promptPayId: str('promptpay_id', null),
     operators: (() => {
       const value = values.get('operators');
       return Array.isArray(value) ? value.map(String) : FALLBACK.operators;

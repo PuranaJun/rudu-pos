@@ -374,7 +374,7 @@ Only worth doing if a second operator or a second device appears.
 | Blocks a sale on expired stock               | "Warn, never block. Record the override. §2.1."                                 |
 | Adds VAT, a tax field, or a receipt prompt   | "Not VAT-registered. No tax engine, never prompt for receipts. §5."             |
 | Builds customer accounts for loyalty         | "Loyalty is a paper punch card. No CRM. §4."                                    |
-| Waits on or polls for PromptPay confirmation | "Static QR, manual confirmation. The system must never claim to verify. §4."    |
+| Waits on or polls for PromptPay confirmation | "Offline QR, manual confirmation. The system must never claim to verify. §4."    |
 | Hardcodes a price, cost or quantity          | "Nothing compiled in — recipes aren't taste-tested. Settings row. §2.1 item 7." |
 | Truncates a drink name with "…"              | "Never truncate. Fix the short name in settings. §9."                           |
 | Starts on Tier 2 or Tier 3 reports           | "Tier 1 only for now. §7."                                                      |

@@ -99,7 +99,7 @@ Cutting a slab is an **explicit action that records grams cut**, so the uncut re
 **Payment** — one method per sale, no splits, no cards, no e-wallets.
 
 - **Cash** (majority): change calculation + drawer balance. Opening float 1,500 THB. Quick-tender: **40 · 50 · 59 · 100 · 500 · 1000 · exact**.
-- **PromptPay QR**: a **static printed QR**. No gateway, no callback. The customer scans and shows their phone; **the operator confirms manually.** The system must **never** wait for, poll for, or claim to have verified a payment.
+- **PromptPay QR**: drawn **offline** from the shop's PromptPay ID (a setting, never compiled in) with **the bill's amount in it** (EMVCo PromptPay payload), so the customer types nothing. The static printed QR is the fallback when no ID is set. No gateway, no callback. The customer scans and shows their phone; **the operator confirms manually.** The system must **never** wait for, poll for, or claim to have verified a payment.
 
 ---
 

@@ -12,6 +12,7 @@ import type { PosSettings } from '../../db/settings-repo.ts';
 import { saveSetting } from '../../db/catalog-repo.ts';
 import type { SettingValue } from '../../db/types.ts';
 import { problemsOf } from './problems.ts';
+import { parsePromptPayId } from '../../domain/promptpay.ts';
 
 /**
  * The shop: promotions, the float, the tender buttons, the day's fixed cost,
@@ -39,6 +40,7 @@ export default function ShopSettings({
   const [operators, setOperators] = useState(settings.operators.join('\n'));
   const [voidReasons, setVoidReasons] = useState(settings.voidReasons.join('\n'));
   const [branding, setBranding] = useState(settings.brandingLineTh);
+  const [promptPayId, setPromptPayId] = useState(settings.promptPayId ?? '');
   const [threshold, setThreshold] = useState(bahtInput(settings.annualRevenueThreshold));
   const [warnPercent, setWarnPercent] = useState(
     String(Math.round(settings.annualRevenueWarnRatio * 100)),
@@ -57,6 +59,7 @@ export default function ShopSettings({
     operators,
     voidReasons,
     branding,
+    promptPayId,
     threshold,
     warnPercent,
   });
@@ -96,6 +99,13 @@ export default function ShopSettings({
       wrong.push('เริ่มเตือนเมื่อถึง ต้องอยู่ระหว่าง 1–100%');
     if (lines(operators).length === 0) wrong.push('ต้องมีคนขายอย่างน้อยหนึ่งคน');
     if (lines(voidReasons).length === 0) wrong.push('ต้องมีเหตุผลยกเลิกอย่างน้อยหนึ่งข้อ');
+    // Empty is allowed: the printed QR is used instead.
+    const promptPay = promptPayId.trim() === '' ? null : parsePromptPayId(promptPayId);
+    if (promptPayId.trim() !== '' && promptPay === null) {
+      wrong.push(
+        'พร้อมเพย์ต้องเป็นเบอร์มือถือ 10 หลัก เลขบัตรประชาชน 13 หลัก หรือ e-Wallet 15 หลัก',
+      );
+    }
     if (wrong.length > 0) {
       setProblems(wrong);
       return Promise.resolve(false);
@@ -111,6 +121,7 @@ export default function ShopSettings({
       operators: lines(operators),
       void_reasons: lines(voidReasons),
       branding_line_th: branding.trim(),
+      promptpay_id: promptPay?.digits ?? null,
       annual_revenue_warn_ratio: percent! / 100,
     };
 
@@ -206,6 +217,15 @@ export default function ShopSettings({
       />
       <TextField label="ข้อความบนใบเสร็จ" value={branding} onChange={setBranding} />
 
+      <h3 className="mt-6 text-xl font-bold">พร้อมเพย์</h3>
+      <TextField
+        label="พร้อมเพย์ของร้าน"
+        value={promptPayId}
+        onChange={setPromptPayId}
+        inputMode="numeric"
+        hint="เบอร์มือถือหรือเลขบัตรประชาชนที่ผูกพร้อมเพย์ — QR ตอนขายจะใส่ยอดให้เอง ลูกค้าไม่ต้องพิมพ์"
+      />
+
       <QrUpload current={settings.promptPayQrImage} />
     </Editor>
   );
@@ -224,8 +244,10 @@ function QrUpload({ current }: { current: string | null }) {
 
   return (
     <div className="mt-6" role="group" aria-label="QR พร้อมเพย์">
-      <h3 className="text-xl font-bold">QR พร้อมเพย์</h3>
-      <p className="text-ink-soft text-base font-bold">เลือกรูปแล้วบันทึกทันที</p>
+      <h3 className="text-xl font-bold">รูป QR ที่พิมพ์ไว้</h3>
+      <p className="text-ink-soft text-base font-bold">
+        ใช้เมื่อไม่ได้ใส่พร้อมเพย์ของร้าน · เลือกรูปแล้วบันทึกทันที
+      </p>
       {current ? (
         <img
           src={current}

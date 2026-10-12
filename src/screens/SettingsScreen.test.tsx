@@ -182,6 +182,27 @@ describe('editing what is there', () => {
   });
 });
 
+describe('the PromptPay ID', () => {
+  it('refuses something that is not one, and keeps only the digits of one that is', async () => {
+    const user = userEvent.setup();
+    render(<SettingsScreen back={BACK} />);
+    await user.click(await screen.findByRole('button', { name: 'ร้าน' }));
+
+    await typeInto(user, 'พร้อมเพย์ของร้าน', '08123');
+    await user.click(screen.getByRole('button', { name: 'บันทึก' }));
+    expect(await screen.findByText(/พร้อมเพย์ต้องเป็นเบอร์มือถือ 10 หลัก/)).toBeInTheDocument();
+    expect((await loadSettings(db)).promptPayId).toBeNull();
+
+    await typeInto(user, 'พร้อมเพย์ของร้าน', '081-234-5678');
+    await user.click(screen.getByRole('button', { name: 'บันทึก' }));
+    await waitFor(async () => expect((await loadSettings(db)).promptPayId).toBe('0812345678'));
+
+    await typeInto(user, 'พร้อมเพย์ของร้าน', ' ');
+    await user.click(screen.getByRole('button', { name: 'บันทึก' }));
+    await waitFor(async () => expect((await loadSettings(db)).promptPayId).toBeNull());
+  });
+});
+
 describe('the PromptPay QR', () => {
   it('is uploaded once and shown from then on, and can be taken away', async () => {
     const user = userEvent.setup();

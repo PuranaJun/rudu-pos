@@ -184,6 +184,7 @@ export default function SellScreen({ session }: { session: CashSession }) {
     return (
       <PromptPayPanel
         due={priced.totalNet}
+        promptPayId={settings.promptPayId}
         qrImage={settings.promptPayQrImage}
         busy={busy}
         onCancel={() => setShowQr(false)}

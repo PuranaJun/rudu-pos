@@ -108,6 +108,7 @@ describe('touch targets', () => {
     render(
       <PromptPayPanel
         due={4_000}
+        promptPayId="0812345678"
         qrImage={null}
         onConfirm={() => {}}
         onCancel={() => {}}

@@ -21,12 +21,15 @@ export function TextField({
   onChange,
   multiline = false,
   hint,
+  inputMode,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   multiline?: boolean;
   hint?: string;
+  /** `numeric` brings up the number pad for an ID typed with wet thumbs. */
+  inputMode?: 'numeric' | undefined;
 }) {
   return (
     <label className="mt-3 block">
@@ -42,6 +45,7 @@ export function TextField({
       ) : (
         <input
           type="text"
+          inputMode={inputMode}
           aria-label={label}
           value={value}
           onChange={(event) => onChange(event.target.value)}
