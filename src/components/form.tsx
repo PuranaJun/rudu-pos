@@ -63,12 +63,18 @@ export function NumberField({
   onChange,
   suffix,
   hint,
+  name,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   suffix?: string;
   hint?: string;
+  /**
+   * The field's full name when the short label leans on a heading above it —
+   * "จำนวน" under "แก้ว 16oz" is "จำนวน แก้ว 16oz" to a screen reader.
+   */
+  name?: string;
 }) {
   return (
     <label className="mt-3 block">
@@ -77,7 +83,7 @@ export function NumberField({
         <input
           type="text"
           inputMode="decimal"
-          aria-label={label}
+          aria-label={name ?? label}
           value={value}
           onChange={(event) => onChange(event.target.value)}
           className="min-h-touch w-full min-w-0 bg-transparent text-xl font-bold tabular-nums outline-none"

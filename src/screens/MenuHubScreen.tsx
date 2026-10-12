@@ -45,6 +45,11 @@ export default function MenuHubScreen({
             {dayOpen ? <QueueTile session={session} onOpen={() => open('QUEUE')} /> : null}
             <Tile title="ผลิต" detail={['บันทึกของที่ทำ']} onOpen={() => open('PRODUCTION')} />
             <Tile
+              title="สั่งของ"
+              detail={['แก้ว ฝา หลอด', 'ใบสั่งของ']}
+              onOpen={() => open('PURCHASING')}
+            />
+            <Tile
               title="รายงาน"
               detail={['วันที่ผ่านมา', 'ทั้งปี']}
               onOpen={() => open('REPORTS')}

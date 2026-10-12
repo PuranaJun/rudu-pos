@@ -25,6 +25,8 @@ import { loadDaySummary, loadExpectedCash } from './close-repo.ts';
 import { lastOperator, loadOpenSession } from './session-repo.ts';
 import type { CashSession } from './types.ts';
 import { loadQueue, type Queue } from './queue-repo.ts';
+import { loadPurchasing, type Purchasing } from './purchase-repo.ts';
+import { packagingStock, type PackagingStock } from '../domain/packaging.ts';
 
 export function useCostCatalog(): CostCatalog | undefined {
   return useLiveQuery(() => loadCostCatalog(db), []);
@@ -79,6 +81,20 @@ export function useQueue(
   return useLiveQuery(
     async () => (catalog ? loadQueue(catalog, session, db) : undefined),
     [catalog, session],
+  );
+}
+
+/** Suppliers, purchase items, orders and the packaging ledger, live. */
+export function usePurchasing(): Purchasing | undefined {
+  return useLiveQuery(() => loadPurchasing(db), []);
+}
+
+/** Every counted-as-stock packaging item with what is left, live: a sale moves it. */
+export function usePackagingStock(catalog: CostCatalog | undefined): PackagingStock[] | undefined {
+  return useLiveQuery(
+    async () =>
+      catalog ? packagingStock(catalog, await db.packaging_movement.toArray()) : undefined,
+    [catalog],
   );
 }
 

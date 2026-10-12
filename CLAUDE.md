@@ -149,14 +149,25 @@ Same-day components (`CUT` jelly, Pile B pear, basil seed) **default to discarde
 
 ### 6.5 Purchase orders
 
-Recording what the shop buys from suppliers (tea leaves, pears, sugar, cups, lids, ice):
+Recording what the shop buys from suppliers (tea leaves, pears, sugar, cups, lids):
 
-- Pick a supplier → add lines (purchase item, qty, unit cost — **defaults to the last price paid**) → save as `ORDERED`. Share it as an image or text through the iOS share sheet (LINE) for the supplier.
-- **Receive** marks it `RECEIVED` with the actual quantities and costs (they often differ from what was ordered).
-- Receiving **may offer** to update a component's `cost_per_unit` or a packaging item's `unit_cost`. It never does so automatically, and the update is forward only (§2.1.8).
+- Pick a supplier → add lines (purchase item, qty, unit cost — **defaults to the last price paid**) → save as `ORDERED`, or **"bought, received now"** for a market run. Share an order as text through the iOS share sheet (LINE) for the supplier.
+- **Receive** marks it `RECEIVED` with the actual quantities and costs (they often differ from what was ordered). Receiving twice is refused.
+- A purchase item bought in packs of a packaging item (`pack_size`, `packaging_item_id`) **adds `qty_received × pack_size` pieces to packaging stock** (§6.6).
+- Receiving **may offer** to update a packaging item's `unit_cost` (price per pack ÷ pack size). It never does so automatically, and the update is forward only (§2.1.8). Component costs are per ml/g of the finished component, which a raw-ingredient price cannot give, so they are edited by hand in settings.
 - A purchase order **does not create component stock.** Components enter stock only through production batches (§6.3). Purchase items are what is bought, not what is consumed. This is not ingredient-level depletion (§11).
-- Report: spend per month, per supplier and per purchase item.
+- Cancelled orders are kept, never deleted.
+- Report: spend per month (by the Bangkok date received), per supplier and per purchase item.
 - Entirely outside the sell path.
+
+### 6.6 Packaging stock
+
+Cups, lids, straws, spoons, bags, stickers and bottles are counted as stock. Ice is not (bought by the bag daily). `packaging_item.is_stock_tracked` decides, editable in settings.
+
+- **The ledger again:** remaining = sum of `packaging_movement` rows (`SALE`, `PURCHASE`, `COUNT`, `VOID_REVERSAL`). Never a counter.
+- A sale deducts its variant's packaging set (less what a modifier removes, e.g. no ice) **in the sale's transaction**. A void reverses it, once.
+- An item is **"not counted yet"** until its first `COUNT`. A count records the difference from the ledger, never an overwrite.
+- **Warn, never block:** at or below `reorder_at` (or at zero), a banner on the sell screen. Packaging **never limits `available_cups`** and never greys out a drink: a drifted count must not add a tap to a sale.
 
 ---
 
@@ -195,7 +206,7 @@ component        id, name_th, unit (ML|G), default_batch_qty, yield_cups,
                  recipe_note_th, is_batch_tracked
 bom              id, variant_id, component_id, qty_per_cup      -- VARIANT-level
 packaging_set    id, name, items[] {packaging_item_id, qty}
-packaging_item   id, name_th, unit_cost
+packaging_item   id, name_th, unit_cost, is_stock_tracked, reorder_at?
 modifier         id, name_th, price_delta, is_paid, kind (PAID|PREP),
                  applies_to_variant_ids[], component_id?, qty_per_cup?,
                  cost_delta, advisory_th, sort_order
@@ -211,13 +222,16 @@ sale_line        id, sale_id, variant_id, qty, unit_price, line_discount,
 sale_line_mod    id, sale_line_id, modifier_id, price_delta, cost_delta
 stock_movement   id, sale_line_id?, component_batch_id, qty_delta,
                  reason (SALE|PRODUCTION|WASTE|ADJUSTMENT|OVERRIDE|VOID_REVERSAL)
+packaging_movement id, packaging_item_id, qty_delta,
+                 reason (SALE|PURCHASE|COUNT|VOID_REVERSAL), sale_line_id?,
+                 purchase_order_line_id?, reverses_movement_id?, created_at
 waste_event      id, component_batch_id, qty_discarded, reason
                  (EXPIRED|END_OF_DAY_PERISHABLE|QUALITY|SPILLAGE), recorded_at, note
 cash_session     id, opened_at, closed_at, operator_id, opening_float,
                  expected_cash, counted_cash, variance, note
 supplier         id, name, contact_note, is_active
-purchase_item    id, name_th, unit, default_supplier_id?, last_unit_cost,
-                 component_id?, packaging_item_id?, is_active
+purchase_item    id, name_th, unit, pack_size?, packaging_item_id?,
+                 default_supplier_id?, last_unit_cost?, is_active
 purchase_order   id, supplier_id, ordered_at, received_at?,
                  status (ORDERED|RECEIVED|CANCELLED), total_cost, note
 purchase_order_line  id, purchase_order_id, purchase_item_id, qty_ordered,

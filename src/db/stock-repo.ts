@@ -24,6 +24,7 @@ import {
   type StockSnapshot,
 } from '../domain/stock.ts';
 import { nowIso } from '../lib/id.ts';
+import { reversePackaging } from '../domain/packaging.ts';
 
 /**
  * Batches and their ledger as they stand at `now`. Read once, then ask the
@@ -73,22 +74,30 @@ export async function voidSale(
   db: RuduPosDB = defaultDb,
   now: string = nowIso(),
 ): Promise<StockMovement[]> {
-  return db.transaction('rw', [db.sale, db.sale_line, db.stock_movement], async () => {
-    const sale = await db.sale.get(saleId);
-    if (!sale) throw new Error(`sale ${saleId} not found`);
-    if (sale.is_voided) throw new Error(`sale ${saleId} is already voided`);
+  return db.transaction(
+    'rw',
+    [db.sale, db.sale_line, db.stock_movement, db.packaging_movement],
+    async () => {
+      const sale = await db.sale.get(saleId);
+      if (!sale) throw new Error(`sale ${saleId} not found`);
+      if (sale.is_voided) throw new Error(`sale ${saleId} is already voided`);
 
-    const lineIds = (await db.sale_line.where('sale_id').equals(saleId).toArray()).map(
-      (line) => line.id,
-    );
-    const movements = await db.stock_movement.toArray();
-    const reversals = reverseForSale(lineIds, movements, now);
+      const lineIds = (await db.sale_line.where('sale_id').equals(saleId).toArray()).map(
+        (line) => line.id,
+      );
+      const movements = await db.stock_movement.toArray();
+      const reversals = reverseForSale(lineIds, movements, now);
 
-    await db.stock_movement.bulkAdd(reversals);
-    await db.sale.update(saleId, { is_voided: true, void_reason: reason });
+      await db.stock_movement.bulkAdd(reversals);
+      // The cups and lids go back on the shelf too.
+      await db.packaging_movement.bulkAdd(
+        reversePackaging(lineIds, await db.packaging_movement.toArray(), now),
+      );
+      await db.sale.update(saleId, { is_voided: true, void_reason: reason });
 
-    return reversals;
-  });
+      return reversals;
+    },
+  );
 }
 
 /**

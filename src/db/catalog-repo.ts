@@ -241,6 +241,9 @@ export async function savePackagingItem(
   if (!Number.isInteger(item.unit_cost) || item.unit_cost < 0) {
     throw new CatalogError(['ต้นทุนต้องไม่ติดลบ']);
   }
+  if (item.reorder_at !== null && !(item.reorder_at >= 0)) {
+    throw new CatalogError(['จุดสั่งซื้อต้องไม่ติดลบ']);
+  }
   await db.packaging_item.put(item);
 }
 
@@ -253,6 +256,8 @@ export async function createPackagingItem(
     id: newId(),
     name_th: name.trim(),
     unit_cost: unitCost,
+    is_stock_tracked: true,
+    reorder_at: null,
     synced_at: null,
   };
   await savePackagingItem(item, db);

@@ -42,6 +42,9 @@ export type StockMovementReason =
 
 export type WasteReason = 'EXPIRED' | 'END_OF_DAY_PERISHABLE' | 'QUALITY' | 'SPILLAGE';
 
+export type PackagingMovementReason = 'SALE' | 'PURCHASE' | 'COUNT' | 'VOID_REVERSAL';
+export type PurchaseOrderStatus = 'ORDERED' | 'RECEIVED' | 'CANCELLED';
+
 export type DiscountReason =
   'PROMO_TWO_CUP' | 'PROMO_RAINY_DAY' | 'LOYALTY_REDEEM' | 'STAFF_DRINK' | 'COMP_GOODWILL';
 
@@ -128,6 +131,82 @@ export interface Bom extends Synced {
 export interface PackagingItem extends Synced {
   id: string;
   name_th: string;
+  unit_cost: Satang;
+  /**
+   * Counted as stock: cups, lids, straws. Not ice, which is bought by the bag
+   * every morning and gone by night.
+   */
+  is_stock_tracked: boolean;
+  /** Warn at or below this many. Null: warn only when it runs out. */
+  reorder_at: number | null;
+}
+
+/**
+ * The packaging ledger, as stock_movement is for components: remaining is the
+ * sum, never a counter (CLAUDE.md §2.1.2). An item with no COUNT row has never
+ * been counted, and its remaining is unknown rather than zero.
+ */
+export interface PackagingMovement extends Synced {
+  id: string;
+  packaging_item_id: string;
+  /** Negative consumes, positive adds. */
+  qty_delta: number;
+  reason: PackagingMovementReason;
+  /** Set for SALE and VOID_REVERSAL. */
+  sale_line_id: string | null;
+  /** Set for PURCHASE. */
+  purchase_order_line_id: string | null;
+  /** The SALE row a VOID_REVERSAL undoes, so a second void cannot credit twice. */
+  reverses_movement_id: string | null;
+  created_at: string;
+}
+
+export interface Supplier extends Synced {
+  id: string;
+  name: string;
+  /** Phone, LINE id, which market stall — whatever finds them again. */
+  contact_note: string | null;
+  is_active: boolean;
+}
+
+/**
+ * Something the shop buys, in the unit it is bought in: a pack of 50 cups, a
+ * kilo of tamarind. What is bought, not what is consumed — the components a
+ * cup uses are still made in batches (CLAUDE.md §6.5, §11).
+ */
+export interface PurchaseItem extends Synced {
+  id: string;
+  name_th: string;
+  /** The buying unit, as said at the market: แพ็ค, กก., ลัง. */
+  unit: string;
+  /** Receiving one unit adds this many of the packaging item. Null when not packaging. */
+  pack_size: number | null;
+  packaging_item_id: string | null;
+  default_supplier_id: string | null;
+  /** Per buying unit. Pre-fills the next order. */
+  last_unit_cost: Satang | null;
+  is_active: boolean;
+}
+
+export interface PurchaseOrder extends Synced {
+  id: string;
+  supplier_id: string;
+  ordered_at: string;
+  received_at: string | null;
+  status: PurchaseOrderStatus;
+  /** What was ordered until it is received; what was paid from then on. */
+  total_cost: Satang;
+  note: string | null;
+}
+
+export interface PurchaseOrderLine extends Synced {
+  id: string;
+  purchase_order_id: string;
+  purchase_item_id: string;
+  qty_ordered: number;
+  /** Null until received. What arrived is often not what was ordered. */
+  qty_received: number | null;
+  /** Per buying unit: the quoted price, then the price actually paid. */
   unit_cost: Satang;
 }
 

@@ -21,6 +21,7 @@ import type {
   Variant,
 } from '../db/types.ts';
 import { recipeFor, resolveModifiers } from './recipe.ts';
+import { packagingPerCup } from './packaging.ts';
 
 /** The catalog rows the engine needs, exactly as they come out of the tables. */
 export interface CatalogRows {
@@ -107,27 +108,12 @@ export function packagingCost(
   variantId: string,
   modifierIds: readonly string[] = [],
 ): Satang {
-  const variant = requireVariant(catalog, variantId);
-  const set = catalog.packagingSets.get(variant.packaging_set_id);
-  if (!set) {
-    throw new Error(`packaging set ${variant.packaging_set_id} missing for variant ${variantId}`);
-  }
-
-  const removed = new Set(
-    resolveModifiers(catalog, modifierIds)
-      .map((mod) => mod.removes_packaging_item_id)
-      .filter((id): id is string => id !== null),
-  );
-
   let total = 0;
-  for (const line of set.items) {
-    if (removed.has(line.packaging_item_id)) continue;
-    const item = catalog.packagingItems.get(line.packaging_item_id);
-    if (!item)
-      throw new Error(`packaging item ${line.packaging_item_id} missing from set ${set.id}`);
-    total += item.unit_cost * line.qty;
+  for (const use of packagingPerCup(catalog, variantId, modifierIds)) {
+    const item = catalog.packagingItems.get(use.packagingItemId);
+    if (!item) throw new Error(`packaging item ${use.packagingItemId} missing for ${variantId}`);
+    total += item.unit_cost * use.qty;
   }
-
   return total;
 }
 

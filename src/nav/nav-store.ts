@@ -12,7 +12,8 @@ import { create } from 'zustand';
  * Transient UI state only (CLAUDE.md §13), never persisted: after a crash
  * the app comes back on its home screen, which is the right place to be.
  */
-export type Route = 'HUB' | 'SALES' | 'QUEUE' | 'PRODUCTION' | 'REPORTS' | 'SETTINGS' | 'CLOSE_DAY';
+export type Route =
+  'HUB' | 'SALES' | 'QUEUE' | 'PRODUCTION' | 'PURCHASING' | 'REPORTS' | 'SETTINGS' | 'CLOSE_DAY';
 
 interface NavState {
   /** null: the home screen. */

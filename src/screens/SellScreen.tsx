@@ -5,6 +5,7 @@ import PayButtons from '../components/PayButtons.tsx';
 import PromptPayPanel from '../components/PromptPayPanel.tsx';
 import ReceiptSheet from '../components/ReceiptSheet.tsx';
 import PrepBanner from '../components/PrepBanner.tsx';
+import PackagingBanner from '../components/PackagingBanner.tsx';
 import { Button, ChoiceChip } from '../components/Button.tsx';
 import MenuButton from '../nav/MenuButton.tsx';
 import { useNav } from '../nav/nav-store.ts';
@@ -16,6 +17,7 @@ import { breakeven, EMPTY_DAY_TOTALS } from '../domain/reporting.ts';
 import { availableCups } from '../domain/stock.ts';
 import { prepReminders } from '../domain/production.ts';
 import { ORDER_TYPE_TH } from '../domain/queue.ts';
+import { packagingWarnings } from '../domain/packaging.ts';
 import { nowIso } from '../lib/id.ts';
 import {
   useCart,
@@ -24,6 +26,7 @@ import {
   useSettings,
   useStockSnapshot,
   useExpectedCash,
+  usePackagingStock,
   useQueue,
   useSessionTotals,
 } from '../db/hooks.ts';
@@ -73,6 +76,7 @@ export default function SellScreen({ session }: { session: CashSession }) {
   const drawer = useExpectedCash(session);
   const deviceId = useDeviceId();
   const queue = useQueue(catalog, session);
+  const packaging = usePackagingStock(catalog);
   const open = useNav((state) => state.open);
 
   const [pendingSoldOut, setPendingSoldOut] = useState<Product | null>(null);
@@ -221,6 +225,11 @@ export default function SellScreen({ session }: { session: CashSession }) {
 
       {/* Tomorrow's tea. Only there when something needs starting. */}
       <PrepBanner reminders={reminders} onTap={() => open('PRODUCTION')} />
+      {/* Cups or lids running out: said, never in the way (§6.6). */}
+      <PackagingBanner
+        warnings={packaging ? packagingWarnings(packaging) : []}
+        onTap={() => open('PURCHASING')}
+      />
 
       {/* Orders paid and still being made. Tapping one says it went out —
           never needed for anything, so nothing here asks for it (§6.1a). */}

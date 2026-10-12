@@ -26,6 +26,7 @@ import { newId, nowIso } from '../lib/id.ts';
 import { loadCart, type CartItem } from './cart-repo.ts';
 import { loadSettings } from './settings-repo.ts';
 import { nextOrderNo } from '../domain/queue.ts';
+import { packagingForSale } from '../domain/packaging.ts';
 
 export interface CompletedSale {
   saleId: string;
@@ -146,6 +147,7 @@ export async function completeSale(
       db.sale_line_discount,
       db.component_batch,
       db.stock_movement,
+      db.packaging_movement,
       db.cart_line,
       db.cart_line_mod,
       db.setting,
@@ -283,6 +285,20 @@ export async function completeSale(
       if (lineMods.length > 0) await db.sale_line_mod.bulkAdd(lineMods);
       if (lineDiscounts.length > 0) await db.sale_line_discount.bulkAdd(lineDiscounts);
       await db.stock_movement.bulkAdd(deduction.movements);
+      // Cups, lids and straws, counted the same way. Never refused: packaging
+      // warns, it does not stop a sale (CLAUDE.md §6.6).
+      await db.packaging_movement.bulkAdd(
+        packagingForSale(
+          catalog,
+          lines.map((line, index) => ({
+            saleLineId: line.id,
+            variantId: line.variant_id,
+            qty: line.qty,
+            modifierIds: cart[index]?.modifierIds ?? [],
+          })),
+          now,
+        ),
+      );
 
       await db.cart_line_mod.clear();
       await db.cart_line.clear();

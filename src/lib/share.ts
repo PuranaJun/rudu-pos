@@ -28,3 +28,21 @@ export async function shareFile(file: File): Promise<ShareOutcome> {
   window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
   return 'downloaded';
 }
+
+/**
+ * Hand text to the share sheet — an order to a supplier on LINE — or, where
+ * there is no share sheet, copy it. Call it straight from the tap.
+ */
+export async function shareText(text: string): Promise<'shared' | 'copied' | 'cancelled'> {
+  if (typeof navigator.share === 'function') {
+    try {
+      await navigator.share({ text });
+      return 'shared';
+    } catch (cause) {
+      if (cause instanceof DOMException && cause.name === 'AbortError') return 'cancelled';
+      throw cause;
+    }
+  }
+  await navigator.clipboard.writeText(text);
+  return 'copied';
+}

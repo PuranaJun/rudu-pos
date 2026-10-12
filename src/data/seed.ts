@@ -25,7 +25,7 @@ import type {
 } from '../db/types.ts';
 
 /** Bump to force a reseed of a database that was seeded by an older build. */
-export const SEED_VERSION = 8;
+export const SEED_VERSION = 9;
 export const SEED_VERSION_KEY = 'seed_version';
 
 const unsynced = { synced_at: null } as const;
@@ -368,22 +368,59 @@ export const BOM_ROWS: Bom[] = [
 
 // -------------------------------------------------------------- packaging
 
+// Cups, lids, straws and the rest are counted as stock; ice is not — it is
+// bought by the bag each morning and gone by night. Nothing warns until the
+// owner sets a reorder point.
+const counted = { is_stock_tracked: true, reorder_at: null };
+const notCounted = { is_stock_tracked: false, reorder_at: null };
+
 export const PACKAGING_ITEMS: PackagingItem[] = [
   {
     ...unsynced,
+    ...counted,
     id: 'PKGI_CUP_PLASTIC_16OZ',
     name_th: 'แก้วพลาสติก 16 oz',
     unit_cost: toSatang(1.18),
   },
-  { ...unsynced, id: 'PKGI_CUP_PAPER_HOT', name_th: 'แก้วกระดาษร้อน', unit_cost: toSatang(1.5) },
-  { ...unsynced, id: 'PKGI_LID', name_th: 'ฝา', unit_cost: toSatang(0.59) },
-  { ...unsynced, id: 'PKGI_STRAW_NORMAL', name_th: 'หลอดปกติ', unit_cost: toSatang(0.14) },
-  { ...unsynced, id: 'PKGI_STRAW_WIDE', name_th: 'หลอดใหญ่', unit_cost: toSatang(0.25) },
-  { ...unsynced, id: 'PKGI_SPOON', name_th: 'ช้อน', unit_cost: toSatang(0.35) },
-  { ...unsynced, id: 'PKGI_CARRY_BAG', name_th: 'ถุงหิ้ว', unit_cost: toSatang(0.2) },
-  { ...unsynced, id: 'PKGI_ICE', name_th: 'น้ำแข็ง', unit_cost: toSatang(1.0) },
-  { ...unsynced, id: 'PKGI_LOGO_STICKER', name_th: 'สติกเกอร์โลโก้', unit_cost: toSatang(0.3) },
-  { ...unsynced, id: 'PKGI_BOTTLE_PET_1L', name_th: 'ขวด PET 1 ลิตร', unit_cost: toSatang(7.0) },
+  {
+    ...unsynced,
+    ...counted,
+    id: 'PKGI_CUP_PAPER_HOT',
+    name_th: 'แก้วกระดาษร้อน',
+    unit_cost: toSatang(1.5),
+  },
+  { ...unsynced, ...counted, id: 'PKGI_LID', name_th: 'ฝา', unit_cost: toSatang(0.59) },
+  {
+    ...unsynced,
+    ...counted,
+    id: 'PKGI_STRAW_NORMAL',
+    name_th: 'หลอดปกติ',
+    unit_cost: toSatang(0.14),
+  },
+  {
+    ...unsynced,
+    ...counted,
+    id: 'PKGI_STRAW_WIDE',
+    name_th: 'หลอดใหญ่',
+    unit_cost: toSatang(0.25),
+  },
+  { ...unsynced, ...counted, id: 'PKGI_SPOON', name_th: 'ช้อน', unit_cost: toSatang(0.35) },
+  { ...unsynced, ...counted, id: 'PKGI_CARRY_BAG', name_th: 'ถุงหิ้ว', unit_cost: toSatang(0.2) },
+  { ...unsynced, ...notCounted, id: 'PKGI_ICE', name_th: 'น้ำแข็ง', unit_cost: toSatang(1.0) },
+  {
+    ...unsynced,
+    ...counted,
+    id: 'PKGI_LOGO_STICKER',
+    name_th: 'สติกเกอร์โลโก้',
+    unit_cost: toSatang(0.3),
+  },
+  {
+    ...unsynced,
+    ...counted,
+    id: 'PKGI_BOTTLE_PET_1L',
+    name_th: 'ขวด PET 1 ลิตร',
+    unit_cost: toSatang(7.0),
+  },
 ];
 
 const pkg = (packaging_item_id: string, qty = 1) => ({ packaging_item_id, qty });

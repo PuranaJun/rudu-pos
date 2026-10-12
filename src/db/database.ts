@@ -8,14 +8,19 @@ import type {
   ComponentBatch,
   Modifier,
   PackagingItem,
+  PackagingMovement,
   PackagingSet,
   Product,
+  PurchaseItem,
+  PurchaseOrder,
+  PurchaseOrderLine,
   Sale,
   SaleLine,
   SaleLineDiscount,
   SaleLineMod,
   Setting,
   StockMovement,
+  Supplier,
   Variant,
   WasteEvent,
 } from './types.ts';
@@ -45,6 +50,13 @@ export class RuduPosDB extends Dexie {
   component_batch!: Table<ComponentBatch, string>;
   stock_movement!: Table<StockMovement, string>;
   waste_event!: Table<WasteEvent, string>;
+  packaging_movement!: Table<PackagingMovement, string>;
+
+  // Buying
+  supplier!: Table<Supplier, string>;
+  purchase_item!: Table<PurchaseItem, string>;
+  purchase_order!: Table<PurchaseOrder, string>;
+  purchase_order_line!: Table<PurchaseOrderLine, string>;
 
   // Trade
   sale!: Table<Sale, string>;
@@ -108,6 +120,16 @@ export class RuduPosDB extends Dexie {
           await sales.update(patch.id, patch.changes);
         }
       });
+
+    // Packaging counted as stock, and buying from suppliers.
+    this.version(6).stores({
+      packaging_movement:
+        'id, packaging_item_id, sale_line_id, purchase_order_line_id, reason, created_at',
+      supplier: 'id',
+      purchase_item: 'id, packaging_item_id, default_supplier_id',
+      purchase_order: 'id, supplier_id, status, ordered_at, received_at',
+      purchase_order_line: 'id, purchase_order_id, purchase_item_id',
+    });
   }
 }
 

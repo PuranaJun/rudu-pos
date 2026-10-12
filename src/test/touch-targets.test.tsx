@@ -17,6 +17,9 @@ import ProductionScreen from '../screens/ProductionScreen.tsx';
 import SettingsScreen from '../screens/SettingsScreen.tsx';
 import ReportsScreen from '../screens/ReportsScreen.tsx';
 import PromptPayPanel from '../components/PromptPayPanel.tsx';
+import PurchasingScreen from '../screens/PurchasingScreen.tsx';
+import QueueScreen from '../screens/QueueScreen.tsx';
+import { createOrder, createSupplier, savePurchaseItem } from '../db/purchase-repo.ts';
 import { db } from '../db/database.ts';
 import { ensureSeeded } from '../db/seed.ts';
 import { ensureDeviceId } from '../db/device.ts';
@@ -125,7 +128,16 @@ describe('touch targets', () => {
     await within(hub).findByRole('button', { name: 'ปิดร้าน' });
 
     expect(problems(hub)).toEqual(NONE);
-    for (const name of ['บิลวันนี้', 'ผลิต', 'รายงาน', 'ตั้งค่า', 'ปิดร้าน', BACK.label]) {
+    for (const name of [
+      'บิลวันนี้',
+      'คิว',
+      'ผลิต',
+      'สั่งของ',
+      'รายงาน',
+      'ตั้งค่า',
+      'ปิดร้าน',
+      BACK.label,
+    ]) {
       expect(within(hub).getByRole('button', { name }).className, name).toMatch(LARGE);
     }
   });
@@ -147,6 +159,61 @@ describe('touch targets', () => {
     await screen.findByRole('button', { name: 'บันทึก' });
     expect(problems()).toEqual(NONE);
   });
+
+  it('on the queue screen', async () => {
+    render(<QueueScreen session={SESSION} back={BACK} />);
+    await screen.findByRole('dialog', { name: 'คิว' });
+    expect(problems()).toEqual(NONE);
+  });
+
+  it('on สั่งของ: the stock count, a new order, an order, and the lists', async () => {
+    const supplier = await createSupplier('ร้านป้าแดง', null, db);
+    await savePurchaseItem(
+      {
+        id: 'PI_TOUCH_CUPS',
+        name_th: 'แก้ว แพ็ค 50',
+        unit: 'แพ็ค',
+        pack_size: 50,
+        packaging_item_id: 'PKGI_CUP_PLASTIC_16OZ',
+        default_supplier_id: supplier.id,
+        last_unit_cost: 5_900,
+        is_active: true,
+        synced_at: null,
+      },
+      db,
+    );
+    await createOrder(
+      {
+        supplierId: supplier.id,
+        lines: [{ purchaseItemId: 'PI_TOUCH_CUPS', qty: 2, unitCost: 5_900 }],
+        note: null,
+      },
+      false,
+      db,
+    );
+    const user = userEvent.setup();
+    render(<PurchasingScreen back={BACK} />);
+    await screen.findByRole('dialog', { name: 'สั่งของ' });
+    await user.click(await screen.findByRole('button', { name: 'นับ แก้วพลาสติก 16 oz' }));
+    expect(problems(), 'home').toEqual(NONE);
+
+    await user.click(screen.getAllByRole('button', { name: /ร้านป้าแดง/ })[0]!);
+    await screen.findByRole('button', { name: 'รับของแล้ว' });
+    expect(problems(), 'order').toEqual(NONE);
+    await user.click(screen.getByRole('button', { name: 'กลับไปสั่งของ' }));
+
+    await user.click(await screen.findByRole('button', { name: 'สั่งของใหม่' }));
+    await screen.findByRole('button', { name: 'สั่งไว้ รอของมา' });
+    expect(problems(), 'new order').toEqual(NONE);
+    await user.click(screen.getByRole('button', { name: 'ยกเลิก' }));
+
+    await user.click(await screen.findByRole('button', { name: 'ร้านที่ซื้อ · ของที่ซื้อ' }));
+    await screen.findByRole('button', { name: '+ เพิ่มร้าน' });
+    expect(problems(), 'lists').toEqual(NONE);
+    await user.click(screen.getByRole('button', { name: /แก้ว แพ็ค 50/ }));
+    await screen.findByRole('button', { name: 'บันทึก' });
+    expect(problems(), 'item editor').toEqual(NONE);
+  }, 15_000);
 
   it('on the reports screen', async () => {
     render(<ReportsScreen back={BACK} />);

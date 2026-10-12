@@ -7,10 +7,11 @@ import {
   ListRow,
   NumberField,
   TextField,
+  Toggle,
 } from '../../components/form.tsx';
 import type { BackTo } from '../../components/Screen.tsx';
 import { useDirty } from '../../components/use-dirty.ts';
-import { parseNumber } from '../../lib/number.ts';
+import { numberText, parseNumber } from '../../lib/number.ts';
 import { bahtInput, formatTHB, parseBaht } from '../../lib/money.ts';
 import { newId } from '../../lib/id.ts';
 import type { CostCatalog } from '../../domain/cost.ts';
@@ -112,17 +113,30 @@ function ItemEditor({
 }) {
   const [name, setName] = useState(item?.name_th ?? '');
   const [cost, setCost] = useState(item ? bahtInput(item.unit_cost) : '');
+  const [tracked, setTracked] = useState(item?.is_stock_tracked ?? true);
+  const [reorder, setReorder] = useState(numberText(item?.reorder_at ?? null));
   const [problems, setProblems] = useState<string[]>([]);
-  const form = useDirty({ name, cost });
+  const form = useDirty({ name, cost, tracked, reorder });
 
   function save(): Promise<boolean> {
     const unitCost = parseBaht(cost);
+    const reorderAt = reorder.trim() === '' ? null : parseNumber(reorder);
     if (unitCost === null) {
       setProblems(['ต้นทุนต้องเป็นตัวเลข']);
       return Promise.resolve(false);
     }
+    if (reorder.trim() !== '' && (reorderAt === null || reorderAt < 0)) {
+      setProblems(['เตือนเมื่อเหลือ ต้องเป็นตัวเลข']);
+      return Promise.resolve(false);
+    }
     const write = item
-      ? savePackagingItem({ ...item, name_th: name.trim(), unit_cost: unitCost })
+      ? savePackagingItem({
+          ...item,
+          name_th: name.trim(),
+          unit_cost: unitCost,
+          is_stock_tracked: tracked,
+          reorder_at: tracked ? reorderAt : null,
+        })
       : createPackagingItem(name, unitCost).then(() => {
           form.markSaved();
           onCreated();
@@ -151,6 +165,20 @@ function ItemEditor({
     >
       <TextField label="ชื่อ" value={name} onChange={setName} />
       <NumberField label="ต้นทุนต่อชิ้น" value={cost} onChange={setCost} suffix="บาท" />
+      {item ? (
+        <>
+          <Toggle label="นับสต็อก" value={tracked} onChange={setTracked} />
+          {tracked ? (
+            <NumberField
+              label="เตือนเมื่อเหลือ"
+              value={reorder}
+              onChange={setReorder}
+              suffix="ชิ้น"
+              hint="ว่างไว้ = เตือนเมื่อหมดเท่านั้น"
+            />
+          ) : null}
+        </>
+      ) : null}
     </Editor>
   );
 }
