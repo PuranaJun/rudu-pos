@@ -24,6 +24,7 @@ import { loadAnnualRevenue, loadClosedDays, loadSessionTotals } from './report-r
 import { loadDaySummary, loadExpectedCash } from './close-repo.ts';
 import { lastOperator, loadOpenSession } from './session-repo.ts';
 import type { CashSession } from './types.ts';
+import { loadQueue, type Queue } from './queue-repo.ts';
 
 export function useCostCatalog(): CostCatalog | undefined {
   return useLiveQuery(() => loadCostCatalog(db), []);
@@ -67,6 +68,17 @@ export function useTodaySales(
   return useLiveQuery(
     async () => (catalog ? loadSalesForDate(catalog, businessDate, db) : []),
     [catalog, businessDate],
+  );
+}
+
+/** The open session's queue, live: a sale, a void or a hand-over repaints it. */
+export function useQueue(
+  catalog: CostCatalog | undefined,
+  session: CashSession,
+): Queue | undefined {
+  return useLiveQuery(
+    async () => (catalog ? loadQueue(catalog, session, db) : undefined),
+    [catalog, session],
   );
 }
 

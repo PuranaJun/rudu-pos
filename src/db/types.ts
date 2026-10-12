@@ -31,6 +31,8 @@ export type ModifierKind = 'PAID' | 'PREP';
  */
 export type ComponentRole = 'TEA_BASE' | 'CONCENTRATE' | 'SOLID' | 'GARNISH';
 export type PaymentMethod = 'CASH' | 'PROMPTPAY';
+/** A label on the sale, nothing more: dine-in is served in the same cup. */
+export type OrderType = 'TAKEAWAY' | 'DINE_IN';
 
 export type BatchState =
   'STEEPING' | 'SOAKING' | 'BLANCHED' | 'SLAB' | 'CUT' | 'READY' | 'EXPIRED' | 'DISCARDED';
@@ -196,6 +198,14 @@ export interface Sale extends Synced {
   payment_method: PaymentMethod;
   cash_received: Satang | null;
   cash_change: Satang | null;
+  /**
+   * What the customer is called by. Sequential per business date from 1,
+   * assigned at payment; a voided sale keeps its number, so none is reused.
+   */
+  order_no: number;
+  order_type: OrderType;
+  /** Null while the order is in the queue. Marking it is never required. */
+  handed_over_at: string | null;
   is_voided: boolean;
   void_reason: string | null;
   device_id: string;

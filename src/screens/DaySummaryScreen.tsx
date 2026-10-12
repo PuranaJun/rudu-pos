@@ -90,6 +90,11 @@ export default function DaySummaryScreen({ sessionId, back, promptBackup = false
           )}
         </Section>
 
+        <Section title="ทานที่ไหน">
+          <Row label="กลับบ้าน" value={`${summary.ordersByType.TAKEAWAY} บิล`} />
+          <Row label="ทานที่ร้าน" value={`${summary.ordersByType.DINE_IN} บิล`} />
+        </Section>
+
         <Section title="ส่วนลด">
           {totals.discountsByReason.length === 0 ? (
             <Row label="ไม่มี" value="" />

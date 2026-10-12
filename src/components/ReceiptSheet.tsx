@@ -1,6 +1,7 @@
 import { formatTHB } from '../lib/money.ts';
 import { formatBangkok } from '../lib/datetime.ts';
 import { DISCOUNT_REASON_TH } from '../domain/promotions.ts';
+import { ORDER_TYPE_TH } from '../domain/queue.ts';
 import { ScreenFooter, type BackTo } from './Screen.tsx';
 import type { DiscountReason } from '../db/types.ts';
 import type { Receipt } from '../db/sale-repo.ts';
@@ -45,6 +46,8 @@ export default function ReceiptSheet({ receipt, back, voidReason = null }: Props
           {receipt.brandingLineTh ? (
             <p className="text-ink-soft text-lg font-bold">{receipt.brandingLineTh}</p>
           ) : null}
+          <p className="mt-3 text-4xl font-bold tabular-nums">คิว {receipt.orderNo}</p>
+          <p className="text-xl font-bold">{ORDER_TYPE_TH[receipt.orderType]}</p>
           <p className="text-ink-soft mt-1 text-base font-bold">
             {formatBangkok(receipt.createdAt)}
           </p>

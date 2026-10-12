@@ -15,6 +15,7 @@ import type {
   CashSession,
   ComponentBatch,
   DiscountReason,
+  OrderType,
   Sale,
   SaleLine,
   SaleLineDiscount,
@@ -137,6 +138,8 @@ export interface WasteLine {
 export interface DaySummary {
   businessDate: string;
   totals: DayTotals;
+  /** Bills by takeaway and dine-in, voided ones left out. */
+  ordersByType: Record<OrderType, number>;
   /** Cups and bottles per variant, most sold first. */
   unitsByVariant: { variantId: string; name: string; units: number }[];
   /** Per component, costliest first — the one to make less of tops the list. */
@@ -172,7 +175,10 @@ export function daySummary(input: DaySummaryInput): DaySummary {
   const { catalog, session } = input;
   const totals = dayTotals(input.sales, input.lines, input.discounts);
 
-  const live = new Set(input.sales.filter((sale) => !sale.is_voided).map((sale) => sale.id));
+  const liveSales = input.sales.filter((sale) => !sale.is_voided);
+  const live = new Set(liveSales.map((sale) => sale.id));
+  const ordersByType: Record<OrderType, number> = { TAKEAWAY: 0, DINE_IN: 0 };
+  for (const sale of liveSales) ordersByType[sale.order_type] += 1;
   const byVariant = new Map<string, number>();
   for (const line of input.lines) {
     if (!live.has(line.sale_id)) continue;
@@ -207,6 +213,7 @@ export function daySummary(input: DaySummaryInput): DaySummary {
   return {
     businessDate: bangkokDate(session.opened_at),
     totals,
+    ordersByType,
     // Most sold first; ties in menu order, so the report reads the same every
     // time it is opened rather than in whatever order the rows were stored.
     unitsByVariant: [...byVariant]

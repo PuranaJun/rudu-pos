@@ -19,11 +19,13 @@ import {
   type CloseDecision,
 } from '../domain/close-day.ts';
 import { daySummary, type DaySummary } from '../domain/reporting.ts';
+import { waitingOrders } from '../domain/queue.ts';
 import { bangkokDate } from '../lib/datetime.ts';
 import type { Satang } from '../lib/money.ts';
 import { nowIso } from '../lib/id.ts';
 
-async function sessionSales(session: CashSession, db: RuduPosDB): Promise<Sale[]> {
+/** The session's sales, voided ones included. */
+export async function sessionSales(session: CashSession, db: RuduPosDB): Promise<Sale[]> {
   const sales = await db.sale
     .where('business_date')
     .equals(bangkokDate(session.opened_at))
@@ -75,7 +77,14 @@ export async function closeDay(
         await db.component_batch.update(batchId, { state: 'DISCARDED' });
       }
 
-      const expected = expectedCash(session, await sessionSales(session, db));
+      const sales = await sessionSales(session, db);
+      // Whatever is still in the queue went out with its drink: cleared
+      // without asking, since marking it was never required (CLAUDE.md §6.1a).
+      for (const sale of waitingOrders(sales)) {
+        await db.sale.update(sale.id, { handed_over_at: now });
+      }
+
+      const expected = expectedCash(session, sales);
       const closed: CashSession = {
         ...session,
         closed_at: now,

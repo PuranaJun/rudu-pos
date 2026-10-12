@@ -215,6 +215,7 @@ async function ringOne(
       deviceId: 'sample',
       brandingLineTh: '',
       businessDate: sessionBusinessDate(session),
+      orderType: random() < 0.3 ? 'DINE_IN' : 'TAKEAWAY',
     },
     db,
     at,

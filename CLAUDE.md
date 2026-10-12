@@ -124,7 +124,7 @@ Tap drink → [temp / modifier sheet only if applicable] → Tap CASH or QR → 
 - Second identical drink = **quantity stepper**, not a repeat of the flow.
 - `PROMO_TWO_CUP` applies automatically when the cart qualifies.
 - On payment, deduct every BOM component **in one transaction**.
-- **Order type** (`TAKEAWAY` | `DINE_IN`) is a one-tap toggle on the cart that **remembers the last choice**. It is never a prompt and never a step in the flow. The standard sale stays at 2 taps.
+- **Order type** (`TAKEAWAY` | `DINE_IN`) is a one-tap toggle on the cart that **remembers the last choice**. It is never a prompt and never a step in the flow. The standard sale stays at 2 taps. Dine-in is served in the **same cup** as takeaway, so the order type is a label only: same price, same packaging, same cost.
 - **Order number** is assigned automatically at payment, in the same transaction. It is sequential per business date and starts at 1 each day. Show it **large** on the done screen and on the receipt. The operator never types or picks it.
 
 ### 6.1a Queue
@@ -291,7 +291,6 @@ Listed so they are not inferred from generic POS templates. **Do not build:**
 | **Caffeine-free cup**        | No drink currently suits children, pregnant or caffeine-sensitive customers. Per-product advisory flag must exist.                                                                                                              |
 | **Second operator**          | Money-handling may split from drink-making. Don't assume one user — but **don't require login per sale.**                                                                                                                       |
 | **Branding text**            | Sign reads `ชาต้มเอง วันต่อวัน`, becomes `ชา 3 แก้ว เปลี่ยนตามฤดู` at the third drink. Any branding the POS shows is **editable text**.                                                                                         |
-| **Dine-in packaging**        | Whether a dine-in drink is served in a glass (no cup, lid, straw or bag) or the same cup. If different, it becomes a dine-in packaging set per variant. **Data, not code**, and the cost snapshot follows the order type.                     |
 | **Legal, surface once**      | Selling bottles for customers to carry home is fine. **Wholesaling or shipping by post** reclassifies them as pre-packaged food requiring Thai FDA (อย.) registration. Flag if a delivery/wholesale channel is ever added.      |
 
 ---

@@ -19,6 +19,7 @@ import type {
   Variant,
   WasteEvent,
 } from './types.ts';
+import { legacySalePatches } from '../domain/queue.ts';
 
 export const DB_NAME = 'RuduPosDB';
 
@@ -96,6 +97,17 @@ export class RuduPosDB extends Dexie {
     this.version(4).stores({
       waste_event: 'id, component_batch_id, reason, recorded_at, cash_session_id',
     });
+
+    // Order numbers, order type and the queue. Sales rung before this get
+    // their numbers in the order they were rung, and count as handed over.
+    this.version(5)
+      .stores({})
+      .upgrade(async (tx) => {
+        const sales = tx.table<Sale, string>('sale');
+        for (const patch of legacySalePatches(await sales.toArray())) {
+          await sales.update(patch.id, patch.changes);
+        }
+      });
   }
 }
 

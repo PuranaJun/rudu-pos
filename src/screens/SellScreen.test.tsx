@@ -73,6 +73,7 @@ beforeEach(async () => {
   await db.sale_line.clear();
   await db.sale_line_mod.clear();
   await db.sale_line_discount.clear();
+  await db.setting.delete('order_type');
 });
 
 async function tamarindButton() {
@@ -586,7 +587,7 @@ describe('crash safety', () => {
 });
 
 describe('the day’s sales', () => {
-  it('lists them newest first with time, items, total and method', async () => {
+  it('lists them newest first with queue number, time, items, total and method', async () => {
     const user = userEvent.setup();
     renderSell();
 
@@ -596,7 +597,8 @@ describe('the day’s sales', () => {
 
     const list = await openBills(user);
     expect(await within(list).findByText('มะขามแดง')).toBeInTheDocument();
-    expect(within(list).getByText('เงินสด')).toBeInTheDocument();
+    expect(within(list).getByText(/^คิว 1 · /)).toBeInTheDocument();
+    expect(within(list).getByText(/เงินสด · กลับบ้าน/)).toBeInTheDocument();
   });
 
   it('voids with a reason and puts the stock back', async () => {
@@ -735,5 +737,68 @@ describe('today, live', () => {
     } finally {
       await db.setting.put(fixed!);
     }
+  });
+});
+
+describe('order number, order type and the queue', () => {
+  it('calls out the order number on the done line, and keeps dine-in for the next sale', async () => {
+    const user = userEvent.setup();
+    renderSell();
+
+    await user.click(await screen.findByRole('button', { name: 'ทานที่ร้าน' }));
+    await waitFor(async () => expect((await db.setting.get('order_type'))?.value).toBe('DINE_IN'));
+
+    // Still two taps: the toggle was set before the sale, not during it.
+    await user.click(await tamarindButton());
+    await user.click(await enabledButton('พอดี'));
+    expect(await screen.findByText('คิว 1')).toBeInTheDocument();
+
+    await user.click(await tamarindButton());
+    await user.click(await enabledButton('พอดี'));
+    expect(await screen.findByText('คิว 2')).toBeInTheDocument();
+
+    const sales = await db.sale.orderBy('created_at').toArray();
+    expect(sales.map((sale) => [sale.order_no, sale.order_type])).toEqual([
+      [1, 'DINE_IN'],
+      [2, 'DINE_IN'],
+    ]);
+    expect(screen.getByRole('button', { name: /ทานที่ร้าน/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+  });
+
+  it('shows waiting orders in a strip, and one tap says it went out', async () => {
+    const user = userEvent.setup();
+    renderSell();
+
+    await user.click(await tamarindButton());
+    await user.click(await enabledButton('พอดี'));
+    const strip = await screen.findByRole('region', { name: 'คิวรอ' });
+
+    await user.click(within(strip).getByRole('button', { name: 'ส่งคิว 1 แล้ว' }));
+    await waitFor(async () => {
+      expect((await db.sale.toArray())[0]?.handed_over_at).not.toBeNull();
+    });
+    await waitFor(() =>
+      expect(screen.queryByRole('region', { name: 'คิวรอ' })).not.toBeInTheDocument(),
+    );
+  });
+
+  it('puts a mis-tapped order back from the คิว screen', async () => {
+    const user = userEvent.setup();
+    renderSell();
+
+    await user.click(await tamarindButton());
+    await user.click(await enabledButton('พอดี'));
+    await user.click(await screen.findByRole('button', { name: 'ส่งคิว 1 แล้ว' }));
+
+    await user.click(screen.getByRole('button', { name: 'เมนู' }));
+    await user.click(await screen.findByRole('button', { name: 'คิว' }));
+    const queue = await screen.findByRole('dialog', { name: 'คิว' });
+    await user.click(await within(queue).findByRole('button', { name: 'คิว 1 ยังไม่ได้ส่ง' }));
+
+    expect(await within(queue).findByRole('button', { name: 'ส่งคิว 1 แล้ว' })).toBeInTheDocument();
+    expect((await db.sale.toArray())[0]?.handed_over_at).toBeNull();
   });
 });

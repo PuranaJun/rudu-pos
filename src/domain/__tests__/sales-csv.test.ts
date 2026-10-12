@@ -35,6 +35,9 @@ function sale(id: string, date: string, time: string, overrides: Partial<Sale> =
     payment_method: 'CASH',
     cash_received: 7_000,
     cash_change: 0,
+    order_no: 1,
+    order_type: 'TAKEAWAY',
+    handed_over_at: null,
     is_voided: false,
     void_reason: null,
     device_id: 'phone',
@@ -66,6 +69,8 @@ const SALES = [
   }),
   sale('S1', '2026-03-01', '02:00'),
   sale('S3', '2026-09-01', '04:00', {
+    order_no: 7,
+    order_type: 'DINE_IN',
     is_voided: true,
     void_reason: 'กดผิด, แล้ว "ลูกค้า" เปลี่ยนใจ',
   }),
@@ -92,15 +97,17 @@ describe('the sales CSV', () => {
     expect(body.map((row) => row.split(',')[2])).toEqual(['S1', 'S2', 'S3']);
   });
 
-  it('reads like a ledger: date, Bangkok time, items, method, amounts in plain baht', () => {
+  it('reads like a ledger: date, Bangkok time, queue, items, method, amounts in plain baht', () => {
     // 02:00 UTC is 09:00 in Bangkok.
-    expect(rows()[1]).toBe('2026-03-01,09:00,S1,มะขามแดง × 2,เงินสด,80.00,10.00,70.00,ปกติ,,70.00');
+    expect(rows()[1]).toBe(
+      '2026-03-01,09:00,S1,1,กลับบ้าน,มะขามแดง × 2,เงินสด,80.00,10.00,70.00,ปกติ,,70.00',
+    );
     expect(rows()[2]).toContain('สาลี่ขาว (ร้อน),พร้อมเพย์,59.00,0.00,59.00');
   });
 
   it('counts a void as nothing, and quotes a reason that would break the row', () => {
     expect(rows()[3]).toBe(
-      '2026-09-01,11:00,S3,สาลี่ขาว (เย็น),เงินสด,80.00,10.00,70.00,ยกเลิก,"กดผิด, แล้ว ""ลูกค้า"" เปลี่ยนใจ",0.00',
+      '2026-09-01,11:00,S3,7,ทานที่ร้าน,สาลี่ขาว (เย็น),เงินสด,80.00,10.00,70.00,ยกเลิก,"กดผิด, แล้ว ""ลูกค้า"" เปลี่ยนใจ",0.00',
     );
   });
 

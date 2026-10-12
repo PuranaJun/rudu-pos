@@ -10,6 +10,7 @@ import type { RuduPosDB } from './database.ts';
 import { db as defaultDb } from './database.ts';
 import type {
   DiscountReason,
+  OrderType,
   PaymentMethod,
   Sale,
   SaleLine,
@@ -23,6 +24,8 @@ import { loadStockSnapshot } from './stock-repo.ts';
 import { bangkokDate } from '../lib/datetime.ts';
 import { newId, nowIso } from '../lib/id.ts';
 import { loadCart, type CartItem } from './cart-repo.ts';
+import { loadSettings } from './settings-repo.ts';
+import { nextOrderNo } from '../domain/queue.ts';
 
 export interface CompletedSale {
   saleId: string;
@@ -42,6 +45,8 @@ export interface ReceiptLine {
 
 export interface Receipt {
   saleId: string;
+  orderNo: number;
+  orderType: OrderType;
   createdAt: string;
   brandingLineTh: string;
   lines: ReceiptLine[];
@@ -90,6 +95,12 @@ export interface PaymentDetails {
    * when there is no session to belong to (CLAUDE.md §8).
    */
   businessDate?: string;
+  /**
+   * Left out by the sell screen, which records whatever the toggle holds when
+   * the sale is written — not what the screen last drew, which a tap on the
+   * toggle a moment before paying may not have reached yet.
+   */
+  orderType?: OrderType;
 }
 
 /**
@@ -137,6 +148,7 @@ export async function completeSale(
       db.stock_movement,
       db.cart_line,
       db.cart_line_mod,
+      db.setting,
     ],
     async () => {
       // The cart as it is now, not as the screen last drew it. A tap that
@@ -237,11 +249,18 @@ export async function completeSale(
         now,
       );
 
+      const businessDate = payment.businessDate ?? bangkokDate(now);
+      // Inside the transaction, so two sales can never take the same number.
+      const orderNo = nextOrderNo(
+        await db.sale.where('business_date').equals(businessDate).toArray(),
+      );
+      const orderType = payment.orderType ?? (await loadSettings(db)).orderType;
+
       const received = payment.cashReceived;
       const sale: Sale = {
         id: saleId,
         created_at: now,
-        business_date: payment.businessDate ?? bangkokDate(now),
+        business_date: businessDate,
         operator_id: payment.operatorId,
         total_gross: priced.totalGross,
         total_discount: priced.totalDiscount,
@@ -250,6 +269,9 @@ export async function completeSale(
         payment_method: payment.method,
         cash_received: received,
         cash_change: received === null ? null : received - priced.totalNet,
+        order_no: orderNo,
+        order_type: orderType,
+        handed_over_at: null,
         is_voided: false,
         void_reason: null,
         device_id: payment.deviceId,
@@ -270,6 +292,8 @@ export async function completeSale(
         shortfalls: deduction.shortfalls,
         receipt: {
           saleId,
+          orderNo,
+          orderType,
           createdAt: now,
           brandingLineTh: payment.brandingLineTh,
           lines: receiptLines,
@@ -287,6 +311,8 @@ export async function completeSale(
 
 export interface SaleSummary {
   id: string;
+  orderNo: number;
+  orderType: OrderType;
   createdAt: string;
   /** "มะขามแดง × 2 · สาลี่ขาว" — short names only, never the full ones. */
   items: string;
@@ -318,21 +344,30 @@ export async function loadSalesForDate(
     .sort((a, b) => b.created_at.localeCompare(a.created_at))
     .map((sale) => ({
       id: sale.id,
+      orderNo: sale.order_no,
+      orderType: sale.order_type,
       createdAt: sale.created_at,
-      items: lines
-        .filter((line) => line.sale_id === sale.id)
-        .map((line) => {
-          const variant = catalog.variants.get(line.variant_id);
-          const product = variant ? catalog.products.get(variant.product_id) : undefined;
-          const name = product?.name_short_th ?? line.variant_id;
-          return line.qty > 1 ? `${name} × ${line.qty}` : name;
-        })
-        .join(' · '),
+      items: describeItems(
+        catalog,
+        lines.filter((line) => line.sale_id === sale.id),
+      ),
       totalNet: sale.total_net,
       paymentMethod: sale.payment_method,
       isVoided: sale.is_voided,
       voidReason: sale.void_reason,
     }));
+}
+
+/** "มะขามแดง × 2 · สาลี่ขาว" — short names only, never the full ones (CLAUDE.md §9). */
+export function describeItems(catalog: CostCatalog, lines: readonly SaleLine[]): string {
+  return lines
+    .map((line) => {
+      const variant = catalog.variants.get(line.variant_id);
+      const product = variant ? catalog.products.get(variant.product_id) : undefined;
+      const name = product?.name_short_th ?? line.variant_id;
+      return line.qty > 1 ? `${name} × ${line.qty}` : name;
+    })
+    .join(' · ');
 }
 
 /**
@@ -379,6 +414,8 @@ export async function loadReceipt(
   return {
     receipt: {
       saleId: sale.id,
+      orderNo: sale.order_no,
+      orderType: sale.order_type,
       createdAt: sale.created_at,
       brandingLineTh,
       lines: receiptLines,

@@ -9,6 +9,9 @@ import type { RuduPosDB } from './database.ts';
 import { db as defaultDb } from './database.ts';
 import type { Satang } from '../lib/money.ts';
 import type { PromotionSettings } from '../domain/promotions.ts';
+import type { OrderType } from './types.ts';
+
+export const ORDER_TYPE_KEY = 'order_type';
 
 export interface PosSettings extends PromotionSettings {
   openingFloat: Satang;
@@ -27,6 +30,8 @@ export interface PosSettings extends PromotionSettings {
   annualRevenueThreshold: Satang;
   /** How far towards the threshold the warning starts, 0–1. */
   annualRevenueWarnRatio: number;
+  /** The cart's order type: whatever was chosen last, kept across sales. */
+  orderType: OrderType;
 }
 
 const FALLBACK: PosSettings = {
@@ -46,6 +51,7 @@ const FALLBACK: PosSettings = {
   voidReasons: ['ยกเลิก'],
   annualRevenueThreshold: 180_000_000,
   annualRevenueWarnRatio: 0.75,
+  orderType: 'TAKEAWAY',
 };
 
 export async function loadSettings(db: RuduPosDB = defaultDb): Promise<PosSettings> {
@@ -92,5 +98,6 @@ export async function loadSettings(db: RuduPosDB = defaultDb): Promise<PosSettin
     })(),
     annualRevenueThreshold: num('annual_revenue_warn_threshold', FALLBACK.annualRevenueThreshold),
     annualRevenueWarnRatio: num('annual_revenue_warn_ratio', FALLBACK.annualRevenueWarnRatio),
+    orderType: values.get(ORDER_TYPE_KEY) === 'DINE_IN' ? 'DINE_IN' : FALLBACK.orderType,
   };
 }

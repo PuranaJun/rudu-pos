@@ -5,7 +5,7 @@ import PayButtons from '../components/PayButtons.tsx';
 import PromptPayPanel from '../components/PromptPayPanel.tsx';
 import ReceiptSheet from '../components/ReceiptSheet.tsx';
 import PrepBanner from '../components/PrepBanner.tsx';
-import { Button } from '../components/Button.tsx';
+import { Button, ChoiceChip } from '../components/Button.tsx';
 import MenuButton from '../nav/MenuButton.tsx';
 import { useNav } from '../nav/nav-store.ts';
 import { formatTHB } from '../lib/money.ts';
@@ -15,6 +15,7 @@ import { DISCOUNT_REASON_TH } from '../domain/promotions.ts';
 import { breakeven, EMPTY_DAY_TOTALS } from '../domain/reporting.ts';
 import { availableCups } from '../domain/stock.ts';
 import { prepReminders } from '../domain/production.ts';
+import { ORDER_TYPE_TH } from '../domain/queue.ts';
 import { nowIso } from '../lib/id.ts';
 import {
   useCart,
@@ -23,21 +24,27 @@ import {
   useSettings,
   useStockSnapshot,
   useExpectedCash,
+  useQueue,
   useSessionTotals,
 } from '../db/hooks.ts';
 import {
   addDrink,
   clearCart,
   setLineDiscountReason,
+  setOrderType,
   setVariant,
   stepQty,
   toggleModifier,
 } from '../db/cart-repo.ts';
 import { CartChangedError, completeSale, priceCart, type Receipt } from '../db/sale-repo.ts';
 import { sessionBusinessDate } from '../db/session-repo.ts';
-import type { CashSession, PaymentMethod, Product } from '../db/types.ts';
+import { markHandedOver } from '../db/queue-repo.ts';
+import type { CashSession, OrderType, PaymentMethod, Product } from '../db/types.ts';
 
 const MENU_COLORS = ['--color-drink-1', '--color-drink-2', '--color-drink-3'];
+const ORDER_TYPES: readonly OrderType[] = ['TAKEAWAY', 'DINE_IN'];
+/** As many queue numbers as fit on one phone row; the rest are under เมนู → คิว. */
+const QUEUE_STRIP = 3;
 
 /**
  * The sell screen. The only workflow that has to be fast.
@@ -65,6 +72,7 @@ export default function SellScreen({ session }: { session: CashSession }) {
   const today = useSessionTotals(session) ?? EMPTY_DAY_TOTALS;
   const drawer = useExpectedCash(session);
   const deviceId = useDeviceId();
+  const queue = useQueue(catalog, session);
   const open = useNav((state) => state.open);
 
   const [pendingSoldOut, setPendingSoldOut] = useState<Product | null>(null);
@@ -213,6 +221,34 @@ export default function SellScreen({ session }: { session: CashSession }) {
       {/* Tomorrow's tea. Only there when something needs starting. */}
       <PrepBanner reminders={reminders} onTap={() => open('PRODUCTION')} />
 
+      {/* Orders paid and still being made. Tapping one says it went out —
+          never needed for anything, so nothing here asks for it (§6.1a). */}
+      {queue && queue.waiting.length > 0 ? (
+        <section
+          aria-label="คิวรอ"
+          className="border-line flex flex-wrap items-center gap-2 border-b px-4 py-1"
+        >
+          <span className="text-lg font-bold">คิวรอ</span>
+          {queue.waiting.slice(0, QUEUE_STRIP).map((order) => (
+            <Button
+              key={order.saleId}
+              variant="secondary"
+              size="sm"
+              aria-label={`ส่งคิว ${order.orderNo} แล้ว`}
+              onClick={() => void markHandedOver(order.saleId)}
+              className="tabular-nums"
+            >
+              ส่ง {order.orderNo}
+            </Button>
+          ))}
+          {queue.waiting.length > QUEUE_STRIP ? (
+            <span className="text-lg font-bold tabular-nums">
+              +{queue.waiting.length - QUEUE_STRIP}
+            </span>
+          ) : null}
+        </section>
+      ) : null}
+
       {/* Phone: menu, cart, pay, top to bottom. Tablet: the same three, with the
           cart and pay alongside the menu instead of under it — same flow, bigger
           buttons, nothing added. */}
@@ -257,6 +293,21 @@ export default function SellScreen({ session }: { session: CashSession }) {
         </div>
 
         <div className="tablet:w-[40%] tablet:max-w-md tablet:flex-none tablet:border-l border-line flex min-h-0 flex-1 flex-col">
+          {/* Stays where it was left, sale after sale: the standard sale never
+              touches it (CLAUDE.md §6.1). */}
+          <div role="group" aria-label="ทานที่ไหน" className="flex gap-2 px-4 pt-2">
+            {ORDER_TYPES.map((type) => (
+              <ChoiceChip
+                key={type}
+                selected={settings.orderType === type}
+                onClick={() => void setOrderType(type)}
+                className="flex-1"
+              >
+                {ORDER_TYPE_TH[type]}
+              </ChoiceChip>
+            ))}
+          </div>
+
           {/* The cart. */}
           <main className="min-h-0 flex-1 overflow-y-auto px-4">
             {cart.length === 0 ? (
@@ -323,6 +374,10 @@ export default function SellScreen({ session }: { session: CashSession }) {
 
             {done ? (
               <div role="status" className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                {/* Said out loud to the customer: as big as the change. */}
+                <p className="border-ink rounded-xl border-2 px-2 text-4xl leading-tight font-bold tabular-nums">
+                  คิว {done.receipt.orderNo}
+                </p>
                 {done.receipt.cashChange ? (
                   // Read at arm's length with the customer watching: the
                   // largest type on the screen.

@@ -10,8 +10,9 @@
  */
 import type { RuduPosDB } from './database.ts';
 import { db as defaultDb } from './database.ts';
-import type { CartLine, CartLineMod, DiscountReason } from './types.ts';
+import type { CartLine, CartLineMod, DiscountReason, OrderType } from './types.ts';
 import { newId, nowIso } from '../lib/id.ts';
+import { ORDER_TYPE_KEY } from './settings-repo.ts';
 
 export interface CartItem {
   line: CartLine;
@@ -161,6 +162,15 @@ export async function setLineDiscountReason(
   db: RuduPosDB = defaultDb,
 ): Promise<void> {
   await db.cart_line.update(lineId, { manual_discount_reason: reason });
+}
+
+/**
+ * Takeaway or dine-in. A setting rather than a cart column: it stays where
+ * the operator left it for the next sale, so a run of dine-in customers is
+ * one tap, not one per bill — and the standard sale never touches it.
+ */
+export async function setOrderType(type: OrderType, db: RuduPosDB = defaultDb): Promise<void> {
+  await db.setting.put({ key: ORDER_TYPE_KEY, value: type, synced_at: null });
 }
 
 export async function clearCart(db: RuduPosDB = defaultDb): Promise<void> {

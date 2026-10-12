@@ -12,11 +12,14 @@ import { bangkokTime } from '../lib/datetime.ts';
 import type { Satang } from '../lib/money.ts';
 import type { Sale, SaleLine } from '../db/types.ts';
 import type { CostCatalog } from './cost.ts';
+import { ORDER_TYPE_TH } from './queue.ts';
 
 const HEADER = [
   'วันที่',
   'เวลา',
   'เลขที่บิล',
+  'คิว',
+  'ประเภท',
   'รายการ',
   'ชำระโดย',
   'ยอดก่อนลด',
@@ -70,6 +73,8 @@ export function salesCsv(
       sale.business_date,
       bangkokTime(sale.created_at),
       sale.id,
+      String(sale.order_no),
+      ORDER_TYPE_TH[sale.order_type],
       (linesBySale.get(sale.id) ?? [])
         .map((line) => {
           const variant = catalog.variants.get(line.variant_id);

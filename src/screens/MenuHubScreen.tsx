@@ -4,7 +4,7 @@ import UpdateBanner from '../components/UpdateBanner.tsx';
 import VersionStamp from '../components/VersionStamp.tsx';
 import { buttonClass } from '../components/button.ts';
 import { Screen, ScreenBody, ScreenFooter, type BackTo } from '../components/Screen.tsx';
-import { useCart } from '../db/hooks.ts';
+import { useCart, useCostCatalog, useQueue } from '../db/hooks.ts';
 import { useNav } from '../nav/nav-store.ts';
 import type { CashSession } from '../db/types.ts';
 
@@ -42,6 +42,7 @@ export default function MenuHubScreen({
                 onOpen={() => open('SALES')}
               />
             ) : null}
+            {dayOpen ? <QueueTile session={session} onOpen={() => open('QUEUE')} /> : null}
             <Tile title="ผลิต" detail={['บันทึกของที่ทำ']} onOpen={() => open('PRODUCTION')} />
             <Tile
               title="รายงาน"
@@ -80,6 +81,18 @@ export default function MenuHubScreen({
 
       <ScreenFooter back={back} />
     </Screen>
+  );
+}
+
+/** Its own component: the queue is only read while a day is open. */
+function QueueTile({ session, onOpen }: { session: CashSession; onOpen: () => void }) {
+  const waiting = useQueue(useCostCatalog(), session)?.waiting.length;
+  return (
+    <Tile
+      title="คิว"
+      detail={[waiting === undefined ? 'คิวรอ' : `รอ ${waiting}`, 'จอลูกค้า']}
+      onOpen={onOpen}
+    />
   );
 }
 

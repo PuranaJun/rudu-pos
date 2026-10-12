@@ -15,6 +15,7 @@ import { ensureSeeded } from './seed.ts';
 import { loadCostCatalog } from './catalog.ts';
 import type { Sale, SaleLine } from './types.ts';
 import { salesCsv, salesCsvFilename } from '../domain/sales-csv.ts';
+import { legacySalePatches } from '../domain/queue.ts';
 import { bangkokDate } from '../lib/datetime.ts';
 import { nowIso } from '../lib/id.ts';
 
@@ -164,6 +165,12 @@ export async function restoreBackup(backup: BackupFile, db: RuduPosDB = defaultD
     }
 
     for (const row of keep) await db.setting.put(row);
+
+    // A backup from before order numbers: shaped the way the upgrade shapes
+    // an old install.
+    for (const patch of legacySalePatches(await db.sale.toArray())) {
+      await db.sale.update(patch.id, patch.changes);
+    }
   });
 
   await ensureSeeded(db);

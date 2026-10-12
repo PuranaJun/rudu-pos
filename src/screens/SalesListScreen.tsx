@@ -5,6 +5,7 @@ import { Screen, ScreenBody, ScreenFooter, type BackTo } from '../components/Scr
 import { formatTHB } from '../lib/money.ts';
 import { bangkokTime } from '../lib/datetime.ts';
 import { breakeven, EMPTY_DAY_TOTALS } from '../domain/reporting.ts';
+import { ORDER_TYPE_TH } from '../domain/queue.ts';
 import { useCostCatalog, useSessionTotals, useSettings, useTodaySales } from '../db/hooks.ts';
 import { sessionBusinessDate } from '../db/session-repo.ts';
 import { voidSale } from '../db/stock-repo.ts';
@@ -82,7 +83,7 @@ export default function SalesListScreen({ session, back }: { session: CashSessio
               <li key={sale.id} className="border-line border-b py-3">
                 <div className="flex items-baseline justify-between gap-2">
                   <span className="text-lg font-bold tabular-nums">
-                    {bangkokTime(sale.createdAt)}
+                    คิว {sale.orderNo} · {bangkokTime(sale.createdAt)}
                   </span>
                   <span
                     className={`text-xl font-bold tabular-nums ${
@@ -97,7 +98,8 @@ export default function SalesListScreen({ session, back }: { session: CashSessio
                   {sale.items}
                 </p>
                 <p className="text-ink-soft text-base font-bold">
-                  {sale.paymentMethod === 'CASH' ? 'เงินสด' : 'พร้อมเพย์'}
+                  {sale.paymentMethod === 'CASH' ? 'เงินสด' : 'พร้อมเพย์'} ·{' '}
+                  {ORDER_TYPE_TH[sale.orderType]}
                 </p>
 
                 {sale.isVoided ? (
