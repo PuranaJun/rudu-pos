@@ -39,8 +39,9 @@ export async function ensureSeeded(db: RuduPosDB = defaultDb): Promise<boolean> 
 }
 
 /**
- * Wipe the catalog and the trading history and start over. Development only —
- * it is wired to a long press in a DEV build and has no production path.
+ * Wipe the catalog and the trading history and start over. A long press in a
+ * DEV build — and, in production, a view-only device that stops viewing: its
+ * data was only ever a copy of the cloud's.
  */
 export async function resetAndReseed(db: RuduPosDB = defaultDb): Promise<void> {
   await db.transaction('rw', db.tables, async () => {

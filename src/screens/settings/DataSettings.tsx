@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import ShareFileButton from '../../components/ShareFileButton.tsx';
+import SyncPanel from '../../components/SyncPanel.tsx';
 import BackupCard from '../../components/BackupCard.tsx';
 import { Choice, ListPage } from '../../components/form.tsx';
 import { Button } from '../../components/Button.tsx';
@@ -31,6 +32,10 @@ export default function DataSettings({ exit }: { exit: BackTo }) {
   return (
     <ListPage exit={exit}>
       <BackupSection />
+      <section aria-label="ซิงค์ออนไลน์" className="pt-8">
+        <h2 className="text-2xl font-bold">ซิงค์ออนไลน์</h2>
+        <SyncPanel />
+      </section>
       <TaxSection />
       <RestoreSection />
     </ListPage>

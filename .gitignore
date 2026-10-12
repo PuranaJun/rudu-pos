@@ -35,3 +35,6 @@ pnpm-debug.log*
 
 # vercel
 .vercel
+
+# cloudflare wrangler (local runs)
+.wrangler

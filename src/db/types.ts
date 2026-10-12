@@ -60,6 +60,14 @@ export type PromotionActivation = 'AUTO' | 'MANUAL';
 
 interface Synced {
   synced_at: string | null;
+  /**
+   * 1 while the row has changes the cloud has not had; absent once sent. Set
+   * by the database's own hooks on every write (see database.ts), never by
+   * hand. A number, not a boolean, so IndexedDB can index it.
+   */
+  sync_dirty?: 1;
+  /** Bumped on every write, so a send can tell whether the row moved under it. */
+  sync_rev?: number;
 }
 
 export interface Product extends Synced {
@@ -437,6 +445,8 @@ export interface Setting {
   key: string;
   value: SettingValue;
   synced_at: string | null;
+  sync_dirty?: 1;
+  sync_rev?: number;
 }
 
 /**

@@ -1,9 +1,13 @@
+import { useState } from 'react';
 import OpenDayScreen from './screens/OpenDayScreen.tsx';
 import SellScreen from './screens/SellScreen.tsx';
 import DaySummaryScreen from './screens/DaySummaryScreen.tsx';
 import ScreenHost from './nav/ScreenHost.tsx';
 import { useNav } from './nav/nav-store.ts';
-import { useOpenSession } from './db/hooks.ts';
+import { useOpenSession, useSyncState } from './db/hooks.ts';
+import ViewerHome from './screens/ViewerHome.tsx';
+import PairScreen from './screens/PairScreen.tsx';
+import { pairKeyFromAddress } from './sync/pairing.ts';
 import { useWakeLock } from './lib/useWakeLock.ts';
 
 /**
@@ -17,11 +21,28 @@ import { useWakeLock } from './lib/useWakeLock.ts';
  */
 export default function App() {
   const session = useOpenSession();
+  const sync = useSyncState();
+  // A pairing link — rudu-pos.pages.dev/#pair=… — read once, on launch.
+  const [pairKey, setPairKey] = useState(pairKeyFromAddress);
   const closedSessionId = useNav((state) => state.closedSessionId);
   const summaryDone = useNav((state) => state.summaryDone);
 
   // The screen stays on for as long as the day is open, and only then.
   useWakeLock(Boolean(session));
+
+  if (pairKey && sync && sync.mode === null) {
+    return <PairScreen initialKey={pairKey} onDone={() => setPairKey(null)} />;
+  }
+
+  // A view-only device never sells: its home is the shop's day, read-only.
+  if (sync?.mode === 'VIEWER') {
+    return (
+      <>
+        <ViewerHome />
+        <ScreenHost session={null} />
+      </>
+    );
+  }
 
   if (closedSessionId) {
     return (

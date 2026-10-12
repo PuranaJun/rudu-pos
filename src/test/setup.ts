@@ -13,8 +13,11 @@ configure({ asyncUtilTimeout: 3000 });
 
 // jsdom has no canvas and says so on every receipt. No 2D context is the
 // honest answer; tests that draw one bring their own stand-in.
-HTMLCanvasElement.prototype.getContext = (() =>
-  null) as typeof HTMLCanvasElement.prototype.getContext;
+// (Server tests run without a DOM at all.)
+if (typeof HTMLCanvasElement !== 'undefined') {
+  HTMLCanvasElement.prototype.getContext = (() =>
+    null) as typeof HTMLCanvasElement.prototype.getContext;
+}
 
 // Navigation lives in a module-level store, which outlives a test's render.
 // Unmount first, so nothing on screen reacts to the reset, then start the next

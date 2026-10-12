@@ -247,7 +247,14 @@ purchase_order_line  id, purchase_order_id, purchase_item_id, qty_ordered,
 setting          key, value
 ```
 
-**Sync:** last-write-wins per record is fine. One device, one operator; real conflicts are near-impossible. **Do not build CRDTs.** v1 has no server at all — local IndexedDB plus export/import backup.
+**Sync:** last-write-wins per record is fine. **Do not build CRDTs.** Local IndexedDB stays the source of truth, plus export/import backup. Online sync is **opt-in** (Settings → ข้อมูล → ซิงค์ออนไลน์), built and live:
+
+- **Server:** Cloudflare Pages Functions (`functions/api/sync/*` → `server/sync.ts`) in front of one D1 database bound as `DB`. It stores each row as JSON under (table, id) with a sequence number and knows nothing about sales or stock, so **a new table needs no server change**. Under 50 queries a request (free plan).
+- **One writer:** the **shop phone** sends; any other device with the shop's key is **view-only** (`ViewerHome`: today's figures, cups left, packaging warnings, bills, reports — nothing that writes). A new phone can **replace** the shop phone by taking everything from the cloud (refused if it already has sales). **Two selling devices is not built** — it needs a shared session and drawer.
+- **Two keys, enforced by the server:** the **shop key** (sends, fetches, rotates; stored only as SHA-256) stays on the shop phone; the **view key** is the one shared (`#pair=` link or typed) and the server refuses it anything that writes (403). Rotating replaces both and locks out every viewer. Taking over as the shop phone needs the shop key.
+- **Change tracking** is in the database's own hooks: every write sets `sync_dirty = 1` (indexed) and bumps `sync_rev`; a send clears the flag only if the rev did not move meanwhile. Writes that came from the cloud, and a backup restore, are applied without marking.
+- **Never synced:** the open cart, and this phone's own settings (`device_id`, storage note, last backup, order type, the sync settings themselves).
+- **Triggers, never a loop (§1):** a change arms **one** send 15 s later (re-armed by the next change); opening the app or getting signal back does one round; and a button. **Nothing on the sell path imports sync** (`src/test/no-network.test.ts` enforces it, and that only `src/sync/sync-client.ts` touches the network).
 
 **Business date** = the `cash_session` the sale belongs to; fall back to the Asia/Bangkok calendar date. Never use UTC date for reports.
 

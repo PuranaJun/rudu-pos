@@ -8,7 +8,7 @@
  * that dies halfway through keeps what it had rather than half of each.
  */
 import type { RuduPosDB } from './database.ts';
-import { db as defaultDb } from './database.ts';
+import { asRemoteWrites, db as defaultDb, SYNCED_TABLES } from './database.ts';
 import { DEVICE_ID_KEY } from './device.ts';
 import { STORAGE_NOTE_KEY } from './storage-note.ts';
 import { ensureSeeded } from './seed.ts';
@@ -153,25 +153,41 @@ export function describeBackup(backup: BackupFile): BackupSummary {
  * same way an old install would be.
  */
 export async function restoreBackup(backup: BackupFile, db: RuduPosDB = defaultDb): Promise<void> {
-  await db.transaction('rw', db.tables, async () => {
-    const keep = (await db.setting.bulkGet(DEVICE_SETTINGS)).filter(
-      (row): row is NonNullable<typeof row> => row !== undefined,
-    );
+  // Rows go back exactly as they were saved — sync flags included — rather
+  // than as fresh changes, which would push last week's version of a row over
+  // the cloud's newer one.
+  await asRemoteWrites(() =>
+    db.transaction('rw', db.tables, async () => {
+      const keep = (await db.setting.bulkGet(DEVICE_SETTINGS)).filter(
+        (row): row is NonNullable<typeof row> => row !== undefined,
+      );
 
-    for (const table of db.tables) {
-      await table.clear();
-      const rows = backup.tables[table.name];
-      if (rows && rows.length > 0) await table.bulkAdd(rows as never[]);
-    }
+      for (const table of db.tables) {
+        await table.clear();
+        const rows = backup.tables[table.name];
+        if (!rows || rows.length === 0) continue;
+        // A backup from before sync existed has never been sent anywhere.
+        const synced = (SYNCED_TABLES as readonly string[]).includes(table.name);
+        await table.bulkAdd(
+          (synced
+            ? rows.map((row) =>
+                (row as { sync_rev?: number }).sync_rev === undefined
+                  ? { ...(row as object), sync_dirty: 1, sync_rev: 1 }
+                  : row,
+              )
+            : rows) as never[],
+        );
+      }
 
-    for (const row of keep) await db.setting.put(row);
+      for (const row of keep) await db.setting.put(row);
 
-    // A backup from before order numbers: shaped the way the upgrade shapes
-    // an old install.
-    for (const patch of legacySalePatches(await db.sale.toArray())) {
-      await db.sale.update(patch.id, patch.changes);
-    }
-  });
+      // A backup from before order numbers: shaped the way the upgrade shapes
+      // an old install.
+      for (const patch of legacySalePatches(await db.sale.toArray())) {
+        await db.sale.update(patch.id, patch.changes);
+      }
+    }),
+  );
 
   await ensureSeeded(db);
 }

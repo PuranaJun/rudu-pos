@@ -32,6 +32,7 @@ import { lastOperator, loadOpenSession } from './session-repo.ts';
 import type { CashSession } from './types.ts';
 import { loadQueue, type Queue } from './queue-repo.ts';
 import { loadPurchasing, type Purchasing } from './purchase-repo.ts';
+import { loadSyncState, pendingCount, type SyncState } from '../sync/sync-client.ts';
 import { packagingStock, type PackagingStock } from '../domain/packaging.ts';
 
 export function useCostCatalog(): CostCatalog | undefined {
@@ -107,6 +108,16 @@ export function usePackagingStock(catalog: CostCatalog | undefined): PackagingSt
       catalog ? packagingStock(catalog, await db.packaging_movement.toArray()) : undefined,
     [catalog],
   );
+}
+
+/** Whether this device syncs, as what, and how it last went — live. */
+export function useSyncState(): SyncState | undefined {
+  return useLiveQuery(() => loadSyncState(db), []);
+}
+
+/** Rows waiting to go to the cloud, live. */
+export function usePendingCount(): number | undefined {
+  return useLiveQuery(() => pendingCount(db), []);
 }
 
 /** This install's id, provisioned at startup by ensureDeviceId. */

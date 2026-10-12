@@ -6,6 +6,7 @@ import { ensureSeeded } from './db/seed.ts';
 import { promoteReadyBatches } from './db/stock-repo.ts';
 import { requestPersistentStorage } from './lib/storage.ts';
 import { recordStorageDurability } from './db/storage-note.ts';
+import { startSync } from './sync/sync-client.ts';
 import './index.css';
 
 // iOS can evict IndexedDB. Ask for durable storage on launch, never block on
@@ -19,6 +20,10 @@ void ensureDeviceId();
 // Bring finished steeps' stored state into line. Reads already treat them as
 // ready; this runs once per launch, never on a timer.
 void promoteReadyBatches();
+// Online sync, if it is switched on: a send shortly after changes, and a round
+// whenever the app is opened or the signal comes back. Never a loop, never
+// awaited by anything the operator is doing (CLAUDE.md §1, §8).
+startSync();
 
 // iOS Safari only applies :active — the pressed look on every button — when
 // something is listening for touches. A passive no-op costs nothing.
