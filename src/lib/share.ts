@@ -7,6 +7,11 @@ export type ShareOutcome = 'shared' | 'downloaded' | 'cancelled';
  * Call it straight from the tap with a file already built. iOS only allows
  * the share sheet from a user gesture, and an await on the database before
  * this call can outlast the gesture and get the share refused.
+ *
+ * A share sheet that exists but refuses this file — desktop Chrome and Edge
+ * turn down a .json backup with "Permission denied" — is treated like no share
+ * sheet at all: the file is downloaded instead. A backup that cannot leave
+ * the device is the one outcome that must not happen.
  */
 export async function shareFile(file: File): Promise<ShareOutcome> {
   if (navigator.canShare?.({ files: [file] })) {
@@ -15,7 +20,7 @@ export async function shareFile(file: File): Promise<ShareOutcome> {
       return 'shared';
     } catch (cause) {
       if (cause instanceof DOMException && cause.name === 'AbortError') return 'cancelled';
-      throw cause;
+      // Refused rather than cancelled: fall through to the download.
     }
   }
 
@@ -31,7 +36,7 @@ export async function shareFile(file: File): Promise<ShareOutcome> {
 
 /**
  * Hand text to the share sheet — an order to a supplier on LINE — or, where
- * there is no share sheet, copy it. Call it straight from the tap.
+ * there is no share sheet, or it refuses, copy it. Call it straight from the tap.
  */
 export async function shareText(text: string): Promise<'shared' | 'copied' | 'cancelled'> {
   if (typeof navigator.share === 'function') {
@@ -40,7 +45,7 @@ export async function shareText(text: string): Promise<'shared' | 'copied' | 'ca
       return 'shared';
     } catch (cause) {
       if (cause instanceof DOMException && cause.name === 'AbortError') return 'cancelled';
-      throw cause;
+      // Refused rather than cancelled: fall through to the clipboard.
     }
   }
   await navigator.clipboard.writeText(text);
