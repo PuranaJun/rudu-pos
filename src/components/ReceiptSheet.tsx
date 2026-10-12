@@ -3,6 +3,8 @@ import { formatBangkok } from '../lib/datetime.ts';
 import { DISCOUNT_REASON_TH } from '../domain/promotions.ts';
 import { ORDER_TYPE_TH } from '../domain/queue.ts';
 import { ScreenFooter, type BackTo } from './Screen.tsx';
+import ShareFileButton from './ShareFileButton.tsx';
+import { receiptImageFile, SHOP_NAME_TH } from '../lib/receipt-image.ts';
 import type { DiscountReason } from '../db/types.ts';
 import type { Receipt } from '../db/sale-repo.ts';
 
@@ -24,6 +26,9 @@ interface Props {
  *
  * There is no VAT line and there is no tax arithmetic, because the shop is not
  * VAT registered. The price is simply the price.
+ *
+ * ส่งใบเสร็จ hands the same receipt, as a picture, to the share sheet — LINE,
+ * Photos, AirDrop — for the customer who wants to keep it.
  */
 export default function ReceiptSheet({ receipt, back, voidReason = null }: Props) {
   return (
@@ -42,7 +47,7 @@ export default function ReceiptSheet({ receipt, back, voidReason = null }: Props
           </p>
         ) : null}
         <div className="py-4 text-center">
-          <h1 className="text-3xl font-bold">ฤดูชา</h1>
+          <h1 className="text-3xl font-bold">{SHOP_NAME_TH}</h1>
           {receipt.brandingLineTh ? (
             <p className="text-ink-soft text-lg font-bold">{receipt.brandingLineTh}</p>
           ) : null}
@@ -111,7 +116,15 @@ export default function ReceiptSheet({ receipt, back, voidReason = null }: Props
         </dl>
       </div>
 
-      <ScreenFooter back={back} />
+      <ScreenFooter back={back}>
+        <div className="mb-3">
+          <ShareFileButton
+            label="ส่งใบเสร็จ"
+            build={() => receiptImageFile(receipt, voidReason)}
+            buildKey={`${receipt.saleId}:${voidReason ?? ''}`}
+          />
+        </div>
+      </ScreenFooter>
     </div>
   );
 }

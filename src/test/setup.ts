@@ -11,6 +11,11 @@ import { resetNav } from '../nav/nav-store.ts';
 // load. Three seconds is headroom, not a hiding place: a real hang still fails.
 configure({ asyncUtilTimeout: 3000 });
 
+// jsdom has no canvas and says so on every receipt. No 2D context is the
+// honest answer; tests that draw one bring their own stand-in.
+HTMLCanvasElement.prototype.getContext = (() =>
+  null) as typeof HTMLCanvasElement.prototype.getContext;
+
 // Navigation lives in a module-level store, which outlives a test's render.
 // Unmount first, so nothing on screen reacts to the reset, then start the next
 // test at home — never on the summary of a day the last test closed.
