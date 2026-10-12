@@ -1,6 +1,6 @@
 # Rudu Tea (ฤดูชา) POS — project rules
 
-Point-of-sale for a **single-stall Thai tea shop**. Runs on the owner's **iPhone/iPad, outdoors, on battery, with no reliable data**, while she is making drinks. One operator, occasionally two.
+Point-of-sale for a **single-stall Thai tea shop**. Runs on the owner's **iPhone/iPad, outdoors, on battery, with no reliable data**, while she is making drinks. One operator, occasionally two. Serves **takeaway and dine-in**.
 
 Currency THB · locale th-TH · timezone Asia/Bangkok (UTC+07:00) · UI strings Thai · code/comments English.
 
@@ -124,6 +124,15 @@ Tap drink → [temp / modifier sheet only if applicable] → Tap CASH or QR → 
 - Second identical drink = **quantity stepper**, not a repeat of the flow.
 - `PROMO_TWO_CUP` applies automatically when the cart qualifies.
 - On payment, deduct every BOM component **in one transaction**.
+- **Order type** (`TAKEAWAY` | `DINE_IN`) is a one-tap toggle on the cart that **remembers the last choice**. It is never a prompt and never a step in the flow. The standard sale stays at 2 taps.
+- **Order number** is assigned automatically at payment, in the same transaction. It is sequential per business date and starts at 1 each day. Show it **large** on the done screen and on the receipt. The operator never types or picks it.
+
+### 6.1a Queue
+
+- Paid orders not yet handed over form the **queue**: order number, drinks, order type, age.
+- The queue lives **outside the sell path**. Marking an order handed over is one tap, but it is **never required**. An unmarked order must not block a sale, nag, or change any number in the books.
+- On close day, orders still in the queue are marked handed over silently.
+- A customer-facing queue board is allowed **on the same device** (a "turn the screen around" view). A second-device board needs sync and waits for it.
 
 ### 6.2 Open day
 
@@ -137,6 +146,17 @@ Pick component → quantity (defaults from the catalog) → made-at time. `ready
 
 Per component: how much is left → **carry over** (within shelf life) or **discard** → count cash → record variance → day summary.
 Same-day components (`CUT` jelly, Pile B pear, basil seed) **default to discarded and must be one tap**.
+
+### 6.5 Purchase orders
+
+Recording what the shop buys from suppliers (tea leaves, pears, sugar, cups, lids, ice):
+
+- Pick a supplier → add lines (purchase item, qty, unit cost — **defaults to the last price paid**) → save as `ORDERED`. Share it as an image or text through the iOS share sheet (LINE) for the supplier.
+- **Receive** marks it `RECEIVED` with the actual quantities and costs (they often differ from what was ordered).
+- Receiving **may offer** to update a component's `cost_per_unit` or a packaging item's `unit_cost`. It never does so automatically, and the update is forward only (§2.1.8).
+- A purchase order **does not create component stock.** Components enter stock only through production batches (§6.3). Purchase items are what is bought, not what is consumed. This is not ingredient-level depletion (§11).
+- Report: spend per month, per supplier and per purchase item.
+- Entirely outside the sell path.
 
 ---
 
@@ -184,6 +204,7 @@ component_batch  id, component_id, made_at, qty_made, state, ready_at,
 sale             id, created_at, business_date, operator_id, total_gross,
                  total_discount, total_net, total_cost,
                  payment_method (CASH|PROMPTPAY), cash_received, cash_change,
+                 order_no, order_type (TAKEAWAY|DINE_IN), handed_over_at?,
                  is_voided, void_reason, device_id, synced_at
 sale_line        id, sale_id, variant_id, qty, unit_price, line_discount,
                  discount_reason, unit_cost
@@ -194,6 +215,13 @@ waste_event      id, component_batch_id, qty_discarded, reason
                  (EXPIRED|END_OF_DAY_PERISHABLE|QUALITY|SPILLAGE), recorded_at, note
 cash_session     id, opened_at, closed_at, operator_id, opening_float,
                  expected_cash, counted_cash, variance, note
+supplier         id, name, contact_note, is_active
+purchase_item    id, name_th, unit, default_supplier_id?, last_unit_cost,
+                 component_id?, packaging_item_id?, is_active
+purchase_order   id, supplier_id, ordered_at, received_at?,
+                 status (ORDERED|RECEIVED|CANCELLED), total_cost, note
+purchase_order_line  id, purchase_order_id, purchase_item_id, qty_ordered,
+                 qty_received?, unit_cost
 setting          key, value
 ```
 
@@ -242,13 +270,13 @@ The pair **แดง / ขาว** (red / white) encodes the tea base. Keep both
 
 Listed so they are not inferred from generic POS templates. **Do not build:**
 
-❌ Table management, order numbers, kitchen display (customer waits ~40 s at the counter)
+❌ Table management, table numbers, kitchen display. Dine-in customers are matched by **order number**, not by table.
 ❌ Customer accounts, CRM, marketing, SMS/email
 ❌ Barcode scanning · multi-store · franchise hierarchy
 ❌ **Ingredient-level depletion** (grams of tamarind paste, grams of agar) — **component-batch level is the right granularity**; ingredient-level is unmaintainable for two people
 ❌ Employee time clock, payroll, scheduling
 ❌ Tax engine, e-Tax invoice, accounting export
-❌ Online ordering, delivery, purchase orders
+❌ Online ordering, delivery
 ❌ Login per sale — **operator selection at open-day is enough**
 ❌ **Any feature that adds a tap to the standard sale**
 
@@ -263,6 +291,7 @@ Listed so they are not inferred from generic POS templates. **Do not build:**
 | **Caffeine-free cup**        | No drink currently suits children, pregnant or caffeine-sensitive customers. Per-product advisory flag must exist.                                                                                                              |
 | **Second operator**          | Money-handling may split from drink-making. Don't assume one user — but **don't require login per sale.**                                                                                                                       |
 | **Branding text**            | Sign reads `ชาต้มเอง วันต่อวัน`, becomes `ชา 3 แก้ว เปลี่ยนตามฤดู` at the third drink. Any branding the POS shows is **editable text**.                                                                                         |
+| **Dine-in packaging**        | Whether a dine-in drink is served in a glass (no cup, lid, straw or bag) or the same cup. If different, it becomes a dine-in packaging set per variant. **Data, not code**, and the cost snapshot follows the order type.                     |
 | **Legal, surface once**      | Selling bottles for customers to carry home is fine. **Wholesaling or shipping by post** reclassifies them as pre-packaged food requiring Thai FDA (อย.) registration. Flag if a delivery/wholesale channel is ever added.      |
 
 ---
