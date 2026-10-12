@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { formatTHB } from '../../lib/money.ts';
 import { formatQty } from '../../lib/quantity.ts';
 import { wastePct, type PeriodReport } from '../../domain/period-report.ts';
+import { discountLabel } from '../../domain/promotions.ts';
 
 /** Waste over this share of what left the shelf is the line to stay under (CLAUDE.md §7). */
 const WASTE_TARGET = 0.1;
@@ -119,6 +120,22 @@ export default function PeriodReportView({ report }: { report: PeriodReport }) {
               {wasted.length === 0 ? 'ไม่มีของเสียเลย' : 'ส่วนประกอบอื่นไม่มีของเสีย'}
             </li>
           ) : null}
+        </Section>
+      ) : null}
+
+      {totals.discountsByReason.length > 0 ? (
+        <Section title="ส่วนลด" note="รวมทุกบิลในช่วงนี้ แยกตามเหตุผลและโปรโมชั่น">
+          {[...totals.discountsByReason]
+            .sort((a, b) => b.amount - a.amount)
+            .map((discount) => (
+              <li
+                key={`${discount.reason}:${discount.label ?? ''}`}
+                className="flex justify-between gap-3 py-1 text-lg font-bold"
+              >
+                <span>{discountLabel(discount)}</span>
+                <span className="tabular-nums">{formatTHB(discount.amount)}</span>
+              </li>
+            ))}
         </Section>
       ) : null}
 

@@ -22,6 +22,7 @@ export function TextField({
   multiline = false,
   hint,
   inputMode,
+  type = 'text',
 }: {
   label: string;
   value: string;
@@ -30,6 +31,8 @@ export function TextField({
   hint?: string;
   /** `numeric` brings up the number pad for an ID typed with wet thumbs. */
   inputMode?: 'numeric' | undefined;
+  /** `date` and `time` bring up the phone's own pickers: `2026-10-13`, `14:00`. */
+  type?: 'text' | 'date' | 'time';
 }) {
   return (
     <label className="mt-3 block">
@@ -44,7 +47,7 @@ export function TextField({
         />
       ) : (
         <input
-          type="text"
+          type={type}
           inputMode={inputMode}
           aria-label={label}
           value={value}

@@ -13,6 +13,7 @@ import { formatQty, unitLabel } from '../lib/quantity.ts';
 import { bangkokDate, bangkokWeekday } from '../lib/datetime.ts';
 import { nowIso } from '../lib/id.ts';
 import { unitPrice } from '../domain/cost.ts';
+import { promotionSummary } from '../domain/promotions.ts';
 import {
   jellyToCut,
   missingComponents,
@@ -58,6 +59,8 @@ export default function OpenDayScreen() {
   const [operator, setOperator] = useState<string | null>(null);
   const [openingFloat, setOpeningFloat] = useState<number | null>(null);
   const [rainyDay, setRainyDay] = useState(false);
+  // Switched-on-for-the-day promotions: all off each morning, like the rain.
+  const [promotionsOn, setPromotionsOn] = useState<string[]>([]);
   const [opening, setOpening] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -87,13 +90,22 @@ export default function OpenDayScreen() {
     : undefined;
   const rainyPrice = rainyVariant ? unitPrice(catalog, rainyVariant.id) : 0;
 
+  const manualPromotions = catalog.promotions
+    .filter((promotion) => promotion.activation === 'MANUAL' && promotion.is_active)
+    .filter(
+      (promotion) =>
+        (promotion.starts_on === null || bangkokDate(now) >= promotion.starts_on) &&
+        (promotion.ends_on === null || bangkokDate(now) <= promotion.ends_on),
+    )
+    .sort((a, b) => a.sort_order - b.sort_order);
+
   const report = (what: string) => (cause: unknown) => setError(`${what}: ${String(cause)}`);
 
   function open() {
     if (opening || mustCut.length > 0) return;
     setOpening(true);
     // The live query on the open session takes the app to the sell screen.
-    openSession({ operatorId: chosenOperator, openingFloat: float, rainyDay }).catch(
+    openSession({ operatorId: chosenOperator, openingFloat: float, rainyDay, promotionsOn }).catch(
       (cause: unknown) => {
         setOpening(false);
         report('เปิดร้านไม่สำเร็จ')(cause);
@@ -203,6 +215,40 @@ export default function OpenDayScreen() {
             </button>
           </section>
         ) : null}
+
+        {manualPromotions.map((promotion) => {
+          const on = promotionsOn.includes(promotion.id);
+          return (
+            <section key={promotion.id} aria-label={promotion.name_th} className="pt-4">
+              <button
+                type="button"
+                aria-pressed={on}
+                onClick={() =>
+                  setPromotionsOn((current) =>
+                    on ? current.filter((id) => id !== promotion.id) : [...current, promotion.id],
+                  )
+                }
+                className={`${choiceClass(on, 'neutral', 'md')} flex w-full items-center justify-between gap-3 py-3 text-left`}
+              >
+                <span>
+                  <span className="block text-xl font-bold">{promotion.name_th}</span>
+                  <span className="block text-lg font-bold">
+                    {promotionSummary(catalog, promotion, { withWhen: false })}
+                  </span>
+                </span>
+                <span className="shrink-0 text-xl font-bold">
+                  {on ? (
+                    <>
+                      <span aria-hidden="true">✓ </span>ใช้อยู่
+                    </>
+                  ) : (
+                    'ไม่ใช้'
+                  )}
+                </span>
+              </button>
+            </section>
+          );
+        })}
 
         <section aria-label="ของที่มี" className="pt-4">
           <h2 className="text-2xl font-bold">ของที่มี</h2>

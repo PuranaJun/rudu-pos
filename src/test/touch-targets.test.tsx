@@ -226,7 +226,15 @@ describe('touch targets', () => {
     render(<SettingsScreen back={BACK} />);
     await screen.findByRole('region', { name: 'เครื่องดื่ม' });
 
-    for (const tab of ['เครื่องดื่ม', 'ส่วนประกอบ', 'บรรจุภัณฑ์', 'ท็อปปิ้ง', 'ร้าน', 'ข้อมูล']) {
+    for (const tab of [
+      'เครื่องดื่ม',
+      'ส่วนประกอบ',
+      'บรรจุภัณฑ์',
+      'ท็อปปิ้ง',
+      'โปรโมชั่น',
+      'ร้าน',
+      'ข้อมูล',
+    ]) {
       await user.click(screen.getByRole('button', { name: tab }));
       await waitFor(() => expect(screen.queryByText('กำลังโหลด…')).not.toBeInTheDocument());
       expect(problems(), tab).toEqual(NONE);

@@ -11,7 +11,7 @@
  * component is being thrown away (waste %, against the 10% target).
  */
 import type { Satang } from '../lib/money.ts';
-import { bangkokDate, bangkokTime } from '../lib/datetime.ts';
+import { bangkokDate, bangkokTime, weekdayIndex } from '../lib/datetime.ts';
 import type {
   CashSession,
   ComponentBatch,
@@ -78,10 +78,7 @@ export const WEEKDAY_TH = [
   'อาทิตย์',
 ] as const;
 
-/** 0 = Monday … 6 = Sunday, from the business date alone. */
-export function weekdayIndex(date: string): number {
-  return (new Date(`${date}T00:00:00Z`).getUTCDay() + 6) % 7;
-}
+export { weekdayIndex } from '../lib/datetime.ts';
 
 export interface PeriodInput {
   catalog: CostCatalog;

@@ -99,3 +99,8 @@ export function businessDay(date: string): string {
     month: 'short',
   });
 }
+
+/** 0 = Monday … 6 = Sunday, from a business date alone — the way a market week is planned. */
+export function weekdayIndex(date: string): number {
+  return (new Date(`${date}T00:00:00Z`).getUTCDay() + 6) % 7;
+}

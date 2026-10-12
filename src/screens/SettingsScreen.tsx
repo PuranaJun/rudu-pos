@@ -3,6 +3,7 @@ import MenuSettings from './settings/MenuSettings.tsx';
 import ComponentSettings from './settings/ComponentSettings.tsx';
 import PackagingSettings from './settings/PackagingSettings.tsx';
 import ModifierSettings from './settings/ModifierSettings.tsx';
+import PromotionSettings from './settings/PromotionSettings.tsx';
 import ShopSettings from './settings/ShopSettings.tsx';
 import DataSettings from './settings/DataSettings.tsx';
 import { ChoiceChip } from '../components/Button.tsx';
@@ -16,6 +17,7 @@ const TABS = [
   ['COMPONENTS', 'ส่วนประกอบ'],
   ['PACKAGING', 'บรรจุภัณฑ์'],
   ['MODIFIERS', 'ท็อปปิ้ง'],
+  ['PROMOS', 'โปรโมชั่น'],
   ['SHOP', 'ร้าน'],
   ['DATA', 'ข้อมูล'],
 ] as const;
@@ -29,7 +31,7 @@ type Tab = (typeof TABS)[number][0];
  * them lives in the code — it lives here. Every change applies from the next
  * sale on; what was already sold keeps the price and cost it was sold at.
  *
- * All six sections are on screen at once — a row that scrolls sideways hides
+ * All seven sections are on screen at once — a row that scrolls sideways hides
  * the last ones, and the last one is the backup. Each section draws its own
  * body and footer: a list's footer leaves settings, an editor's footer goes
  * back to its list and saves. Nothing typed is lost without being asked.
@@ -52,7 +54,10 @@ function Settings({ back }: { back: BackTo }) {
     <Screen
       title="ตั้งค่า"
       below={
-        <nav aria-label="หมวด" className="tablet:grid-cols-6 mt-2 grid grid-cols-2 gap-2">
+        <nav
+          aria-label="หมวด"
+          className="tablet:grid-cols-7 mt-2 grid grid-cols-2 gap-2 [&>*:last-child:nth-child(odd)]:col-span-2"
+        >
           {TABS.map(([id, label]) => (
             <ChoiceChip
               key={id}
@@ -80,6 +85,8 @@ function Settings({ back }: { back: BackTo }) {
         <PackagingSettings catalog={catalog} exit={back} />
       ) : tab === 'MODIFIERS' ? (
         <ModifierSettings catalog={catalog} exit={back} />
+      ) : tab === 'PROMOS' ? (
+        <PromotionSettings catalog={catalog} exit={back} />
       ) : tab === 'SHOP' ? (
         <ShopSettings catalog={catalog} settings={settings} exit={back} />
       ) : (

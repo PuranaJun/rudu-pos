@@ -12,7 +12,7 @@ import { useNav } from '../nav/nav-store.ts';
 import { formatTHB } from '../lib/money.ts';
 import { defaultVariantOf } from '../domain/cart.ts';
 import { unitPrice } from '../domain/cost.ts';
-import { DISCOUNT_REASON_TH } from '../domain/promotions.ts';
+import { discountLabel } from '../domain/promotions.ts';
 import { breakeven, EMPTY_DAY_TOTALS } from '../domain/reporting.ts';
 import { availableCups } from '../domain/stock.ts';
 import { prepReminders } from '../domain/production.ts';
@@ -426,8 +426,8 @@ export default function SellScreen({ session }: { session: CashSession }) {
             {priced.totalDiscount > 0 ? (
               <div className="mb-1 flex flex-wrap justify-end gap-x-3 text-lg font-bold">
                 {priced.byReason.map((discount) => (
-                  <span key={discount.reason}>
-                    {DISCOUNT_REASON_TH[discount.reason]} −{formatTHB(discount.amount)}
+                  <span key={`${discount.reason}:${discount.promotionId ?? ''}`}>
+                    {discountLabel(discount)} −{formatTHB(discount.amount)}
                   </span>
                 ))}
               </div>

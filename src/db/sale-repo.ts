@@ -112,6 +112,8 @@ export function priceCart(
   catalog: CostCatalog,
   settings: PromotionSettings,
   cart: readonly CartItem[],
+  /** The moment the price is for: a happy hour starts and ends on the clock. */
+  now: string = nowIso(),
 ): PricedCart {
   return applyPromotions(
     catalog,
@@ -123,6 +125,7 @@ export function priceCart(
       unitPrice: unitPrice(catalog, item.line.variant_id, item.modifierIds),
       manualReason: item.line.manual_discount_reason ?? null,
     })),
+    now,
   );
 }
 
@@ -200,6 +203,8 @@ export async function completeSale(
             sale_line_id: line.id,
             reason: applied.reason,
             amount: applied.amount,
+            promotion_id: applied.promotionId ?? null,
+            label: applied.label ?? null,
             synced_at: null,
           });
         }
@@ -232,7 +237,7 @@ export async function completeSale(
           net: pricedLine.net,
           modifiers: modifierNames,
           discounts: pricedLine.discounts.map((applied) => ({
-            label: applied.reason,
+            label: applied.label ?? applied.reason,
             amount: applied.amount,
           })),
         });
@@ -423,7 +428,7 @@ export async function loadReceipt(
         .map((mod) => catalog.modifiers.get(mod.modifier_id)?.name_th ?? mod.modifier_id),
       discounts: discounts
         .filter((discount) => discount.sale_line_id === line.id)
-        .map((discount) => ({ label: discount.reason, amount: discount.amount })),
+        .map((discount) => ({ label: discount.label ?? discount.reason, amount: discount.amount })),
     };
   });
 

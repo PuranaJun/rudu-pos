@@ -11,6 +11,7 @@ import type {
   PackagingMovement,
   PackagingSet,
   Product,
+  Promotion,
   PurchaseItem,
   PurchaseOrder,
   PurchaseOrderLine,
@@ -45,6 +46,7 @@ export class RuduPosDB extends Dexie {
   packaging_set!: Table<PackagingSet, string>;
   packaging_item!: Table<PackagingItem, string>;
   modifier!: Table<Modifier, string>;
+  promotion!: Table<Promotion, string>;
 
   // Stock
   component_batch!: Table<ComponentBatch, string>;
@@ -129,6 +131,11 @@ export class RuduPosDB extends Dexie {
       purchase_item: 'id, packaging_item_id, default_supplier_id',
       purchase_order: 'id, supplier_id, status, ordered_at, received_at',
       purchase_order_line: 'id, purchase_order_id, purchase_item_id',
+    });
+
+    // The owner's own promotions.
+    this.version(7).stores({
+      promotion: 'id, sort_order',
     });
   }
 }

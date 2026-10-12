@@ -222,3 +222,38 @@ describe('the PromptPay QR', () => {
     await waitFor(async () => expect((await loadSettings(db)).promptPayQrImage).toBeNull());
   });
 });
+
+describe('a promotion, through settings alone', () => {
+  it('is set up once and comes off at the till by itself', async () => {
+    const user = userEvent.setup();
+    render(<SettingsScreen back={BACK} />);
+    await user.click(await screen.findByRole('button', { name: 'โปรโมชั่น' }));
+    await user.click(await screen.findByRole('button', { name: '+ เพิ่มโปรโมชั่น' }));
+
+    await typeInto(user, 'ชื่อโปรโมชั่น', 'มะขามลด 5');
+    await typeInto(user, 'ลดแก้วละ', '5');
+    await user.click(
+      within(screen.getByRole('group', { name: 'ใช้กับ' })).getByRole('button', {
+        name: 'มะขามแดง',
+      }),
+    );
+    await user.click(screen.getByRole('button', { name: 'บันทึก' }));
+    await screen.findByText('บันทึกแล้ว');
+    await waitFor(async () => expect(await db.promotion.count()).toBe(1));
+    await user.click(screen.getByRole('button', { name: 'กลับไปรายการ' }));
+    expect(await screen.findByText(/ลด ฿5 · มะขามแดง · ทุกวัน/)).toBeInTheDocument();
+    cleanup();
+
+    // At the till: one tap on the drink, and the promotion is already on the total.
+    await db.setting.put({ key: 'promo_two_cup_enabled', value: false, synced_at: null });
+    render(<SellScreen session={SESSION} />);
+    await user.click(await screen.findByRole('button', { name: /มะขามแดง/ }));
+    const ok = screen.queryByRole('button', { name: 'ขายต่อ' });
+    if (ok) await user.click(ok);
+    expect(await screen.findByText('มะขามลด 5 −฿5')).toBeInTheDocument();
+
+    await db.promotion.clear();
+    await db.setting.put({ key: 'promo_two_cup_enabled', value: true, synced_at: null });
+    await db.cart_line.clear();
+  }, 15_000);
+});

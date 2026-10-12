@@ -92,9 +92,10 @@ Cutting a slab is an **explicit action that records grams cut**, so the uncut re
 | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `PROMO_TWO_CUP`   | 10 THB off per pair of qualifying **drinks** in one transaction: `floor(qty/2) × 10`. Bottles excluded. Free/0 THB loyalty lines do **not** qualify. **Applies automatically** — the operator will forget, and a forgotten discount is a complaint.                  |
 | `PROMO_RAINY_DAY` | Hot pear 59 → 54. **Manually toggled by the operator. Never date-automated.** `VAR_PEAR_HOT` only.                                                                                                                                                                   |
+| `PROMO_CUSTOM`    | The owner's own promotions, rows in settings: **฿ off / % off per cup, or buy X get Y** (cheapest cups free), on chosen drinks (none chosen = every drink, never a bottle). Either **AUTO** on a schedule (dates, weekdays, hours — Bangkok clock) or **MANUAL**: switched on at open day for that day only, reset every morning like the rainy day. **Applies automatically — never a tap on the sale.** Order: a given-away line is untouched; each cup gets the **single best** per-cup offer (rainy day included, never two); buy-X-get-Y next; `PROMO_TWO_CUP` on top unless the promotion says it does not combine. Free cups never count towards a pair. Each discount stores `promotion_id` and a **snapshot of the promotion's name**. |
 | `LOYALTY_STAMP`   | Physical paper punch card. Buy 10 get 1 free, one stamp per drink. **Do not build customer accounts, phone capture or a CRM.** The POS only rings the free drink at 0 THB: it **counts as a unit, deducts components, lands in COGS, and is excluded from revenue.** |
 
-**Every discounted or zero-price line must record a reason code:** `PROMO_TWO_CUP`, `PROMO_RAINY_DAY`, `LOYALTY_REDEEM`, `STAFF_DRINK`, `COMP_GOODWILL`. Without a reason, shrinkage and generosity are indistinguishable.
+**Every discounted or zero-price line must record a reason code:** `PROMO_TWO_CUP`, `PROMO_RAINY_DAY`, `PROMO_CUSTOM` (with its promotion), `LOYALTY_REDEEM`, `STAFF_DRINK`, `COMP_GOODWILL`. Without a reason, shrinkage and generosity are indistinguishable.
 
 **Payment** — one method per sale, no splits, no cards, no e-wallets.
 
@@ -222,6 +223,11 @@ sale             id, created_at, business_date, operator_id, total_gross,
 sale_line        id, sale_id, variant_id, qty, unit_price, line_discount,
                  discount_reason, unit_cost
 sale_line_mod    id, sale_line_id, modifier_id, price_delta, cost_delta
+sale_line_discount id, sale_line_id, reason, amount, promotion_id?, label?
+promotion        id, name_th, kind (AMOUNT_OFF|PERCENT_OFF|BUY_X_GET_Y), amount,
+                 percent, buy_qty, free_qty, variant_ids[], activation (AUTO|MANUAL),
+                 manual_on, starts_on?, ends_on?, weekdays[], hours_from?, hours_to?,
+                 stacks_with_two_cup, is_active, sort_order
 stock_movement   id, sale_line_id?, component_batch_id, qty_delta,
                  reason (SALE|PRODUCTION|WASTE|ADJUSTMENT|OVERRIDE|VOID_REVERSAL)
 packaging_movement id, packaging_item_id, qty_delta,

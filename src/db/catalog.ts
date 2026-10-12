@@ -10,16 +10,25 @@ import { buildCostCatalog, type CostCatalog } from '../domain/cost.ts';
  * edit in settings.
  */
 export async function loadCostCatalog(db: RuduPosDB = defaultDb): Promise<CostCatalog> {
-  const [products, variants, components, bom, packagingSets, packagingItems, modifiers] =
-    await Promise.all([
-      db.product.toArray(),
-      db.variant.toArray(),
-      db.component.toArray(),
-      db.bom.toArray(),
-      db.packaging_set.toArray(),
-      db.packaging_item.toArray(),
-      db.modifier.toArray(),
-    ]);
+  const [
+    products,
+    variants,
+    components,
+    bom,
+    packagingSets,
+    packagingItems,
+    modifiers,
+    promotions,
+  ] = await Promise.all([
+    db.product.toArray(),
+    db.variant.toArray(),
+    db.component.toArray(),
+    db.bom.toArray(),
+    db.packaging_set.toArray(),
+    db.packaging_item.toArray(),
+    db.modifier.toArray(),
+    db.promotion.toArray(),
+  ]);
 
   return buildCostCatalog({
     products,
@@ -29,5 +38,6 @@ export async function loadCostCatalog(db: RuduPosDB = defaultDb): Promise<CostCa
     packagingSets,
     packagingItems,
     modifiers,
+    promotions,
   });
 }

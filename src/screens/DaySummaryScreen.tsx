@@ -1,7 +1,7 @@
 import { formatTHB } from '../lib/money.ts';
 import { formatQty } from '../lib/quantity.ts';
 import { bangkokWeekday } from '../lib/datetime.ts';
-import { DISCOUNT_REASON_TH } from '../domain/promotions.ts';
+import { discountLabel } from '../domain/promotions.ts';
 import { useDaySummary } from '../db/hooks.ts';
 import { backupAsFile, markBackedUp } from '../db/backup.ts';
 import ShareFileButton from '../components/ShareFileButton.tsx';
@@ -101,8 +101,8 @@ export default function DaySummaryScreen({ sessionId, back, promptBackup = false
           ) : (
             totals.discountsByReason.map((discount) => (
               <Row
-                key={discount.reason}
-                label={DISCOUNT_REASON_TH[discount.reason]}
+                key={`${discount.reason}:${discount.label ?? ''}`}
+                label={discountLabel(discount)}
                 value={formatTHB(discount.amount)}
               />
             ))

@@ -46,7 +46,17 @@ export type PackagingMovementReason = 'SALE' | 'PURCHASE' | 'COUNT' | 'VOID_REVE
 export type PurchaseOrderStatus = 'ORDERED' | 'RECEIVED' | 'CANCELLED';
 
 export type DiscountReason =
-  'PROMO_TWO_CUP' | 'PROMO_RAINY_DAY' | 'LOYALTY_REDEEM' | 'STAFF_DRINK' | 'COMP_GOODWILL';
+  | 'PROMO_TWO_CUP'
+  | 'PROMO_RAINY_DAY'
+  /** One of the owner's own promotions, named by `promotion_id` and `label`. */
+  | 'PROMO_CUSTOM'
+  | 'LOYALTY_REDEEM'
+  | 'STAFF_DRINK'
+  | 'COMP_GOODWILL';
+
+export type PromotionKind = 'AMOUNT_OFF' | 'PERCENT_OFF' | 'BUY_X_GET_Y';
+/** AUTO runs on its schedule; MANUAL is switched on at open day, for that day only. */
+export type PromotionActivation = 'AUTO' | 'MANUAL';
 
 interface Synced {
   synced_at: string | null;
@@ -322,6 +332,48 @@ export interface SaleLineDiscount extends Synced {
   reason: DiscountReason;
   /** Total for the line, not per cup. */
   amount: Satang;
+  /** Set for PROMO_CUSTOM. Null — or absent, from an older build — otherwise. */
+  promotion_id?: string | null;
+  /**
+   * The promotion's name when the sale was made. A snapshot, like the price:
+   * renaming or deleting the promotion later never rewrites this bill.
+   */
+  label?: string | null;
+}
+
+/**
+ * One of the owner's promotions (CLAUDE.md §4): ฿ or % off a cup, or buy X get
+ * Y free, on chosen drinks, either on a schedule or switched on for the day.
+ * Applied automatically — never a tap on the sale.
+ */
+export interface Promotion extends Synced {
+  id: string;
+  name_th: string;
+  kind: PromotionKind;
+  /** AMOUNT_OFF: satang off each cup. */
+  amount: Satang;
+  /** PERCENT_OFF: 1–100. */
+  percent: number;
+  /** BUY_X_GET_Y: for every buy_qty + free_qty cups, free_qty are free. */
+  buy_qty: number;
+  free_qty: number;
+  /** Empty: every drink (never a bottle). */
+  variant_ids: string[];
+  activation: PromotionActivation;
+  /** MANUAL only: on for today. Cleared every open day. */
+  manual_on: boolean;
+  /** Business dates, both ends included. Null: open-ended. */
+  starts_on: string | null;
+  ends_on: string | null;
+  /** 0 = Monday … 6 = Sunday. Empty: every day. */
+  weekdays: number[];
+  /** Bangkok clock `HH:mm`, from included, to excluded. Both null: all day. */
+  hours_from: string | null;
+  hours_to: string | null;
+  /** False: cups on this promotion do not count towards a PROMO_TWO_CUP pair. */
+  stacks_with_two_cup: boolean;
+  is_active: boolean;
+  sort_order: number;
 }
 
 export interface SaleLineMod extends Synced {

@@ -38,6 +38,12 @@ export interface OpenDay {
   openingFloat: Satang;
   /** The operator's call, every morning. Never carried over, never inferred. */
   rainyDay: boolean;
+  /**
+   * The switched-on-for-the-day promotions the operator turned on this
+   * morning. Every other one is switched off — like the rainy day, yesterday's
+   * never carries into today.
+   */
+  promotionsOn?: readonly string[];
 }
 
 /**
@@ -49,7 +55,7 @@ export async function openSession(
   db: RuduPosDB = defaultDb,
   now: string = nowIso(),
 ): Promise<CashSession> {
-  return db.transaction('rw', [db.cash_session, db.setting], async () => {
+  return db.transaction('rw', [db.cash_session, db.setting, db.promotion], async () => {
     const existing = await loadOpenSession(db);
     if (existing) return existing;
 
@@ -70,6 +76,11 @@ export async function openSession(
     // Written every morning, so yesterday's rain does not quietly carry into
     // a dry day (CLAUDE.md §4: manually toggled, never date-automated).
     await db.setting.put({ key: 'promo_rainy_day_enabled', value: day.rainyDay, synced_at: null });
+    const on = new Set(day.promotionsOn ?? []);
+    for (const promotion of await db.promotion.toArray()) {
+      if (promotion.activation !== 'MANUAL') continue;
+      await db.promotion.update(promotion.id, { manual_on: on.has(promotion.id) });
+    }
 
     return session;
   });

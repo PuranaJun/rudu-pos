@@ -32,7 +32,8 @@ export interface DayTotals {
   revenue: Satang;
   cogs: Satang;
   grossProfit: Satang;
-  discountsByReason: { reason: DiscountReason; amount: Satang }[];
+  /** By reason — and each of the owner's promotions on its own, by the name it was sold under. */
+  discountsByReason: { reason: DiscountReason; amount: Satang; label?: string }[];
   totalDiscount: Satang;
   saleCount: number;
   voidedCount: number;
@@ -63,10 +64,18 @@ export function dayTotals(
   const revenue = live.reduce((total, sale) => total + sale.total_net, 0);
   const cogs = live.reduce((total, sale) => total + sale.total_cost, 0);
 
-  const byReason = new Map<DiscountReason, number>();
+  const byReason = new Map<string, { reason: DiscountReason; amount: Satang; label?: string }>();
   for (const discount of discounts) {
     if (!liveLineIds.has(discount.sale_line_id)) continue;
-    byReason.set(discount.reason, (byReason.get(discount.reason) ?? 0) + discount.amount);
+    const key = `${discount.reason}:${discount.promotion_id ?? ''}`;
+    const entry = byReason.get(key);
+    if (entry) entry.amount += discount.amount;
+    else
+      byReason.set(key, {
+        reason: discount.reason,
+        amount: discount.amount,
+        ...(discount.label ? { label: discount.label } : {}),
+      });
   }
 
   return {
@@ -74,7 +83,7 @@ export function dayTotals(
     revenue,
     cogs,
     grossProfit: revenue - cogs,
-    discountsByReason: [...byReason].map(([reason, amount]) => ({ reason, amount })),
+    discountsByReason: [...byReason.values()],
     totalDiscount: live.reduce((total, sale) => total + sale.total_discount, 0),
     saleCount: live.length,
     voidedCount: sales.length - live.length,

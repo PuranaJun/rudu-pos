@@ -18,6 +18,7 @@ import type {
   PackagingItem,
   PackagingSet,
   Product,
+  Promotion,
   Variant,
 } from '../db/types.ts';
 import { recipeFor, resolveModifiers } from './recipe.ts';
@@ -32,6 +33,8 @@ export interface CatalogRows {
   packagingSets: readonly PackagingSet[];
   packagingItems: readonly PackagingItem[];
   modifiers: readonly Modifier[];
+  /** Optional so a catalog built for costing alone need not list them. */
+  promotions?: readonly Promotion[];
 }
 
 /** The same rows, indexed for lookup. Build it once per screen, not per tap. */
@@ -43,6 +46,7 @@ export interface CostCatalog {
   packagingSets: ReadonlyMap<string, PackagingSet>;
   packagingItems: ReadonlyMap<string, PackagingItem>;
   modifiers: ReadonlyMap<string, Modifier>;
+  promotions: readonly Promotion[];
 }
 
 export function buildCostCatalog(rows: CatalogRows): CostCatalog {
@@ -61,6 +65,7 @@ export function buildCostCatalog(rows: CatalogRows): CostCatalog {
     packagingSets: byId(rows.packagingSets),
     packagingItems: byId(rows.packagingItems),
     modifiers: byId(rows.modifiers),
+    promotions: rows.promotions ?? [],
   };
 }
 
