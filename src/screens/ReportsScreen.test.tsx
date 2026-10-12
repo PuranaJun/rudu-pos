@@ -148,3 +148,24 @@ describe('the year against the VAT threshold', () => {
     expect(await screen.findByRole('status', { name: 'ยอดขายทั้งปี' })).toBeInTheDocument();
   });
 });
+
+describe('a week or a month', () => {
+  it('shows what sold in the last 7 days, and switches to this month', async () => {
+    await tradedDay(26, 3);
+    const user = userEvent.setup();
+    render(<ReportsScreen back={BACK} />);
+
+    const best = await screen.findByRole('region', { name: 'ขายดี' });
+    expect(within(best).getByText(/3 แก้ว · ฿120/)).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'วันไหนขายดี' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'ช่วงเวลาที่ขาย' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'เดือนที่แล้ว' }));
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /เดือนที่แล้ว/ })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      ),
+    );
+  });
+});

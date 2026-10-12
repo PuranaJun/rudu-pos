@@ -9,7 +9,7 @@ import { ensureSeeded } from './seed.ts';
 import { ensureDeviceId } from './device.ts';
 import { generateSampleWeek } from './sample-week.ts';
 import { auditDatabase } from './audit-repo.ts';
-import { loadClosedDays } from './report-repo.ts';
+import { loadClosedDays, loadPeriodReport } from './report-repo.ts';
 import { loadDaySummary } from './close-repo.ts';
 import { loadStockSnapshot } from './stock-repo.ts';
 import { batchRemaining } from '../domain/stock.ts';
@@ -188,5 +188,23 @@ describe('the audit catches what it is there to catch', () => {
     expect(auditBooks(books, [{ ...honest, revenue: honest.revenue + 4_000 }])).toEqual([
       expect.objectContaining({ check: 'REPORT_DISAGREES' }),
     ]);
+  });
+});
+
+describe('the week as one report', () => {
+  it('agrees with its days: takings, cups, bills, waste — and every cup in some hour', async () => {
+    const days = await loadClosedDays(db);
+    const dates = days.map((day) => day.businessDate).sort();
+    const report = await loadPeriodReport({ from: dates[0]!, to: dates.at(-1)! }, db);
+
+    expect(report.totals.revenue).toBe(days.reduce((total, day) => total + day.revenue, 0));
+    expect(report.totals.units).toBe(days.reduce((total, day) => total + day.units, 0));
+    expect(report.wasteCost).toBe(days.reduce((total, day) => total + day.wasteCost, 0));
+    expect(report.tradingDays).toBe(5);
+    expect(report.byWeekday.reduce((total, day) => total + day.days, 0)).toBe(5);
+    expect(report.byHour.reduce((total, hour) => total + hour.cups, 0)).toBe(report.totals.units);
+    expect(report.bestSellers.reduce((total, b) => total + b.units, 0)).toBe(report.totals.units);
+    expect(report.orderTypes.TAKEAWAY + report.orderTypes.DINE_IN).toBe(report.totals.saleCount);
+    for (const entry of report.attach) expect(entry.attached).toBeLessThanOrEqual(entry.eligible);
   });
 });

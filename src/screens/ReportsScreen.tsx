@@ -1,30 +1,53 @@
 import { useState } from 'react';
 import DaySummaryScreen from './DaySummaryScreen.tsx';
 import AnnualRevenueCard from '../components/AnnualRevenueCard.tsx';
+import PeriodReportView from './reports/PeriodReportView.tsx';
+import { ChoiceChip } from '../components/Button.tsx';
 import { Screen, ScreenBody, ScreenFooter, type BackTo } from '../components/Screen.tsx';
 import { formatTHB } from '../lib/money.ts';
-import { bangkokDate, bangkokWeekday } from '../lib/datetime.ts';
+import { bangkokDate, bangkokWeekday, businessDay } from '../lib/datetime.ts';
 import { nowIso } from '../lib/id.ts';
-import { useClosedDays } from '../db/hooks.ts';
+import { useClosedDays, usePeriodReport } from '../db/hooks.ts';
+import { PERIOD_PRESET_TH, presetRange, type PeriodPreset } from '../domain/period-report.ts';
+
+const PRESETS: readonly PeriodPreset[] = ['LAST_7', 'LAST_30', 'THIS_MONTH', 'LAST_MONTH'];
 
 /**
- * Reports, Tier 1 only (CLAUDE.md §7): the year against the VAT threshold,
- * and every closed day, each one opening its full summary.
+ * Reports (CLAUDE.md §7): a week's or a month's numbers — best sellers, the
+ * market days worth keeping, the busy hours, topping take-up, waste against
+ * its target — then the year against the VAT threshold, and every closed day,
+ * each one opening its full summary.
  *
- * Deliberately no charts. A list of days with their takings and waste
- * answers "how did last week go" faster than a plot would; the one visual
- * is the bar towards the threshold, where how close matters more than the
- * number. Days of the week, hours and attach rates are Tier 2, and wait.
+ * The bars are labelled lists, the number beside every one: read at arm's
+ * length in the sun, not hovered over.
  */
 export default function ReportsScreen({ back }: { back: BackTo }) {
   const days = useClosedDays();
   const [year] = useState(() => bangkokDate(nowIso()).slice(0, 4));
   const [open, setOpen] = useState<string | null>(null);
+  const [preset, setPreset] = useState<PeriodPreset>('LAST_7');
+  const [today] = useState(() => bangkokDate(nowIso()));
+  const range = presetRange(preset, today);
+  const report = usePeriodReport(range);
 
   return (
     <Screen title="รายงาน">
       <ScreenBody>
-        <div className="pt-3">
+        <section aria-label="ช่วงเวลา" className="pt-3">
+          <div role="group" aria-label="ดูช่วง" className="grid grid-cols-2 gap-2">
+            {PRESETS.map((id) => (
+              <ChoiceChip key={id} selected={preset === id} onClick={() => setPreset(id)}>
+                {PERIOD_PRESET_TH[id]}
+              </ChoiceChip>
+            ))}
+          </div>
+          <p className="text-ink-soft pt-2 text-base font-bold tabular-nums">
+            {businessDay(range.from)} – {businessDay(range.to)}
+          </p>
+          {report ? <PeriodReportView report={report} /> : null}
+        </section>
+
+        <div className="pt-6">
           <AnnualRevenueCard year={year} />
         </div>
 

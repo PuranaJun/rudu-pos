@@ -90,3 +90,12 @@ export function formatSpan(ms: number, round: 'down' | 'up' = 'down'): string {
   if (hours >= 1) return `${fit(hours)} ชม.`;
   return `${Math.max(1, fit(ms / 60_000))} นาที`;
 }
+
+/** A business date (`YYYY-MM-DD`) as `6 ต.ค.` — midday, so no zone can shift the day. */
+export function businessDay(date: string): string {
+  return new Date(`${date}T05:00:00.000Z`).toLocaleDateString('th-TH', {
+    timeZone: BANGKOK,
+    day: 'numeric',
+    month: 'short',
+  });
+}

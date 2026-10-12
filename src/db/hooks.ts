@@ -20,7 +20,13 @@ import { LAST_BACKUP_KEY } from './backup.ts';
 import { loadSettings, type PosSettings } from './settings-repo.ts';
 import { loadSalesForDate, type SaleSummary } from './sale-repo.ts';
 import type { ClosedDay, DayTotals, DaySummary } from '../domain/reporting.ts';
-import { loadAnnualRevenue, loadClosedDays, loadSessionTotals } from './report-repo.ts';
+import {
+  loadAnnualRevenue,
+  loadClosedDays,
+  loadPeriodReport,
+  loadSessionTotals,
+} from './report-repo.ts';
+import type { PeriodRange, PeriodReport } from '../domain/period-report.ts';
 import { loadDaySummary, loadExpectedCash } from './close-repo.ts';
 import { lastOperator, loadOpenSession } from './session-repo.ts';
 import type { CashSession } from './types.ts';
@@ -55,6 +61,11 @@ export function useSessionTotals(session: CashSession): DayTotals | undefined {
 /** A Bangkok calendar year's takings, live. */
 export function useAnnualRevenue(year: string): number | undefined {
   return useLiveQuery(() => loadAnnualRevenue(year, db), [year]);
+}
+
+/** A week's or a month's numbers, live. */
+export function usePeriodReport(range: PeriodRange): PeriodReport | undefined {
+  return useLiveQuery(() => loadPeriodReport(range, db), [range.from, range.to]);
 }
 
 /** Every closed day, newest first, for the reports list. */

@@ -1,5 +1,5 @@
 /**
- * Reads for the reports (CLAUDE.md §7, Tier 1 only).
+ * Reads for the reports (CLAUDE.md §7).
  *
  * Nothing here is stored: every figure is computed from the sales, the
  * ledger and the sessions each time it is asked for, so a report can never
@@ -17,6 +17,8 @@ import {
   type DayTotals,
 } from '../domain/reporting.ts';
 import { bangkokDate } from '../lib/datetime.ts';
+import { loadCostCatalog } from './catalog.ts';
+import { periodReport, type PeriodRange, type PeriodReport } from '../domain/period-report.ts';
 import type { Satang } from '../lib/money.ts';
 
 /**
@@ -59,4 +61,48 @@ export async function loadClosedDays(db: RuduPosDB = defaultDb): Promise<ClosedD
     db.waste_event.toArray(),
   ]);
   return closedDays(sessions, sales, lines, waste);
+}
+
+/** A week's or a month's numbers, by business date. */
+export async function loadPeriodReport(
+  range: PeriodRange,
+  db: RuduPosDB = defaultDb,
+): Promise<PeriodReport> {
+  const sales = await db.sale
+    .where('business_date')
+    .between(range.from, range.to, true, true)
+    .toArray();
+  const lines = await db.sale_line
+    .where('sale_id')
+    .anyOf(sales.map((sale) => sale.id))
+    .toArray();
+  const lineIds = lines.map((line) => line.id);
+  const [catalog, mods, discounts, movements, waste, sessions] = await Promise.all([
+    loadCostCatalog(db),
+    db.sale_line_mod.where('sale_line_id').anyOf(lineIds).toArray(),
+    db.sale_line_discount.where('sale_line_id').anyOf(lineIds).toArray(),
+    db.stock_movement.where('sale_line_id').anyOf(lineIds).toArray(),
+    db.waste_event.toArray(),
+    db.cash_session.toArray(),
+  ]);
+  const batchIds = new Set([
+    ...movements.map((movement) => movement.component_batch_id),
+    ...waste.map((event) => event.component_batch_id),
+  ]);
+  const batches = await db.component_batch
+    .where('id')
+    .anyOf([...batchIds])
+    .toArray();
+  return periodReport({
+    catalog,
+    range,
+    sales,
+    lines,
+    mods,
+    discounts,
+    movements,
+    waste,
+    batches,
+    sessions,
+  });
 }

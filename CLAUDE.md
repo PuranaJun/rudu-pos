@@ -187,6 +187,8 @@ Cups, lids, straws, spoons, bags, stickers and bottles are counted as stock. Ice
 - **Prep reminders**: "start red tea steeping by 21:00 to be ready tomorrow" (10 h and 12–14 h lead times).
 - Average basket size — tests whether the 2-cup discount works.
 
+**Built (reports screen, period = 7 days · 30 days · this month · last month):** totals, average per trading day and per bill, best sellers by variant, revenue per weekday **averaged over the days traded on it**, cups by Bangkok hour, paid-topping attach rate against 1 in 3, waste % per component (`wasted ÷ (used in sales + wasted)`) against 10%, dine-in/takeaway and cash/PromptPay splits. Labelled bar lists with the number beside each bar — no hover-only information, no colour-only meaning. Everything computed from records each time; a period report must agree with the sum of its closed days.
+
 > **The financial risk is product thrown away, not cost per cup.** Breakeven is 10 cups/day and gross margin is ~81%; a day cannot realistically lose money on margin. It loses money on a batch that did not sell. Waste reporting matters more than margin reporting.
 
 ---
