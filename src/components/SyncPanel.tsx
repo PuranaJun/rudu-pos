@@ -23,6 +23,8 @@ const SETUP_TH: Record<Exclude<SetupResult, 'ok'>, string> = {
   exists:
     'ร้านนี้เปิดซิงค์ไว้แล้วจากเครื่องอื่น — ถ้าเครื่องนี้มาแทนเครื่องเดิม ใส่รหัสร้านด้านล่างแล้วกด “ใช้แทนเครื่องร้านเดิม”',
   'no-database': 'ยังไม่ได้เชื่อมฐานข้อมูลใน Cloudflare — ทำตามขั้นตอนตั้งค่าครั้งแรกก่อน',
+  'no-setup-code': 'ยังไม่ได้ตั้งรหัสตั้งค่า (SYNC_SETUP_CODE) ใน Cloudflare',
+  'wrong-setup-code': 'รหัสตั้งค่าไม่ตรงกับที่ตั้งไว้ใน Cloudflare',
   offline: 'ต่ออินเทอร์เน็ตไม่ได้ ลองใหม่เมื่อมีสัญญาณ',
 };
 const JOIN_TH: Record<Exclude<JoinResult, 'ok'>, string> = {
@@ -43,6 +45,7 @@ export default function SyncPanel({ initialKey = '' }: { initialKey?: string }) 
   const state = useSyncState();
   const pending = usePendingCount();
   const [key, setKey] = useState(initialKey);
+  const [setupCode, setSetupCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ text: string; bad: boolean } | null>(null);
   const [confirm, setConfirm] = useState<'rotate' | 'stop' | null>(null);
@@ -228,12 +231,18 @@ export default function SyncPanel({ initialKey = '' }: { initialKey?: string }) 
       </p>
       {notice}
       <h3 className="mt-4 text-xl font-bold">เครื่องนี้คือเครื่องขายของร้าน</h3>
+      <TextField
+        label="รหัสตั้งค่า"
+        value={setupCode}
+        onChange={setSetupCode}
+        hint="รหัสที่ตั้งไว้ใน Cloudflare (SYNC_SETUP_CODE) — ใช้ครั้งเดียวตอนเปิดซิงค์"
+      />
       <Button
         variant="primary"
         disabled={busy}
         onClick={() =>
           void run(async () => {
-            const result = await startAsShop();
+            const result = await startAsShop(setupCode);
             return result === 'ok' ? null : SETUP_TH[result];
           })
         }

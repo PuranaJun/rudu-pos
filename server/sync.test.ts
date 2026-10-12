@@ -19,7 +19,7 @@ import { memoryD1 } from '../src/test/d1-sqlite.ts';
 let env: Env;
 beforeEach(async () => {
   resetSchemaCache();
-  env = { DB: await memoryD1() };
+  env = { DB: await memoryD1(), SYNC_SETUP_CODE: SETUP_CODE };
 });
 
 const call = (path: string, key: string | null, init: RequestInit = {}) =>
@@ -28,8 +28,17 @@ const call = (path: string, key: string | null, init: RequestInit = {}) =>
     headers: key ? { authorization: `Bearer ${key}` } : {},
   });
 
+const SETUP_CODE = 'garden-tea-2569';
+
+function setupCall(code: string | null = SETUP_CODE): Request {
+  return new Request('https://rudu-pos.pages.dev/api/sync/setup', {
+    method: 'POST',
+    headers: code === null ? {} : { 'x-setup-code': code },
+  });
+}
+
 async function keys(): Promise<{ key: string; viewKey: string }> {
-  return (await (await handleSetup(env)).json()) as { key: string; viewKey: string };
+  return (await (await handleSetup(env, setupCall())).json()) as { key: string; viewKey: string };
 }
 
 async function setup(): Promise<string> {
@@ -57,7 +66,7 @@ describe('the key', () => {
   it('is made once, and only once', async () => {
     const key = await setup();
     expect(key).toMatch(/^[A-HJ-NP-Z2-9]{20}$/);
-    expect((await handleSetup(env)).status).toBe(409);
+    expect((await handleSetup(env, setupCall())).status).toBe(409);
   });
 
   it('opens the door, and nothing else does', async () => {
@@ -80,7 +89,23 @@ describe('the key', () => {
   });
 
   it('says so plainly when the database is not linked yet', async () => {
-    expect((await handleSetup({})).status).toBe(503);
+    expect((await handleSetup({}, setupCall())).status).toBe(503);
+  });
+});
+
+describe('setting up', () => {
+  it('needs the setup password the owner put in Cloudflare — first come is not first served', async () => {
+    expect((await handleSetup(env, setupCall(null))).status).toBe(401);
+    expect((await handleSetup(env, setupCall('guess'))).status).toBe(401);
+    // Refused attempts made no keys: the owner can still set up.
+    expect((await handleSetup(env, setupCall())).status).toBe(200);
+  });
+
+  it('refuses to set up at all until the owner has set a password', async () => {
+    const open = { DB: env.DB! };
+    const response = await handleSetup(open, setupCall());
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ error: 'no-setup-code' });
   });
 });
 

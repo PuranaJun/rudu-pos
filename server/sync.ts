@@ -30,6 +30,12 @@ export interface D1StatementLike {
 }
 export interface Env {
   DB?: D1Like;
+  /**
+   * A password the owner sets privately in the Cloudflare dashboard. Without
+   * it, whoever reached /setup first after the database was linked would hold
+   * the shop's keys.
+   */
+  SYNC_SETUP_CODE?: string;
 }
 
 /** What one push may carry. The app sends less, in several requests. */
@@ -94,10 +100,20 @@ async function refuse(db: D1Like, request: Request, need: Role): Promise<Respons
   return null;
 }
 
-/** First time only: make the shop key and the view key. Refused once they exist. */
-export async function handleSetup(env: Env): Promise<Response> {
+/**
+ * First time only: make the shop key and the view key. Needs the setup
+ * password the owner put in Cloudflare; refused once the keys exist.
+ */
+export async function handleSetup(env: Env, request: Request): Promise<Response> {
   const db = await database(env);
   if (db instanceof Response) return db;
+  const expected = env.SYNC_SETUP_CODE?.trim() ?? '';
+  if (expected === '') return json({ error: 'no-setup-code' }, 503);
+  const given = (request.headers.get('x-setup-code') ?? '').trim();
+  // Compared as hashes, so the time taken says nothing about the password.
+  if ((await hashKey(given)) !== (await hashKey(expected))) {
+    return json({ error: 'setup-code' }, 401);
+  }
 
   const key = generateKey();
   const viewKey = generateKey();

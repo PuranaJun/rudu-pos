@@ -118,7 +118,10 @@ export async function pendingCount(db: RuduPosDB = defaultDb): Promise<number> {
 }
 
 function request(fetchImpl: Fetch, path: string, key: string | null, init: RequestInit = {}) {
-  const headers: Record<string, string> = { 'content-type': 'application/json' };
+  const headers: Record<string, string> = {
+    'content-type': 'application/json',
+    ...(init.headers as Record<string, string> | undefined),
+  };
   if (key) headers['authorization'] = `Bearer ${key}`;
   const signal =
     typeof AbortSignal !== 'undefined' && 'timeout' in AbortSignal
@@ -313,21 +316,33 @@ async function apply(
 
 // ------------------------------------------------------------ pairing
 
-export type SetupResult = 'ok' | 'exists' | 'no-database' | 'offline';
+export type SetupResult =
+  'ok' | 'exists' | 'no-database' | 'no-setup-code' | 'wrong-setup-code' | 'offline';
 
-/** Make this the shop phone, with a brand-new key. Everything on it goes up. */
+/**
+ * Make this the shop phone, with brand-new keys. Needs the setup password the
+ * owner put in Cloudflare. Everything on the phone goes up.
+ */
 export async function startAsShop(
+  setupCode: string,
   db: RuduPosDB = defaultDb,
   fetchImpl: Fetch = fetch,
 ): Promise<SetupResult> {
   let response: Response;
   try {
-    response = await request(fetchImpl, 'setup', null, { method: 'POST' });
+    response = await request(fetchImpl, 'setup', null, {
+      method: 'POST',
+      headers: { 'x-setup-code': setupCode.trim() },
+    });
   } catch {
     return 'offline';
   }
   if (response.status === 409) return 'exists';
-  if (response.status === 503) return 'no-database';
+  if (response.status === 401) return 'wrong-setup-code';
+  if (response.status === 503) {
+    const { error } = (await response.json().catch(() => ({}))) as { error?: string };
+    return error === 'no-setup-code' ? 'no-setup-code' : 'no-database';
+  }
   if (!response.ok) return 'offline';
   const { key, viewKey } = (await response.json()) as { key: string; viewKey: string };
   await remember(db, { [SYNC_KEY]: key, [SYNC_VIEW_KEY]: viewKey, [SYNC_MODE]: 'SHOP' });

@@ -29,6 +29,15 @@ export const LAST_BACKUP_KEY = 'last_backup_at';
  */
 const DEVICE_SETTINGS = [DEVICE_ID_KEY, STORAGE_NOTE_KEY];
 
+/**
+ * Sync settings — the shop key among them — never go into a backup file. A
+ * backup travels through LINE and iCloud; the shop key would let whoever
+ * holds the file write to the shop's cloud records. They belong to the phone.
+ */
+function isSyncSetting(key: string): boolean {
+  return key.startsWith('sync_');
+}
+
 export interface BackupFile {
   format: typeof BACKUP_FORMAT;
   /** The database schema version it was taken from. */
@@ -52,7 +61,13 @@ export async function exportBackup(
 ): Promise<BackupFile> {
   return db.transaction('r', db.tables, async () => {
     const tables: Record<string, unknown[]> = {};
-    for (const table of db.tables) tables[table.name] = await table.toArray();
+    for (const table of db.tables) {
+      const rows = await table.toArray();
+      tables[table.name] =
+        table.name === 'setting'
+          ? (rows as { key: string }[]).filter((row) => !isSyncSetting(row.key))
+          : rows;
+    }
     return { format: BACKUP_FORMAT, schema_version: db.verno, exported_at: now, tables };
   });
 }
@@ -158,13 +173,19 @@ export async function restoreBackup(backup: BackupFile, db: RuduPosDB = defaultD
   // the cloud's newer one.
   await asRemoteWrites(() =>
     db.transaction('rw', db.tables, async () => {
-      const keep = (await db.setting.bulkGet(DEVICE_SETTINGS)).filter(
-        (row): row is NonNullable<typeof row> => row !== undefined,
+      const keep = (await db.setting.toArray()).filter(
+        (row) => DEVICE_SETTINGS.includes(row.key) || isSyncSetting(row.key),
       );
 
       for (const table of db.tables) {
         await table.clear();
-        const rows = backup.tables[table.name];
+        const incoming = backup.tables[table.name];
+        // A file from before sync keys were left out may still carry one: it
+        // belongs to the phone that made the file, never to this one.
+        const rows =
+          table.name === 'setting'
+            ? incoming?.filter((row) => !isSyncSetting(String((row as { key?: unknown }).key)))
+            : incoming;
         if (!rows || rows.length === 0) continue;
         // A backup from before sync existed has never been sent anywhere.
         const synced = (SYNCED_TABLES as readonly string[]).includes(table.name);

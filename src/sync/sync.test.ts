@@ -24,6 +24,7 @@ import {
 } from '../../server/sync.ts';
 import { memoryD1 } from '../test/d1-sqlite.ts';
 import { formatKey } from './key.ts';
+import { exportBackup, parseBackup, restoreBackup } from '../db/backup.ts';
 import {
   fetchChanges,
   joinWithKey,
@@ -48,7 +49,7 @@ function cloud(): typeof fetch {
     const request = new Request(url, rest);
     switch (url.pathname.replace('/api/sync/', '')) {
       case 'setup':
-        return handleSetup(env);
+        return handleSetup(env, request);
       case 'check':
         return handleCheck(env, request);
       case 'push':
@@ -76,7 +77,7 @@ async function phone(): Promise<RuduPosDB> {
 
 beforeEach(async () => {
   resetSchemaCache();
-  env = { DB: await memoryD1() };
+  env = { DB: await memoryD1(), SYNC_SETUP_CODE: 'garden-tea-2569' };
   shop = await phone();
   viewer = await phone();
 });
@@ -109,7 +110,7 @@ async function ring(db: RuduPosDB): Promise<string> {
 }
 
 async function shopKey(): Promise<string> {
-  expect(await startAsShop(shop, net())).toBe('ok');
+  expect(await startAsShop('garden-tea-2569', shop, net())).toBe('ok');
   await sendChanges(shop, net());
   return (await loadSyncState(shop)).key!;
 }
@@ -153,7 +154,14 @@ describe('the shop phone', () => {
 
   it('cannot be set up twice', async () => {
     await shopKey();
-    expect(await startAsShop(viewer, net())).toBe('exists');
+    expect(await startAsShop('garden-tea-2569', viewer, net())).toBe('exists');
+  });
+
+  it('cannot be set up without the setup password', async () => {
+    expect(await startAsShop('wrong', shop, net())).toBe('wrong-setup-code');
+    expect((await loadSyncState(shop)).mode).toBeNull();
+    env = { DB: env.DB! };
+    expect(await startAsShop('garden-tea-2569', shop, net())).toBe('no-setup-code');
   });
 
   it('says so, and keeps everything marked, when there is no signal', async () => {
@@ -184,6 +192,16 @@ describe('a view-only device', () => {
     await sendChanges(shop, net());
     await fetchChanges(viewer, net());
     expect((await viewer.sale.get(saleId))?.is_voided).toBe(true);
+  });
+
+  it('a backup file never carries the shop key', async () => {
+    const key = await shopKey();
+    const file = JSON.stringify(await exportBackup(shop));
+    expect(file).not.toContain(key);
+    expect(file).not.toContain(await viewKey());
+    // And restoring one keeps this phone syncing as it was.
+    await restoreBackup(parseBackup(file, shop), shop);
+    expect((await loadSyncState(shop)).key).toBe(key);
   });
 
   it('never gets the shop phone’s own settings, or its cart', async () => {
