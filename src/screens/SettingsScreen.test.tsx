@@ -8,7 +8,7 @@ import userEvent from '@testing-library/user-event';
 import SettingsScreen from './SettingsScreen.tsx';
 import SellScreen from './SellScreen.tsx';
 import { db } from '../db/database.ts';
-import { ensureSeeded } from '../db/seed.ts';
+import { seedLegacyCatalog } from '../db/legacy-catalog.ts';
 import { ensureDeviceId } from '../db/device.ts';
 import { recordProduction } from '../db/stock-repo.ts';
 import { loadSettings } from '../db/settings-repo.ts';
@@ -29,7 +29,7 @@ const SESSION: CashSession = {
 };
 
 beforeAll(async () => {
-  await ensureSeeded(db);
+  await seedLegacyCatalog(db);
   await ensureDeviceId(db);
 });
 

@@ -15,10 +15,11 @@ import type { Satang } from '../lib/money.ts';
 
 export type Unit = 'ML' | 'G' | 'PC';
 /**
- * A cup or a bottle. Not cosmetic: bottles are excluded from PROMO_TWO_CUP
- * (CLAUDE.md §4), and nothing else on the row distinguishes them.
+ * A cup, a bottle or a dessert (the jelly cup). Not cosmetic: only a DRINK
+ * counts towards PROMO_TWO_CUP or a promotion (CLAUDE.md §4), and nothing else
+ * on the row distinguishes them.
  */
-export type ProductKind = 'DRINK' | 'BOTTLE';
+export type ProductKind = 'DRINK' | 'BOTTLE' | 'DESSERT';
 export type Temp = 'ICED' | 'HOT';
 export type Lifecycle = 'SIMPLE' | 'STEEP' | 'SOAK_BLANCH' | 'SLAB_CUT';
 export type ModifierKind = 'PAID' | 'PREP';
@@ -29,7 +30,7 @@ export type ModifierKind = 'PAID' | 'PREP';
  * `PREP_NO_SOLIDS` has to find the solids. Neither can be derived from an id
  * without compiling recipe knowledge into the code (CLAUDE.md §2.1.7).
  */
-export type ComponentRole = 'TEA_BASE' | 'CONCENTRATE' | 'SOLID' | 'GARNISH';
+export type ComponentRole = 'TEA_BASE' | 'CONCENTRATE' | 'SOLID' | 'GARNISH' | 'SWEETENER';
 export type PaymentMethod = 'CASH' | 'PROMPTPAY';
 /** A label on the sale, nothing more: dine-in is served in the same cup. */
 export type OrderType = 'TAKEAWAY' | 'DINE_IN';
@@ -111,8 +112,12 @@ export interface Component extends Synced {
   /** Only set for SLAB_CUT components: the clock after the slab is cut. */
   cut_shelf_life_hours: number | null;
   lead_time_hours: number;
-  /** THB per `unit`. A float, deliberately — never per cup (CLAUDE.md §3). */
-  cost_per_unit: number;
+  /**
+   * THB per `unit`. A float, deliberately — never per cup (CLAUDE.md §3).
+   * Null while nobody knows it yet: costed as nothing, and shown in settings
+   * as not set rather than as a price of ฿0.
+   */
+  cost_per_unit: number | null;
   lifecycle: Lifecycle;
   role: ComponentRole;
   recipe_note_th: string | null;
@@ -135,6 +140,12 @@ export interface Component extends Synced {
    * without a code change (CLAUDE.md §12).
    */
   prep_start_by: string | null;
+  /**
+   * False once the component is off the menu. It stays in the catalog, so the
+   * batches and waste already recorded against it still read back; it is only
+   * no longer offered for production.
+   */
+  is_active: boolean;
   sort_order: number;
 }
 
@@ -264,6 +275,15 @@ export interface Modifier extends Synced {
    * when the price of ice changes in settings.
    */
   removes_packaging_item_id: string | null;
+  /**
+   * Adds `adjust_qty_per_cup` (negative to take away) to every BOM component
+   * with this role, after any override, never below zero. Yakult takes 30 ml
+   * of syrup out of the cup it goes into; less longan concentrate puts 10 ml
+   * more white tea in. Separate from the override, because a modifier can add
+   * a component of its own and still change another one.
+   */
+  adjusts_component_role: ComponentRole | null;
+  adjust_qty_per_cup: number | null;
   advisory_th: string | null;
   sort_order: number;
 }

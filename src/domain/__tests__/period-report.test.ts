@@ -16,7 +16,7 @@ import {
   PACKAGING_SETS,
   PRODUCTS,
   VARIANTS,
-} from '../../data/seed.ts';
+} from '../../data/legacy-seed-v9.ts';
 import type {
   CashSession,
   ComponentBatch,

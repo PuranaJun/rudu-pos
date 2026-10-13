@@ -36,6 +36,7 @@ const ROLES = [
   ['CONCENTRATE', 'หัวเชื้อ'],
   ['SOLID', 'เนื้อ/ท็อปปิ้ง'],
   ['GARNISH', 'โรยหน้า'],
+  ['SWEETENER', 'ความหวาน (น้ำเชื่อม)'],
 ] as const;
 
 type View = { kind: 'LIST' } | { kind: 'NEW' } | { kind: 'EDIT'; id: string };
@@ -87,7 +88,12 @@ export default function ComponentSettings({
             <ListRow
               key={component.id}
               title={component.name_th}
-              detail={`฿${component.cost_per_unit}/${unitLabel(component.unit)}`}
+              detail={
+                component.cost_per_unit === null
+                  ? 'ยังไม่ตั้งต้นทุน'
+                  : `฿${component.cost_per_unit}/${unitLabel(component.unit)}`
+              }
+              muted={!component.is_active}
               onOpen={() => setView({ kind: 'EDIT', id: component.id })}
             />
           ))}
@@ -167,6 +173,7 @@ function ComponentEditor({
   const [source, setSource] = useState(component.source_component_id ?? 'NONE');
   const [sourceQty, setSourceQty] = useState(numberText(component.source_qty_per_unit));
   const [prepStartBy, setPrepStartBy] = useState(component.prep_start_by ?? '');
+  const [active, setActive] = useState(component.is_active);
   const [problems, setProblems] = useState<string[]>([]);
   const form = useDirty({
     name,
@@ -184,6 +191,7 @@ function ComponentEditor({
     source,
     sourceQty,
     prepStartBy,
+    active,
   });
 
   const others = [...catalog.components.values()].filter((other) => other.id !== component.id);
@@ -192,14 +200,9 @@ function ComponentEditor({
   function save(): Promise<boolean> {
     // Blank means "not set" for the optional numbers; anything else must parse.
     const optional = (text: string) => (text.trim() === '' ? null : parseNumber(text));
-    const required = parseNumber(cost);
     const lead = parseNumber(leadTime);
-    const fields = [batchQty, yieldCups, shelfLife, cutShelfLife, sourceQty];
-    if (
-      required === null ||
-      lead === null ||
-      fields.some((text) => text.trim() !== '' && parseNumber(text) === null)
-    ) {
+    const fields = [cost, batchQty, yieldCups, shelfLife, cutShelfLife, sourceQty];
+    if (lead === null || fields.some((text) => text.trim() !== '' && parseNumber(text) === null)) {
       setProblems(['ช่องตัวเลขต้องเป็นตัวเลข']);
       return Promise.resolve(false);
     }
@@ -213,7 +216,7 @@ function ComponentEditor({
       shelf_life_hours: optional(shelfLife),
       cut_shelf_life_hours: optional(cutShelfLife),
       lead_time_hours: lead,
-      cost_per_unit: required,
+      cost_per_unit: optional(cost),
       lifecycle,
       role,
       recipe_note_th: note.trim() || null,
@@ -221,6 +224,7 @@ function ComponentEditor({
       source_component_id: source === 'NONE' ? null : source,
       source_qty_per_unit: source === 'NONE' ? null : optional(sourceQty),
       prep_start_by: prepStartBy.trim() || null,
+      is_active: active,
     }).then(
       () => {
         setProblems([]);
@@ -250,7 +254,7 @@ function ComponentEditor({
         value={cost}
         onChange={setCost}
         suffix={`บาท/${unitLabel(unit)}`}
-        hint="ต่อหน่วย ไม่ใช่ต่อแก้ว — แก้สูตรแล้วต้นทุนยังถูก"
+        hint="ต่อหน่วย ไม่ใช่ต่อแก้ว — แก้สูตรแล้วต้นทุนยังถูก · เว้นว่างถ้ายังไม่รู้"
       />
       <NumberField
         label="ทำครั้งละ"
@@ -278,6 +282,7 @@ function ComponentEditor({
       <Choice label="หน้าที่ในแก้ว" value={role} options={ROLES} onChange={setRole} />
       <TextField label="สูตร / วิธีทำ" value={note} onChange={setNote} multiline />
       <Toggle label="นับสต็อก" value={tracked} onChange={setTracked} />
+      <Toggle label="ยังใช้อยู่" value={active} onChange={setActive} />
       <TextField
         label="เตือนให้เริ่มทำก่อน"
         value={prepStartBy}

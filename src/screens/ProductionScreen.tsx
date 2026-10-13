@@ -61,7 +61,7 @@ export default function ProductionScreen({ back }: { back: BackTo }) {
   }
 
   const components = [...catalog.components.values()]
-    .filter((component) => component.is_batch_tracked)
+    .filter((component) => component.is_batch_tracked && component.is_active)
     .sort((a, b) => a.sort_order - b.sort_order);
   const batches = batchList(catalog, stock, now);
   const reminders = prepReminders(catalog, stock, now);

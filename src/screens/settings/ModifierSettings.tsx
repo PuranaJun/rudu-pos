@@ -30,7 +30,10 @@ const ROLES = [
   ['CONCENTRATE', 'หัวเชื้อ'],
   ['SOLID', 'เนื้อ'],
   ['GARNISH', 'โรยหน้า'],
+  ['SWEETENER', 'ความหวาน (น้ำเชื่อม)'],
 ] as const;
+
+const ADJUST_ROLES = [['NONE', 'ไม่มี'] as const, ...ROLES.slice(1)];
 
 type View = { kind: 'LIST' } | { kind: 'EDIT'; id: string };
 
@@ -125,6 +128,10 @@ function ModifierEditor({
     modifier.overrides_component_role ?? 'NONE',
   );
   const [removes, setRemoves] = useState(modifier.removes_packaging_item_id ?? 'NONE');
+  const [adjustRole, setAdjustRole] = useState<ComponentRole | 'NONE'>(
+    modifier.adjusts_component_role ?? 'NONE',
+  );
+  const [adjustQty, setAdjustQty] = useState(numberText(modifier.adjust_qty_per_cup));
   const [advisory, setAdvisory] = useState(modifier.advisory_th ?? '');
   const [sortOrder, setSortOrder] = useState(String(modifier.sort_order));
   const [problems, setProblems] = useState<string[]>([]);
@@ -138,6 +145,8 @@ function ModifierEditor({
     qty,
     role,
     removes,
+    adjustRole,
+    adjustQty,
     advisory,
     sortOrder,
   });
@@ -151,11 +160,13 @@ function ModifierEditor({
     const costDelta = parseBaht(cost);
     const sort = parseNumber(sortOrder);
     const perCup = qty.trim() === '' ? null : parseNumber(qty);
+    const adjust = adjustQty.trim() === '' ? null : parseNumber(adjustQty);
     if (
       priceDelta === null ||
       costDelta === null ||
       sort === null ||
-      (qty.trim() !== '' && perCup === null)
+      (qty.trim() !== '' && perCup === null) ||
+      (adjustQty.trim() !== '' && adjust === null)
     ) {
       setProblems(['ช่องตัวเลขต้องเป็นตัวเลข']);
       return Promise.resolve(false);
@@ -173,6 +184,8 @@ function ModifierEditor({
       qty_per_cup: needsQty ? perCup : null,
       overrides_component_role: role === 'NONE' ? null : role,
       removes_packaging_item_id: removes === 'NONE' ? null : removes,
+      adjusts_component_role: adjustRole === 'NONE' ? null : adjustRole,
+      adjust_qty_per_cup: adjustRole === 'NONE' ? null : adjust,
       advisory_th: advisory.trim() || null,
       sort_order: sort,
     }).then(
@@ -239,6 +252,20 @@ function ModifierEditor({
           value={qty}
           onChange={setQty}
           suffix={component ? unitLabel(component.unit) : ''}
+        />
+      ) : null}
+      <Choice
+        label="เพิ่มหรือลดปริมาณของ"
+        value={adjustRole}
+        options={ADJUST_ROLES}
+        onChange={setAdjustRole}
+      />
+      {adjustRole !== 'NONE' ? (
+        <NumberField
+          label="เพิ่มต่อแก้ว"
+          value={adjustQty}
+          onChange={setAdjustQty}
+          hint="ติดลบคือลด เช่น ยาคูลท์ลดน้ำเชื่อม -30 (ไม่ต่ำกว่า 0)"
         />
       ) : null}
       <NumberField

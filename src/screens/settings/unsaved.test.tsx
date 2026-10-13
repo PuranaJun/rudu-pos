@@ -8,14 +8,14 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import SettingsScreen from '../SettingsScreen.tsx';
 import { db } from '../../db/database.ts';
-import { ensureSeeded } from '../../db/seed.ts';
+import { seedLegacyCatalog } from '../../db/legacy-catalog.ts';
 import { ensureDeviceId } from '../../db/device.ts';
 import { BACK } from '../../test/helpers.ts';
 
 type User = ReturnType<typeof userEvent.setup>;
 
 beforeAll(async () => {
-  await ensureSeeded(db);
+  await seedLegacyCatalog(db);
   await ensureDeviceId(db);
 });
 

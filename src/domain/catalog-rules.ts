@@ -31,7 +31,9 @@ export function checkVariant(variant: Variant): string[] {
 export function checkComponent(component: Component): string[] {
   const problems: string[] = [];
   if (component.name_th.trim() === '') problems.push('ต้องมีชื่อ');
-  if (!(component.cost_per_unit >= 0)) problems.push('ต้นทุนต้องไม่ติดลบ');
+  if (component.cost_per_unit !== null && !(component.cost_per_unit >= 0)) {
+    problems.push('ต้นทุนต้องไม่ติดลบ');
+  }
   if (!(component.lead_time_hours >= 0)) problems.push('เวลาเตรียมต้องไม่ติดลบ');
   for (const value of [
     component.default_batch_qty,
@@ -85,6 +87,9 @@ export function checkModifier(modifier: Modifier): string[] {
     !(modifier.qty_per_cup !== null && modifier.qty_per_cup > 0)
   ) {
     problems.push('ต้องระบุปริมาณต่อแก้ว');
+  }
+  if ((modifier.adjusts_component_role === null) !== (modifier.adjust_qty_per_cup === null)) {
+    problems.push('ถ้าเพิ่มหรือลดปริมาณ ต้องระบุทั้งของและปริมาณ');
   }
   return problems;
 }

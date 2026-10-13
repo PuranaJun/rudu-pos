@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { resetAndReseed } from '../db/seed.ts';
 import { stockSampleDay } from '../db/sample-day.ts';
 import { generateSampleWeek } from '../db/sample-week.ts';
+import { resetToLegacyCatalog } from '../db/legacy-catalog.ts';
 import { auditDatabase } from '../db/audit-repo.ts';
 import type { Finding } from '../domain/audit.ts';
 import { buttonClass } from './button.ts';
@@ -60,14 +61,15 @@ export default function DevMenu({ onClose }: { onClose: () => void }) {
               'ล้างฐานข้อมูล แล้วสร้างข้อมูลตัวอย่าง 1 สัปดาห์?',
               'กำลังสร้าง 1 สัปดาห์…',
               async () => {
-                await resetAndReseed();
+                // Written against the old three-drink menu (src/db/legacy-catalog.ts).
+                await resetToLegacyCatalog();
                 const week = await generateSampleWeek();
                 return `สร้างแล้ว ${week.days} วัน ${week.sales} บิล`;
               },
             )
           }
         >
-          ล้าง + สร้างข้อมูลตัวอย่าง 1 สัปดาห์
+          ล้าง + สร้างข้อมูลตัวอย่าง 1 สัปดาห์ (เมนูเก่า)
         </button>
 
         <button

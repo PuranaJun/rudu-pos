@@ -85,9 +85,12 @@ export default function OpenDayScreen() {
   const missing = missingComponents(catalog, stock);
   const reminders = prepReminders(catalog, stock, now);
 
+  // Only offered while that drink is on the menu: hot pear came off it in the
+  // recipe update of Oct 2026, and the setting may still name it.
   const rainyVariant = settings.rainyDayVariantId
     ? catalog.variants.get(settings.rainyDayVariantId)
     : undefined;
+  const rainyOffered = rainyVariant?.is_active === true;
   const rainyPrice = rainyVariant ? unitPrice(catalog, rainyVariant.id) : 0;
 
   const manualPromotions = catalog.promotions
@@ -187,7 +190,7 @@ export default function OpenDayScreen() {
           <FloatEditor value={float} onChange={setOpeningFloat} />
         </section>
 
-        {rainyVariant ? (
+        {rainyVariant && rainyOffered ? (
           <section aria-label="โปรวันฝนตก" className="pt-4">
             {/* A switch, said in words: on shows ✓ and "ใช้อยู่", off says "ไม่ใช้". */}
             <button

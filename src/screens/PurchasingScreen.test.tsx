@@ -10,7 +10,7 @@ import PurchasingScreen from './PurchasingScreen.tsx';
 import SellScreen from './SellScreen.tsx';
 import ScreenHost from '../nav/ScreenHost.tsx';
 import { db } from '../db/database.ts';
-import { ensureSeeded } from '../db/seed.ts';
+import { seedLegacyCatalog } from '../db/legacy-catalog.ts';
 import { ensureDeviceId } from '../db/device.ts';
 import { countPackaging } from '../db/purchase-repo.ts';
 import { packagingRemaining } from '../domain/packaging.ts';
@@ -21,7 +21,7 @@ import type { CashSession } from '../db/types.ts';
 const CUP = 'PKGI_CUP_PLASTIC_16OZ';
 
 beforeAll(async () => {
-  await ensureSeeded(db);
+  await seedLegacyCatalog(db);
   await ensureDeviceId(db);
 });
 

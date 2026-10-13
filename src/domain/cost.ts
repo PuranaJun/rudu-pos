@@ -166,9 +166,26 @@ export function grossMarginPct(price: Satang, cost: Satang): number {
 
 // ------------------------------------------------------------------ private
 
-/** CLAUDE.md §3: round every line to the nearest satang, then sum. */
-function costOf(qty: number, costPerUnit: number): Satang {
-  return Math.round(qty * costPerUnit * 100);
+/**
+ * CLAUDE.md §3: round every line to the nearest satang, then sum. A cost
+ * nobody has set yet counts as nothing — settings says which ones those are.
+ */
+function costOf(qty: number, costPerUnit: number | null): Satang {
+  return Math.round(qty * (costPerUnit ?? 0) * 100);
+}
+
+/**
+ * The components in one cup that have no cost yet, so a cost or a margin
+ * shown for it can say it is incomplete rather than look finished.
+ */
+export function uncostedComponents(
+  catalog: CostCatalog,
+  variantId: string,
+  modifierIds: readonly string[] = [],
+): Component[] {
+  return recipeFor(catalog, variantId, modifierIds)
+    .filter((line) => line.qty > 0 && line.component.cost_per_unit === null)
+    .map((line) => line.component);
 }
 
 function byId<T extends { id: string }>(rows: readonly T[]): ReadonlyMap<string, T> {

@@ -11,7 +11,7 @@ import userEvent from '@testing-library/user-event';
 import SellScreen from './SellScreen.tsx';
 import ScreenHost from '../nav/ScreenHost.tsx';
 import { db } from '../db/database.ts';
-import { ensureSeeded } from '../db/seed.ts';
+import { seedLegacyCatalog } from '../db/legacy-catalog.ts';
 import { ensureDeviceId } from '../db/device.ts';
 import { clearCart, loadCart } from '../db/cart-repo.ts';
 import { productionMovement } from '../domain/stock.ts';
@@ -49,7 +49,7 @@ function batch(componentId: string, qty: number, state: ComponentBatch['state'] 
 }
 
 beforeAll(async () => {
-  await ensureSeeded(db);
+  await seedLegacyCatalog(db);
   await ensureDeviceId(db);
 
   const batches = [

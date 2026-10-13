@@ -7,7 +7,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import SettingsScreen from '../SettingsScreen.tsx';
 import { db } from '../../db/database.ts';
-import { ensureSeeded } from '../../db/seed.ts';
+import { seedLegacyCatalog } from '../../db/legacy-catalog.ts';
 import { ensureDeviceId } from '../../db/device.ts';
 import { LAST_BACKUP_KEY, exportBackup } from '../../db/backup.ts';
 import type { Sale } from '../../db/types.ts';
@@ -17,7 +17,7 @@ let shared: File[] = [];
 let shareOutcome: 'ok' | 'cancel' = 'ok';
 
 beforeAll(async () => {
-  await ensureSeeded(db);
+  await seedLegacyCatalog(db);
   await ensureDeviceId(db);
 });
 

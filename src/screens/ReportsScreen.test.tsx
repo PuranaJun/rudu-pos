@@ -7,7 +7,7 @@ import userEvent from '@testing-library/user-event';
 import ReportsScreen from './ReportsScreen.tsx';
 import OpenDayScreen from './OpenDayScreen.tsx';
 import { db } from '../db/database.ts';
-import { ensureSeeded } from '../db/seed.ts';
+import { seedLegacyCatalog } from '../db/legacy-catalog.ts';
 import { ensureDeviceId } from '../db/device.ts';
 import { loadCostCatalog } from '../db/catalog.ts';
 import { loadSettings } from '../db/settings-repo.ts';
@@ -21,7 +21,7 @@ const HOUR = 3_600_000;
 const hoursAgo = (hours: number) => new Date(Date.now() - hours * HOUR).toISOString();
 
 beforeAll(async () => {
-  await ensureSeeded(db);
+  await seedLegacyCatalog(db);
   await ensureDeviceId(db);
 });
 

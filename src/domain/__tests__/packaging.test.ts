@@ -18,7 +18,7 @@ import {
   PACKAGING_SETS,
   PRODUCTS,
   VARIANTS,
-} from '../../data/seed.ts';
+} from '../../data/legacy-seed-v9.ts';
 
 let catalog: CostCatalog;
 const NOW = '2026-10-12T03:00:00.000Z';

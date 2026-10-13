@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { RuduPosDB } from '../../db/database.ts';
 import { loadCostCatalog } from '../../db/catalog.ts';
-import { ensureSeeded } from '../../db/seed.ts';
+import { seedLegacyCatalog } from '../../db/legacy-catalog.ts';
 import type { CostCatalog } from '../cost.ts';
 import type { BatchState, ComponentBatch, StockMovement } from '../../db/types.ts';
 import {
@@ -24,7 +24,7 @@ beforeEach(async () => {
   dbName = `rudu-open-day-${crypto.randomUUID()}`;
   db = new RuduPosDB(dbName);
   await db.open();
-  await ensureSeeded(db);
+  await seedLegacyCatalog(db);
   catalog = await loadCostCatalog(db);
 });
 

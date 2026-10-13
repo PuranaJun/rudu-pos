@@ -187,9 +187,13 @@ export function planCloseStock(
   return plan;
 }
 
-/** What a quantity of a component cost to make, in satang, at today's cost. */
+/**
+ * What a quantity of a component cost to make, in satang, at today's cost.
+ * Nothing, while its cost is not set: the quantity thrown away is still
+ * recorded, and that is what the waste report ranks by.
+ */
 export function wasteCost(component: Component, qty: number): Satang {
-  return Math.round(qty * component.cost_per_unit * 100);
+  return Math.round(qty * (component.cost_per_unit ?? 0) * 100);
 }
 
 // ------------------------------------------------------------------- cash

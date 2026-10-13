@@ -5,7 +5,7 @@ import { unitPrice } from '../domain/cost.ts';
 import { modifiersFor, variantsOf } from '../domain/cart.ts';
 import type { CartItem } from '../db/cart-repo.ts';
 import { DISCOUNT_REASON_TH, MANUAL_DISCOUNT_REASONS } from '../domain/promotions.ts';
-import type { DiscountReason } from '../db/types.ts';
+import type { DiscountReason, Modifier, Variant } from '../db/types.ts';
 import { Button, ChoiceChip } from './Button.tsx';
 
 /** The quantity stepper: square, the secondary look, − and + at full size. */
@@ -24,10 +24,12 @@ interface Props {
 /**
  * One line of the cart.
  *
- * Temperature is a row on the line, not a blocking modal — pear rings ICED on
- * the first tap and HOT costs one more, which keeps the common sale at two
- * taps (CLAUDE.md §6.1). Paid modifiers hide behind one "ท็อปปิ้ง" button so
- * they cost nothing on the standard path, and so does giving a cup away.
+ * The variant is a row on the line, not a blocking modal — a drink rings its
+ * default on the first tap and the other choice (hot, or which tea) costs one
+ * more, which keeps the common sale at two taps (CLAUDE.md §6.1). Paid
+ * modifiers hide behind one "ท็อปปิ้ง" button, sweetness behind one
+ * "ความหวาน" button — normal sweetness is the recipe itself — so they cost
+ * nothing on the standard path, and so does giving a cup away.
  *
  * Every control says what it does in words. − and + are only ever the
  * quantity; opening a list is a word with an arrow.
@@ -41,6 +43,7 @@ export default function CartLineRow({
   onSetDiscountReason,
 }: Props) {
   const [showModifiers, setShowModifiers] = useState(false);
+  const [showPrep, setShowPrep] = useState(false);
   const [showReasons, setShowReasons] = useState(false);
   const givenAway = item.line.manual_discount_reason;
 
@@ -50,6 +53,7 @@ export default function CartLineRow({
 
   const siblings = variantsOf(catalog, product.id);
   const offerable = modifiersFor(catalog, variant.id, 'PAID');
+  const prep = modifiersFor(catalog, variant.id, 'PREP');
   const chosen = new Set(item.modifierIds);
   const price = unitPrice(catalog, variant.id, item.modifierIds);
 
@@ -65,6 +69,14 @@ export default function CartLineRow({
       <div className="flex items-center gap-2">
         <div className="min-w-0 flex-1">
           <p className="text-xl leading-tight font-bold">{product.name_short_th}</p>
+          {/* Per-product data, never a hardcoded string (CLAUDE.md §10): the
+              caffeine and pregnancy notes are said at the counter. */}
+          {product.advisory_th ? (
+            <p className="text-base font-bold">
+              <span aria-hidden="true">⚠ </span>
+              {product.advisory_th}
+            </p>
+          ) : null}
           {item.modifierIds.length > 0 ? (
             <p className="text-ink-soft text-base font-bold">
               {item.modifierIds
@@ -111,10 +123,21 @@ export default function CartLineRow({
                   )
                 }
               >
-                {sibling.temp === 'HOT' ? 'ร้อน' : 'เย็น'}
+                {variantLabel(sibling, siblings)}
               </ChoiceChip>
             ))
           : null}
+
+        {prep.length > 0 ? (
+          <Button
+            variant="secondary"
+            size="md"
+            onClick={() => setShowPrep((open) => !open)}
+            aria-expanded={showPrep}
+          >
+            {prepLabel(prep)} <span aria-hidden="true">{showPrep ? '▴' : '▾'}</span>
+          </Button>
+        ) : null}
 
         {offerable.length > 0 ? (
           <Button
@@ -153,6 +176,21 @@ export default function CartLineRow({
         </div>
       ) : null}
 
+      {showPrep ? (
+        <div className="mt-2 flex flex-wrap gap-2" role="group" aria-label={prepLabel(prep)}>
+          {prep.map((modifier) => (
+            <ChoiceChip
+              key={modifier.id}
+              selected={chosen.has(modifier.id)}
+              size="md"
+              onClick={() => onToggleModifier(modifier.id)}
+            >
+              {modifier.name_th}
+            </ChoiceChip>
+          ))}
+        </div>
+      ) : null}
+
       {showModifiers ? (
         <div className="mt-2 flex flex-wrap gap-2" role="group" aria-label="ท็อปปิ้ง">
           {offerable.map((modifier) => (
@@ -184,4 +222,25 @@ export default function CartLineRow({
       ))}
     </li>
   );
+}
+
+/**
+ * What a variant chip says. Hot and iced are told apart by temperature; the
+ * plain teas are all iced, so they are told apart by name.
+ */
+function variantLabel(variant: Variant, siblings: readonly Variant[]): string {
+  const temps = siblings.map((sibling) => sibling.temp);
+  const byTemp = !temps.includes(null) && new Set(temps).size === siblings.length;
+  if (!byTemp) return variant.name_th;
+  return variant.temp === 'HOT' ? 'ร้อน' : 'เย็น';
+}
+
+/** Sweetness, when every free choice is about how sweet; otherwise how it is made. */
+function prepLabel(prep: readonly Modifier[]): string {
+  const sweetOnly = prep.every(
+    (modifier) =>
+      modifier.overrides_component_role === 'SWEETENER' ||
+      modifier.overrides_component_role === 'CONCENTRATE',
+  );
+  return sweetOnly ? 'ความหวาน' : 'วิธีทำ';
 }

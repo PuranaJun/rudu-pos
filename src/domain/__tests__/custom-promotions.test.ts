@@ -20,7 +20,7 @@ import {
   PACKAGING_SETS,
   PRODUCTS,
   VARIANTS,
-} from '../../data/seed.ts';
+} from '../../data/legacy-seed-v9.ts';
 import type { Promotion } from '../../db/types.ts';
 
 // 2026-10-13 is a Tuesday; 03:00 UTC is 10:00 in Bangkok.

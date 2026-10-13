@@ -58,11 +58,22 @@ export function recipeFor(
     }
   }
 
+  // Then anything that moves an amount rather than replacing it: Yakult takes
+  // 30 ml of syrup out of whatever sweetness was asked for.
+  const adjustments = new Map<ComponentRole, number>();
+  for (const mod of modifiers) {
+    if (mod.adjusts_component_role && mod.adjust_qty_per_cup) {
+      const role = mod.adjusts_component_role;
+      adjustments.set(role, (adjustments.get(role) ?? 0) + mod.adjust_qty_per_cup);
+    }
+  }
+
   const lines: RecipeLine[] = bom.map((row) => {
     const component = requireComponent(catalog, row.component_id);
+    const qty = overrides.get(component.role) ?? row.qty_per_cup;
     return {
       component,
-      qty: overrides.get(component.role) ?? row.qty_per_cup,
+      qty: Math.max(0, qty + (adjustments.get(component.role) ?? 0)),
       source: 'BOM',
     };
   });

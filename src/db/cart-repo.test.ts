@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { RuduPosDB } from './database.ts';
-import { ensureSeeded } from './seed.ts';
+import { seedLegacyCatalog } from './legacy-catalog.ts';
 import {
   addDrink,
   clearCart,
@@ -18,7 +18,7 @@ beforeEach(async () => {
   dbName = `rudu-cart-${crypto.randomUUID()}`;
   db = new RuduPosDB(dbName);
   await db.open();
-  await ensureSeeded(db);
+  await seedLegacyCatalog(db);
 });
 
 afterEach(async () => {

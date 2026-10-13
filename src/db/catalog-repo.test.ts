@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { RuduPosDB } from './database.ts';
 import { loadCostCatalog } from './catalog.ts';
-import { ensureSeeded } from './seed.ts';
+import { seedLegacyCatalog } from './legacy-catalog.ts';
 import { loadSettings } from './settings-repo.ts';
 import { addDrink, loadCart } from './cart-repo.ts';
 import { completeSale, priceCart } from './sale-repo.ts';
@@ -26,7 +26,7 @@ beforeEach(async () => {
   dbName = `rudu-catalog-${crypto.randomUUID()}`;
   db = new RuduPosDB(dbName);
   await db.open();
-  await ensureSeeded(db);
+  await seedLegacyCatalog(db);
 });
 
 afterEach(async () => {
@@ -79,7 +79,7 @@ describe('changes are effective forward only', () => {
     const tamarind = (await db.product.get('DRINK_TAMARIND'))!;
     await saveProduct({ ...tamarind, base_price: 4_500 }, db);
     const tea = (await db.component.get('COMP_TEA_RED'))!;
-    await saveComponent({ ...tea, cost_per_unit: tea.cost_per_unit * 2 }, db);
+    await saveComponent({ ...tea, cost_per_unit: tea.cost_per_unit! * 2 }, db);
 
     // Monday reads exactly as it did.
     expect(await loadDaySummary(monday.id, db)).toEqual(mondayReport);

@@ -16,7 +16,13 @@ import { useDirty } from '../../components/use-dirty.ts';
 import { numberText, parseNumber } from '../../lib/number.ts';
 import { bahtInput, formatTHB, parseBaht } from '../../lib/money.ts';
 import { unitLabel } from '../../lib/quantity.ts';
-import { grossMarginPct, lineCost, unitPrice, type CostCatalog } from '../../domain/cost.ts';
+import {
+  grossMarginPct,
+  lineCost,
+  uncostedComponents,
+  unitPrice,
+  type CostCatalog,
+} from '../../domain/cost.ts';
 import {
   addBomRow,
   createProduct,
@@ -39,6 +45,7 @@ type View =
 const KINDS = [
   ['DRINK', 'แก้ว'],
   ['BOTTLE', 'ขวด'],
+  ['DESSERT', 'ของหวาน'],
 ] as const;
 
 /**
@@ -342,6 +349,7 @@ function VariantEditor({
   const rows = catalog.bomByVariant.get(variant.id) ?? [];
   const price = unitPrice(catalog, variant.id);
   const cost = lineCost(catalog, variant.id);
+  const uncosted = uncostedComponents(catalog, variant.id);
 
   function save(): Promise<boolean> {
     const override = priceOverride.trim() === '' ? null : parseBaht(priceOverride);
@@ -389,6 +397,13 @@ function VariantEditor({
       >
         ขาย {formatTHB(price)} · ต้นทุน {formatTHB(cost)} · กำไร{' '}
         {price > 0 ? `${Math.round(grossMarginPct(price, cost))}%` : '—'}
+        {/* A cost with holes in it must not read as a finished one. */}
+        {uncosted.length > 0 ? (
+          <span className="mt-1 block">
+            ต้นทุนยังไม่ครบ — ยังไม่ตั้ง:{' '}
+            {uncosted.map((component) => component.name_th).join(', ')}
+          </span>
+        ) : null}
       </p>
 
       <TextField label="ชื่อแบบ" value={name} onChange={setName} />

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { RuduPosDB } from './database.ts';
 import { loadCostCatalog } from './catalog.ts';
-import { ensureSeeded } from './seed.ts';
+import { seedLegacyCatalog } from './legacy-catalog.ts';
 import { ensureDeviceId, DEVICE_ID_KEY } from './device.ts';
 import { loadSettings } from './settings-repo.ts';
 import { addDrink, loadCart, toggleModifier } from './cart-repo.ts';
@@ -29,7 +29,7 @@ beforeEach(async () => {
   dbName = `rudu-backup-${crypto.randomUUID()}`;
   db = new RuduPosDB(dbName);
   await db.open();
-  await ensureSeeded(db);
+  await seedLegacyCatalog(db);
   await ensureDeviceId(db);
 });
 
@@ -168,7 +168,7 @@ describe('export → wipe → import', () => {
     await RuduPosDB.delete(dbName);
     db = new RuduPosDB(dbName);
     await db.open();
-    await ensureSeeded(db);
+    await seedLegacyCatalog(db);
     const newPhone = await ensureDeviceId(db);
 
     await restoreBackup(parseBackup(text, db), db);

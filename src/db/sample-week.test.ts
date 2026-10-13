@@ -5,7 +5,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { RuduPosDB } from './database.ts';
-import { ensureSeeded } from './seed.ts';
+import { seedLegacyCatalog } from './legacy-catalog.ts';
 import { ensureDeviceId } from './device.ts';
 import { generateSampleWeek } from './sample-week.ts';
 import { auditDatabase } from './audit-repo.ts';
@@ -22,7 +22,7 @@ const TODAY = '2026-09-25T05:00:00.000Z';
 beforeAll(async () => {
   db = new RuduPosDB(dbName);
   await db.open();
-  await ensureSeeded(db);
+  await seedLegacyCatalog(db);
   await ensureDeviceId(db);
   await generateSampleWeek(db, TODAY, 42);
 }, 60_000);
@@ -108,7 +108,7 @@ describe('a generated week', () => {
   it('is the same week for the same seed', async () => {
     const other = new RuduPosDB(`rudu-week-${crypto.randomUUID()}`);
     await other.open();
-    await ensureSeeded(other);
+    await seedLegacyCatalog(other);
     const again = await generateSampleWeek(other, TODAY, 42);
     expect(again.sales).toBe(await db.sale.count());
     other.close();
@@ -120,7 +120,7 @@ describe('the audit catches what it is there to catch', () => {
   it('flags a loyalty cup counted as revenue, a double waste, a drawer that does not add up and negative stock', async () => {
     const tampered = new RuduPosDB(`rudu-tampered-${crypto.randomUUID()}`);
     await tampered.open();
-    await ensureSeeded(tampered);
+    await seedLegacyCatalog(tampered);
     await generateSampleWeek(tampered, TODAY, 7);
 
     // Revenue including a loyalty drink.

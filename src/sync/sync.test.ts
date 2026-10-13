@@ -6,7 +6,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { RuduPosDB } from '../db/database.ts';
-import { ensureSeeded } from '../db/seed.ts';
+import { seedLegacyCatalog } from '../db/legacy-catalog.ts';
 import { ensureDeviceId, DEVICE_ID_KEY } from '../db/device.ts';
 import { loadCostCatalog } from '../db/catalog.ts';
 import { loadSettings } from '../db/settings-repo.ts';
@@ -70,7 +70,7 @@ async function phone(): Promise<RuduPosDB> {
   names.push(name);
   const db = new RuduPosDB(name);
   await db.open();
-  await ensureSeeded(db);
+  await seedLegacyCatalog(db);
   await ensureDeviceId(db);
   return db;
 }

@@ -45,6 +45,12 @@ import { markHandedOver } from '../db/queue-repo.ts';
 import type { CashSession, OrderType, PaymentMethod, Product } from '../db/types.ts';
 
 const MENU_COLORS = ['--color-drink-1', '--color-drink-2', '--color-drink-3'];
+/**
+ * Up to this many cups on the menu, each gets a large button and the menu
+ * never scrolls. Past it, the buttons go compact and the menu scrolls on a
+ * phone, above a cart and pay buttons that always stay in reach (CLAUDE.md §1).
+ */
+const LARGE_MENU_MAX = 4;
 const ORDER_TYPES: readonly OrderType[] = ['TAKEAWAY', 'DINE_IN'];
 /** As many queue numbers as fit on one phone row; the rest are under เมนู → คิว. */
 const QUEUE_STRIP = 3;
@@ -109,8 +115,10 @@ export default function SellScreen({ session }: { session: CashSession }) {
   const products = [...catalog.products.values()]
     .filter((product) => product.is_active)
     .sort((a, b) => a.sort_order - b.sort_order);
-  const drinks = products.filter((product) => product.kind === 'DRINK');
+  // Cups: drinks and the jelly cup. Bottles get their own small row.
+  const drinks = products.filter((product) => product.kind !== 'BOTTLE');
   const bottles = products.filter((product) => product.kind === 'BOTTLE');
+  const compact = drinks.length > LARGE_MENU_MAX;
 
   // Priced exactly the way the sale will be written, so the total on the
   // footer can never differ from the total recorded.
@@ -264,20 +272,26 @@ export default function SellScreen({ session }: { session: CashSession }) {
           buttons, nothing added. */}
       <div className="tablet:flex-row flex min-h-0 flex-1 flex-col">
         {/* The menu. */}
-        <div className="tablet:min-h-0 tablet:flex-1 tablet:overflow-y-auto tablet:gap-4 tablet:p-4 flex shrink-0 flex-col gap-2 p-2">
+        <div
+          aria-label="เมนู"
+          className={`tablet:min-h-0 tablet:max-h-none tablet:flex-1 tablet:overflow-y-auto tablet:gap-4 tablet:p-4 flex shrink-0 flex-col gap-2 p-2 ${
+            compact ? 'max-h-[46dvh] overflow-y-auto overscroll-contain' : ''
+          }`}
+        >
           {/* Wraps: a third drink takes the next row rather than squeezing the
             first two until their names no longer fit (CLAUDE.md §9, §12). */}
           <div className="tablet:gap-4 flex flex-wrap gap-2">
             {drinks.map((product, index) => {
               const info = stockFor(product);
               return (
-                <div key={product.id} className="flex min-w-[44%] flex-1">
+                <div key={product.id} className="flex min-w-[44%] flex-1 basis-[44%]">
                   <DrinkButton
                     product={product}
                     price={info.price}
                     cups={info.cups}
                     limitingComponentName={info.limitingComponentName}
                     colorVar={MENU_COLORS[index % MENU_COLORS.length]!}
+                    size={compact ? 'compact' : 'large'}
                     onTap={() => tapProduct(product)}
                   />
                 </div>

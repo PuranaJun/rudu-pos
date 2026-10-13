@@ -122,21 +122,34 @@ export async function setVariant(
   });
 }
 
+/**
+ * Put a modifier on a line, or take it off.
+ *
+ * Two modifiers that both set the amount of the same thing cannot both be on
+ * one cup — "less sweet" and "no added sugar" each say how much syrup goes in
+ * — so choosing one takes the other off, the way a radio button would.
+ */
 export async function toggleModifier(
   lineId: string,
   modifierId: string,
   db: RuduPosDB = defaultDb,
 ): Promise<void> {
-  await db.transaction('rw', db.cart_line_mod, async () => {
-    const existing = await db.cart_line_mod
-      .where('cart_line_id')
-      .equals(lineId)
-      .filter((mod) => mod.modifier_id === modifierId)
-      .toArray();
+  await db.transaction('rw', [db.cart_line_mod, db.modifier], async () => {
+    const onLine = await db.cart_line_mod.where('cart_line_id').equals(lineId).toArray();
+    const existing = onLine.filter((mod) => mod.modifier_id === modifierId);
 
     if (existing.length > 0) {
       await db.cart_line_mod.bulkDelete(existing.map((mod) => mod.id));
       return;
+    }
+
+    const role = (await db.modifier.get(modifierId))?.overrides_component_role ?? null;
+    if (role !== null) {
+      const others = await db.modifier.bulkGet(onLine.map((mod) => mod.modifier_id));
+      const clashing = onLine.filter(
+        (_mod, index) => others[index]?.overrides_component_role === role,
+      );
+      await db.cart_line_mod.bulkDelete(clashing.map((mod) => mod.id));
     }
 
     const mod: CartLineMod = {

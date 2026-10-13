@@ -21,7 +21,7 @@ import PurchasingScreen from '../screens/PurchasingScreen.tsx';
 import QueueScreen from '../screens/QueueScreen.tsx';
 import { createOrder, createSupplier, savePurchaseItem } from '../db/purchase-repo.ts';
 import { db } from '../db/database.ts';
-import { ensureSeeded } from '../db/seed.ts';
+import { seedLegacyCatalog } from '../db/legacy-catalog.ts';
 import { ensureDeviceId } from '../db/device.ts';
 import type { CashSession } from '../db/types.ts';
 import { BACK } from './helpers.ts';
@@ -52,7 +52,7 @@ const SESSION: CashSession = {
 };
 
 beforeAll(async () => {
-  await ensureSeeded(db);
+  await seedLegacyCatalog(db);
   await ensureDeviceId(db);
 });
 

@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { RuduPosDB } from '../../db/database.ts';
 import { loadCostCatalog } from '../../db/catalog.ts';
-import { ensureSeeded } from '../../db/seed.ts';
+import { seedLegacyCatalog } from '../../db/legacy-catalog.ts';
 import type { CostCatalog } from '../cost.ts';
 import type { Sale, SaleLine } from '../../db/types.ts';
 import { revenuePeriods, salesCsv, salesCsvFilename } from '../sales-csv.ts';
@@ -13,7 +13,7 @@ const dbName = `rudu-csv-${crypto.randomUUID()}`;
 beforeAll(async () => {
   db = new RuduPosDB(dbName);
   await db.open();
-  await ensureSeeded(db);
+  await seedLegacyCatalog(db);
   catalog = await loadCostCatalog(db);
 });
 

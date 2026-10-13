@@ -7,7 +7,7 @@ import { cleanup, render, screen, waitFor, within } from '@testing-library/react
 import userEvent from '@testing-library/user-event';
 import App from '../App.tsx';
 import { db } from '../db/database.ts';
-import { ensureSeeded } from '../db/seed.ts';
+import { seedLegacyCatalog } from '../db/legacy-catalog.ts';
 import { ensureDeviceId } from '../db/device.ts';
 import { clearCart } from '../db/cart-repo.ts';
 import { loadOpenSession } from '../db/session-repo.ts';
@@ -56,7 +56,7 @@ async function stock(goji: BatchState = 'SLAB') {
 }
 
 beforeAll(async () => {
-  await ensureSeeded(db);
+  await seedLegacyCatalog(db);
   await ensureDeviceId(db);
 });
 
