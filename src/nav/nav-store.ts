@@ -20,20 +20,29 @@ interface NavState {
   route: Route | null;
   /** The day just closed, whose summary is showing until the operator leaves it. */
   closedSessionId: string | null;
+  /**
+   * The owner typed the PIN on this visit. Going home locks again, so the
+   * phone handed back to the staff is never left open (see owner-lock.ts).
+   */
+  ownerUnlocked: boolean;
   open: (route: Route) => void;
   home: () => void;
   dayClosed: (sessionId: string) => void;
   summaryDone: () => void;
+  unlockOwner: () => void;
+  lockOwner: () => void;
 }
 
-const INITIAL = { route: null, closedSessionId: null } as const;
+const INITIAL = { route: null, closedSessionId: null, ownerUnlocked: false } as const;
 
 export const useNav = create<NavState>()((set) => ({
   ...INITIAL,
   open: (route) => set({ route }),
-  home: () => set({ route: null }),
-  dayClosed: (sessionId) => set({ route: null, closedSessionId: sessionId }),
-  summaryDone: () => set({ closedSessionId: null }),
+  home: () => set({ route: null, ownerUnlocked: false }),
+  dayClosed: (sessionId) => set({ route: null, closedSessionId: sessionId, ownerUnlocked: false }),
+  summaryDone: () => set({ closedSessionId: null, ownerUnlocked: false }),
+  unlockOwner: () => set({ ownerUnlocked: true }),
+  lockOwner: () => set({ ownerUnlocked: false }),
 }));
 
 /** Back to a fresh start — tests, and nothing else. */

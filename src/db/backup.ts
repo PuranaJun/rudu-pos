@@ -11,6 +11,7 @@ import type { RuduPosDB } from './database.ts';
 import { asRemoteWrites, db as defaultDb, SYNCED_TABLES } from './database.ts';
 import { DEVICE_ID_KEY } from './device.ts';
 import { STORAGE_NOTE_KEY } from './storage-note.ts';
+import { OWNER_PIN_KEY } from './owner-pin.ts';
 import { ensureSeeded } from './seed.ts';
 import { loadCostCatalog } from './catalog.ts';
 import type { Sale, SaleLine } from './types.ts';
@@ -32,10 +33,11 @@ const DEVICE_SETTINGS = [DEVICE_ID_KEY, STORAGE_NOTE_KEY];
 /**
  * Sync settings — the shop key among them — never go into a backup file. A
  * backup travels through LINE and iCloud; the shop key would let whoever
- * holds the file write to the shop's cloud records. They belong to the phone.
+ * holds the file write to the shop's cloud records. They belong to the phone,
+ * and so does the owner's PIN: a restore keeps the phone's own.
  */
-function isSyncSetting(key: string): boolean {
-  return key.startsWith('sync_');
+function staysOnPhone(key: string): boolean {
+  return key.startsWith('sync_') || key === OWNER_PIN_KEY;
 }
 
 export interface BackupFile {
@@ -65,7 +67,7 @@ export async function exportBackup(
       const rows = await table.toArray();
       tables[table.name] =
         table.name === 'setting'
-          ? (rows as { key: string }[]).filter((row) => !isSyncSetting(row.key))
+          ? (rows as { key: string }[]).filter((row) => !staysOnPhone(row.key))
           : rows;
     }
     return { format: BACKUP_FORMAT, schema_version: db.verno, exported_at: now, tables };
@@ -94,6 +96,21 @@ const STALE_AFTER_MS = 2 * 86_400_000;
  */
 export function backupIsStale(lastBackupAt: string | null, nowMs: number): boolean {
   return lastBackupAt === null || nowMs - Date.parse(lastBackupAt) > STALE_AFTER_MS;
+}
+
+/**
+ * When the records were last safe somewhere other than this phone: the last
+ * backup file or — on the shop phone with sync on — the cloud, which holds
+ * everything once nothing is waiting to go (CLAUDE.md §13). Null if never.
+ */
+export function lastSafeCopy(
+  lastBackupAt: string | null,
+  cloud: { lastSent: string | null; pending: number } | null,
+  now: string,
+): string | null {
+  const cloudAt = cloud === null ? null : cloud.pending === 0 ? now : cloud.lastSent;
+  if (lastBackupAt === null || cloudAt === null) return lastBackupAt ?? cloudAt;
+  return Date.parse(cloudAt) > Date.parse(lastBackupAt) ? cloudAt : lastBackupAt;
 }
 
 /** Remember that a backup left the phone, to show when the last one was. */
@@ -174,7 +191,7 @@ export async function restoreBackup(backup: BackupFile, db: RuduPosDB = defaultD
   await asRemoteWrites(() =>
     db.transaction('rw', db.tables, async () => {
       const keep = (await db.setting.toArray()).filter(
-        (row) => DEVICE_SETTINGS.includes(row.key) || isSyncSetting(row.key),
+        (row) => DEVICE_SETTINGS.includes(row.key) || staysOnPhone(row.key),
       );
 
       for (const table of db.tables) {
@@ -184,7 +201,7 @@ export async function restoreBackup(backup: BackupFile, db: RuduPosDB = defaultD
         // belongs to the phone that made the file, never to this one.
         const rows =
           table.name === 'setting'
-            ? incoming?.filter((row) => !isSyncSetting(String((row as { key?: unknown }).key)))
+            ? incoming?.filter((row) => !staysOnPhone(String((row as { key?: unknown }).key)))
             : incoming;
         if (!rows || rows.length === 0) continue;
         // A backup from before sync existed has never been sent anywhere.

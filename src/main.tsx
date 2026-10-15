@@ -7,6 +7,7 @@ import { promoteReadyBatches } from './db/stock-repo.ts';
 import { requestPersistentStorage } from './lib/storage.ts';
 import { recordStorageDurability } from './db/storage-note.ts';
 import { startSync } from './sync/sync-client.ts';
+import { lockWhenAway } from './nav/owner-lock.ts';
 import './index.css';
 
 // iOS can evict IndexedDB. Ask for durable storage on launch, never block on
@@ -24,6 +25,10 @@ void promoteReadyBatches();
 // whenever the app is opened or the signal comes back. Never a loop, never
 // awaited by anything the operator is doing (CLAUDE.md §1, §8).
 startSync();
+
+// The owner's PIN, once typed, does not outlast the phone going back in a
+// pocket. A listener, not a timer.
+lockWhenAway();
 
 // iOS Safari only applies :active — the pressed look on every button — when
 // something is listening for touches. A passive no-op costs nothing.

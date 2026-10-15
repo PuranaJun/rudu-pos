@@ -77,7 +77,7 @@ describe('backing up', () => {
     await openData(user);
 
     const section = screen.getByRole('region', { name: 'สำรองข้อมูล' });
-    expect(within(section).getByText('ยังไม่เคยสำรองข้อมูล')).toBeInTheDocument();
+    expect(await within(section).findByText('ยังไม่เคยสำรองข้อมูล')).toBeInTheDocument();
 
     const button = await within(section).findByRole('button', { name: 'บันทึกไฟล์สำรอง' });
     await user.click(button);

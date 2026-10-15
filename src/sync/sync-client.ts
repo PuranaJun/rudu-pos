@@ -23,6 +23,7 @@ import { DEVICE_ID_KEY } from '../db/device.ts';
 import { STORAGE_NOTE_KEY } from '../db/storage-note.ts';
 import { LAST_BACKUP_KEY } from '../db/backup.ts';
 import { ORDER_TYPE_KEY } from '../db/settings-repo.ts';
+import { OWNER_PIN_KEY } from '../db/owner-pin.ts';
 import type { SettingValue } from '../db/types.ts';
 import { nowIso } from '../lib/id.ts';
 import { normalizeKey } from './key.ts';
@@ -44,6 +45,8 @@ export const LOCAL_SETTINGS: readonly string[] = [
   STORAGE_NOTE_KEY,
   LAST_BACKUP_KEY,
   ORDER_TYPE_KEY,
+  // The owner's own phone, view-only, sees everything without it.
+  OWNER_PIN_KEY,
   SYNC_KEY,
   SYNC_VIEW_KEY,
   SYNC_MODE,

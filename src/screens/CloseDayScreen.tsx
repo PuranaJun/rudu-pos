@@ -20,6 +20,7 @@ import {
 } from '../domain/close-day.ts';
 import { useCart, useCostCatalog, useExpectedCash, useStockSnapshot } from '../db/hooks.ts';
 import { closeDay } from '../db/close-repo.ts';
+import { useOwnerLock } from '../nav/owner-lock.ts';
 import type { CashSession, WasteReason } from '../db/types.ts';
 
 interface Props {
@@ -52,6 +53,9 @@ interface Override {
 export default function CloseDayScreen({ session, back, onClosed }: Props) {
   const catalog = useCostCatalog();
   const stock = useStockSnapshot();
+  // With an owner PIN, a discard says what goes, not what it cost: the baht
+  // on the button is the component's cost per ml, read backwards.
+  const costs = useOwnerLock().open;
   const cart = useCart();
   const expected = useExpectedCash(session);
 
@@ -80,6 +84,9 @@ export default function CloseDayScreen({ session, back, onClosed }: Props) {
   const lines = closingLines(catalog, stock, now);
   const rows = lines.map((line) => resolve(line, overrides[line.batch.id]));
   const totalWaste = rows.reduce((sum, row) => sum + row.waste, 0);
+  const discarded = rows.filter(
+    (row) => row.decision === 'DISCARD' && row.valid && row.counted > 0,
+  ).length;
   const stockValid = rows.every((row) => row.valid);
 
   // Two batches of one component need telling apart; one does not.
@@ -203,7 +210,9 @@ export default function CloseDayScreen({ session, back, onClosed }: Props) {
                         onClick={() => change(line.batch.id, { decision: 'DISCARD' })}
                         className="flex-1"
                       >
-                        ทิ้ง {formatTHB(row.valid ? wasteCost(line.component, row.counted) : 0)}
+                        {costs
+                          ? `ทิ้ง ${formatTHB(row.valid ? wasteCost(line.component, row.counted) : 0)}`
+                          : 'ทิ้ง'}
                       </ChoiceChip>
                     </div>
 
@@ -363,9 +372,13 @@ export default function CloseDayScreen({ session, back, onClosed }: Props) {
           }}
         >
           <p
-            className={`mb-3 rounded-lg px-3 py-1 text-xl font-bold ${totalWaste > 0 ? 'bg-today' : ''}`}
+            className={`mb-3 rounded-lg px-3 py-1 text-xl font-bold ${(costs ? totalWaste : discarded) > 0 ? 'bg-today' : ''}`}
           >
-            ทิ้งรวม {formatTHB(totalWaste)}
+            {costs
+              ? `ทิ้งรวม ${formatTHB(totalWaste)}`
+              : discarded > 0
+                ? `ทิ้ง ${discarded} อย่าง`
+                : 'ไม่ทิ้งอะไร'}
           </p>
         </ScreenFooter>
       ) : (

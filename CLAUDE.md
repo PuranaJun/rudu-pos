@@ -1,6 +1,13 @@
 # Rudu Tea (ฤดูชา) POS — project rules
 
-Point-of-sale for a **single-stall Thai tea shop**. Runs on the owner's **iPhone/iPad, outdoors, on battery, with no reliable data**, while she is making drinks. One operator, occasionally two. Serves **takeaway and dine-in**.
+Point-of-sale for a **single-stall Thai tea shop**. Runs on the **shop phone — a Samsung Galaxy A07 (Android, Chrome) given to the staff as a work phone — outdoors, on battery, with no reliable data**, while they are making drinks. One operator, occasionally two. Serves **takeaway and dine-in**.
+
+**The owner does not sell.** The owner monitors from their own **iPhone, view-only** (§8), and **staff must not see costs** (§6.7). Two devices, two jobs:
+
+| Device                             | Who                      | Does                                                                                                                                                   |
+| ---------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Shop phone (Samsung A07, Chrome)   | Staff (+ owner with PIN) | Sells, opens and closes the day, records production. **The only writer.** Settings, prices, recipes and costs are edited here, behind the owner PIN. |
+| Owner's iPhone (Safari, installed) | Owner                    | Watches today, reads reports with costs, **saves the backup files** (share sheet → iCloud). Writes nothing.                                            |
 
 Currency THB · locale th-TH · timezone Asia/Bangkok (UTC+07:00) · UI strings Thai · code/comments English.
 
@@ -152,7 +159,7 @@ Same-day components (`CUT` jelly, Pile B pear, basil seed) **default to discarde
 
 Recording what the shop buys from suppliers (tea leaves, pears, sugar, cups, lids):
 
-- Pick a supplier → add lines (purchase item, qty, unit cost — **defaults to the last price paid**) → save as `ORDERED`, or **"bought, received now"** for a market run. Share an order as text through the iOS share sheet (LINE) for the supplier.
+- Pick a supplier → add lines (purchase item, qty, unit cost — **defaults to the last price paid**) → save as `ORDERED`, or **"bought, received now"** for a market run. Share an order as text through the phone's share sheet (LINE) for the supplier.
 - **Receive** marks it `RECEIVED` with the actual quantities and costs (they often differ from what was ordered). Receiving twice is refused.
 - A purchase item bought in packs of a packaging item (`pack_size`, `packaging_item_id`) **adds `qty_received × pack_size` pieces to packaging stock** (§6.6).
 - Receiving **may offer** to update a packaging item's `unit_cost` (price per pack ÷ pack size). It never does so automatically, and the update is forward only (§2.1.8). Component costs are per ml/g of the finished component, which a raw-ingredient price cannot give, so they are edited by hand in settings.
@@ -169,6 +176,17 @@ Cups, lids, straws, spoons, bags, stickers and bottles are counted as stock. Ice
 - A sale deducts its variant's packaging set (less what a modifier removes, e.g. no ice) **in the sale's transaction**. A void reverses it, once.
 - An item is **"not counted yet"** until its first `COUNT`. A count records the difference from the ledger, never an overwrite.
 - **Warn, never block:** at or below `reorder_at` (or at zero), a banner on the sell screen. Packaging **never limits `available_cups`** and never greys out a drink: a drifted count must not add a tap to a sale.
+
+### 6.7 Owner PIN
+
+The owner does not sell; the staff do, and they must not see what things cost. Settings → ข้อมูล → รหัสเจ้าของ (4–8 digits, typed twice). With a PIN set:
+
+- **Behind it:** settings, reports, purchasing, saving a backup file on the shop phone, and every cost, COGS, gross-profit and waste-in-baht figure on the screens staff use — bills, close day, day summary. Staff see breakeven as cups and waste as quantities.
+- **Never behind it:** selling, the queue, production, open day, counting the drawer. **Selling never asks for it.**
+- The gate is in `ScreenHost` (`OWNER_ROUTES`) and `useOwnerLock().open` (`src/nav/owner-lock.ts`). **Any new cost or profit figure on a staff screen must check it.**
+- Unlocked until going home, or the app away for over a minute (a listener, not a timer).
+- **The PIN belongs to the phone:** not synced (the owner's view-only phone sees everything), not in backup files, kept on restore. Stored as salt + SHA-256. **No reset, by the owner's choice.**
+- It is a curtain, not a safe: the phone holds the costs to compute COGS offline, and a backup file contains them. **On the Samsung a backup file is downloaded into the Downloads folder, where staff can open it** — the app says so before the owner saves one there (§13).
 
 ---
 
@@ -247,13 +265,13 @@ purchase_order_line  id, purchase_order_id, purchase_item_id, qty_ordered,
 setting          key, value
 ```
 
-**Sync:** last-write-wins per record is fine. **Do not build CRDTs.** Local IndexedDB stays the source of truth, plus export/import backup. Online sync is **opt-in** (Settings → ข้อมูล → ซิงค์ออนไลน์), built and live:
+**Sync:** last-write-wins per record is fine. **Do not build CRDTs.** Local IndexedDB stays the source of truth, plus export/import backup. Online sync is **opt-in** in the code (Settings → ข้อมูล → ซิงค์ออนไลน์) but **required by this shop's setup**: it is how the owner's iPhone sees anything, and it is the shop phone's backup. Built and live:
 
 - **Server:** Cloudflare Pages Functions (`functions/api/sync/*` → `server/sync.ts`) in front of one D1 database bound as `DB`. It stores each row as JSON under (table, id) with a sequence number and knows nothing about sales or stock, so **a new table needs no server change**. Under 50 queries a request (free plan).
-- **One writer:** the **shop phone** sends; any other device with the shop's key is **view-only** (`ViewerHome`: today's figures, cups left, packaging warnings, bills, reports — nothing that writes). A new phone can **replace** the shop phone by taking everything from the cloud (refused if it already has sales). **Two selling devices is not built** — it needs a shared session and drawer.
+- **One writer:** the **shop phone** sends; any other device with the shop's key is **view-only** (`ViewerHome`: today's figures, cups left, packaging warnings, bills, reports, and **saving a backup file** of its full copy — nothing that writes to the shop's records). A new phone can **replace** the shop phone by taking everything from the cloud (refused if it already has sales). **Two selling devices is not built** — it needs a shared session and drawer.
 - **Two keys, enforced by the server:** the **shop key** (sends, fetches, rotates; stored only as SHA-256) stays on the shop phone; the **view key** is the one shared (`#pair=` link or typed) and the server refuses it anything that writes (403). Rotating replaces both and locks out every viewer. Taking over as the shop phone needs the shop key. **Setup itself needs `SYNC_SETUP_CODE`**, a Cloudflare secret the owner sets — no first-come claiming of the shop. **Backup files never contain `sync_*` settings** (the shop key would travel through LINE/iCloud), and a restore keeps the phone's own.
 - **Change tracking** is in the database's own hooks: every write sets `sync_dirty = 1` (indexed) and bumps `sync_rev`; a send clears the flag only if the rev did not move meanwhile. Writes that came from the cloud, and a backup restore, are applied without marking.
-- **Never synced:** the open cart, and this phone's own settings (`device_id`, storage note, last backup, order type, the sync settings themselves).
+- **Never synced:** the open cart, and this phone's own settings (`device_id`, storage note, last backup, order type, the owner PIN, the sync settings themselves).
 - **Triggers, never a loop (§1):** a change arms **one** send 15 s later (re-armed by the next change); opening the app or getting signal back does one round; and a button. **Nothing on the sell path imports sync** (`src/test/no-network.test.ts` enforces it, and that only `src/sync/sync-client.ts` touches the network).
 
 **Business date** = the `cash_session` the sale belongs to; fall back to the Asia/Bangkok calendar date. Never use UTC date for reports.
@@ -336,15 +354,25 @@ Listed so they are not inferred from generic POS templates. **Do not build:**
 - All seed data in `src/data/seed.ts`, loaded once on first run into Dexie, **then owned by the database** — never re-read from code.
 - `npm run typecheck`, `npm run lint`, `npm run test` must pass before any commit.
 
-### iOS specifics that are easy to get wrong
+### Phone specifics that are easy to get wrong
 
-- Must be **installed via Add to Home Screen** for standalone mode and durable storage. Call `navigator.storage.persist()` on first launch.
-- `viewport-fit=cover` + `env(safe-area-inset-*)` padding, or the home-bar eats the payment buttons.
-- `touch-action: manipulation` on all buttons to kill the 300 ms double-tap-zoom delay.
-- `overscroll-behavior: none` and `height: 100dvh` — no rubber-band scrolling on the sell screen.
+Both phones:
+
+- Must be **installed** (Chrome: ⋮ → Install app / Add to Home screen; Safari: Share → Add to Home Screen) for standalone mode and durable storage. Call `navigator.storage.persist()` on first launch.
+- `viewport-fit=cover` + `env(safe-area-inset-*)` padding, or the home bar / gesture bar eats the payment buttons.
+- `touch-action: manipulation` on all buttons to kill the double-tap-zoom delay.
+- `overscroll-behavior: none` and `height: 100dvh` — no rubber-band or pull-to-refresh on the sell screen.
 - `-webkit-user-select: none` on buttons so a wet mis-tap doesn't select text.
+
+The shop phone (Samsung A07, **Chrome on Android** — not Samsung Internet, which is that phone's default):
+
 - Request a **Screen Wake Lock** while a cash session is open.
-- iOS can still evict IndexedDB in edge cases. **A daily local backup export is part of the product, not a nice-to-have.**
+- A budget phone: Android may kill the app in the background. Every cart line is already persisted (§1); nothing may depend on in-memory state surviving.
+- **Chrome's share sheet refuses `.json` files**, so a backup is **downloaded into Downloads**, readable by anyone holding the phone. **The cloud is this phone's backup** (§8): while sync is on and nothing is waiting to go, the backup is current and nobody is nagged. A file saved here gets a warning first (§6.7).
+
+The owner's iPhone (Safari, view-only):
+
+- iOS can evict a web app's storage, but this phone's copy comes back from the cloud. **Its job is the backup file:** the share sheet takes `.json`, so it goes to iCloud Drive or Files — a copy outside both the phone and Cloudflare.
 
 ---
 

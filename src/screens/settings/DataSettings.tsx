@@ -3,7 +3,8 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import ShareFileButton from '../../components/ShareFileButton.tsx';
 import SyncPanel from '../../components/SyncPanel.tsx';
 import BackupCard from '../../components/BackupCard.tsx';
-import { Choice, ListPage } from '../../components/form.tsx';
+import BackupFileButton from '../../components/BackupFileButton.tsx';
+import { Choice, ListPage, TextField } from '../../components/form.tsx';
 import { Button } from '../../components/Button.tsx';
 import { buttonClass } from '../../components/button.ts';
 import type { BackTo } from '../../components/Screen.tsx';
@@ -12,12 +13,19 @@ import { formatBangkok } from '../../lib/datetime.ts';
 import { revenuePeriods } from '../../domain/sales-csv.ts';
 import { db } from '../../db/database.ts';
 import {
+  PIN_MAX_LENGTH,
+  PIN_MIN_LENGTH,
+  clearOwnerPin,
+  isValidPin,
+  setOwnerPin,
+} from '../../db/owner-pin.ts';
+import { useOwnerLock } from '../../nav/owner-lock.ts';
+import { useNav } from '../../nav/nav-store.ts';
+import {
   BackupError,
-  backupAsFile,
   describeBackup,
   loadSalesForYear,
   loadSalesYears,
-  markBackedUp,
   parseBackup,
   restoreBackup,
   salesCsvFile,
@@ -25,13 +33,14 @@ import {
 } from '../../db/backup.ts';
 
 /**
- * The data (CLAUDE.md §13): this phone holds the only copy of the business's
- * records, and a backup is what keeps them alive.
+ * The data (CLAUDE.md §13): where the business's records are kept safe —
+ * the cloud for a shop phone that syncs, a backup file otherwise.
  */
 export default function DataSettings({ exit }: { exit: BackTo }) {
   return (
     <ListPage exit={exit}>
       <BackupSection />
+      <OwnerPinSection />
       <section aria-label="ซิงค์ออนไลน์" className="pt-8">
         <h2 className="text-2xl font-bold">ซิงค์ออนไลน์</h2>
         <SyncPanel />
@@ -47,11 +56,173 @@ function BackupSection() {
     <section aria-label="สำรองข้อมูล" className="pt-4">
       <h2 className="text-2xl font-bold">สำรองข้อมูล</h2>
       <p className="mt-2 text-lg font-bold">
-        ทุกอย่างในเครื่องเป็นไฟล์เดียว — ส่งไป iCloud Drive, Files หรือ LINE
+        ทุกอย่างในเครื่องเป็นไฟล์เดียว รวมต้นทุน — เก็บไว้ที่ของเจ้าของเท่านั้น อย่าส่งเข้ากลุ่ม
+        LINE ที่พนักงานอยู่
       </p>
       <div className="mt-3">
         <BackupCard />
       </div>
+    </section>
+  );
+}
+
+/**
+ * The owner's PIN (owner-pin.ts). Set, the staff sell exactly as before but
+ * see no cost or profit, and settings, reports, purchasing and the backup
+ * file wait behind it. There is no reset, so it is typed twice and the
+ * screen says so before it is saved.
+ */
+function OwnerPinSection() {
+  const lock = useOwnerLock();
+  const unlock = useNav((state) => state.unlockOwner);
+  const [editing, setEditing] = useState(false);
+  const [pin, setPin] = useState('');
+  const [again, setAgain] = useState('');
+  const [removing, setRemoving] = useState(false);
+  const [done, setDone] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  if (lock.pin === undefined) return null;
+  const formOpen = !lock.pinSet || editing;
+
+  function save() {
+    setDone(null);
+    if (!isValidPin(pin)) {
+      setError(`รหัสต้องเป็นตัวเลข ${PIN_MIN_LENGTH}–${PIN_MAX_LENGTH} ตัว`);
+      return;
+    }
+    if (pin !== again) {
+      setError('รหัสสองช่องไม่ตรงกัน');
+      return;
+    }
+    // This visit stays open: setting the PIN must not lock the owner out of
+    // the very screen it is being set on.
+    unlock();
+    setOwnerPin(pin)
+      .then(() => {
+        setPin('');
+        setAgain('');
+        setEditing(false);
+        setError(null);
+        setDone('ตั้งรหัสแล้ว');
+      })
+      .catch((cause: unknown) => setError(`ตั้งรหัสไม่สำเร็จ: ${String(cause)}`));
+  }
+
+  function remove() {
+    setRemoving(false);
+    setDone(null);
+    clearOwnerPin()
+      .then(() => setDone('เอารหัสออกแล้ว'))
+      .catch((cause: unknown) => setError(`เอารหัสออกไม่สำเร็จ: ${String(cause)}`));
+  }
+
+  return (
+    <section aria-label="รหัสเจ้าของ" className="pt-8">
+      <h2 className="text-2xl font-bold">รหัสเจ้าของ</h2>
+      <p className="mt-2 text-lg font-bold">
+        {lock.pinSet
+          ? 'ตั้งรหัสแล้ว — พนักงานขายได้ตามปกติ แต่ไม่เห็นต้นทุนและกำไร เปิดตั้งค่า รายงาน สั่งของ และส่งไฟล์สำรองไม่ได้'
+          : 'ยังไม่ได้ตั้งรหัส — ทุกคนที่ใช้เครื่องนี้เห็นต้นทุนและกำไร'}
+      </p>
+
+      {done ? (
+        <p
+          role="status"
+          className="bg-brand-2 mt-2 rounded-xl px-4 py-3 text-lg font-bold text-white"
+        >
+          {done}
+        </p>
+      ) : null}
+
+      {formOpen ? (
+        <>
+          <TextField
+            label="รหัสใหม่"
+            value={pin}
+            onChange={setPin}
+            inputMode="numeric"
+            hint={`ตัวเลข ${PIN_MIN_LENGTH}–${PIN_MAX_LENGTH} ตัว`}
+          />
+          <TextField
+            label="ใส่รหัสใหม่อีกครั้ง"
+            value={again}
+            onChange={setAgain}
+            inputMode="numeric"
+          />
+          <p className="bg-today mt-3 rounded-xl px-4 py-3 text-lg font-bold">
+            ลืมรหัสแล้วตั้งใหม่ไม่ได้ — ตั้งค่า รายงาน สั่งของ
+            และสำรองข้อมูลบนเครื่องนี้จะเปิดไม่ได้อีก จดรหัสเก็บไว้ที่ปลอดภัย
+          </p>
+          <div className="mt-3 flex gap-2">
+            {editing ? (
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setEditing(false);
+                  setPin('');
+                  setAgain('');
+                  setError(null);
+                }}
+                className="flex-1"
+              >
+                ไม่เปลี่ยน
+              </Button>
+            ) : null}
+            <Button variant="primary" onClick={save} className="flex-[1.4]">
+              {editing ? 'เปลี่ยนรหัส' : 'ตั้งรหัส'}
+            </Button>
+          </div>
+        </>
+      ) : removing ? (
+        <div
+          role="alertdialog"
+          aria-label="ยืนยันเอารหัสออก"
+          className="border-expired mt-3 rounded-2xl border-4 p-4"
+        >
+          <p className="text-xl font-bold">เอารหัสออกแล้ว ทุกคนจะเห็นต้นทุนและกำไร</p>
+          <div className="mt-3 flex gap-2">
+            <Button variant="secondary" onClick={() => setRemoving(false)} className="flex-1">
+              ไม่เอาออก
+            </Button>
+            <Button variant="danger" onClick={remove} className="flex-[1.4]">
+              เอารหัสออก
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="mt-3 flex gap-2">
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setDone(null);
+              setEditing(true);
+            }}
+            className="flex-1"
+          >
+            เปลี่ยนรหัส
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setDone(null);
+              setRemoving(true);
+            }}
+            className="flex-1"
+          >
+            เอารหัสออก
+          </Button>
+        </div>
+      )}
+
+      {error ? (
+        <p
+          role="alert"
+          className="bg-expired mt-3 rounded-xl px-4 py-3 text-lg font-bold text-white"
+        >
+          {error}
+        </p>
+      ) : null}
     </section>
   );
 }
@@ -189,10 +360,9 @@ function RestoreSection() {
             ถ้าไม่แน่ใจ สำรองข้อมูลที่อยู่ในเครื่องตอนนี้ไว้ก่อน
           </p>
           <div className="mt-2">
-            <ShareFileButton
+            <BackupFileButton
               label="สำรองข้อมูลตอนนี้ก่อน"
-              build={() => backupAsFile()}
-              onDone={() => void markBackedUp()}
+              backLabel="กลับไปตั้งค่า"
               tone="plain"
             />
           </div>

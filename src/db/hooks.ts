@@ -17,6 +17,7 @@ import { bangkokDate } from '../lib/datetime.ts';
 import { DEVICE_ID_KEY } from './device.ts';
 import { STORAGE_NOTE_KEY } from './storage-note.ts';
 import { LAST_BACKUP_KEY } from './backup.ts';
+import { loadOwnerPin } from './owner-pin.ts';
 import { loadSettings, type PosSettings } from './settings-repo.ts';
 import { loadSalesForDate, type SaleSummary } from './sale-repo.ts';
 import type { ClosedDay, DayTotals, DaySummary } from '../domain/reporting.ts';
@@ -155,6 +156,11 @@ export function useDaySummary(sessionId: string): DaySummary | null | undefined 
 export function useStorageNote(): boolean {
   const value = useLiveQuery(async () => (await db.setting.get(STORAGE_NOTE_KEY))?.value, []);
   return value === 'PENDING';
+}
+
+/** This phone's owner PIN record, or null when there is none. */
+export function useOwnerPin(): string | null | undefined {
+  return useLiveQuery(() => loadOwnerPin(db), []);
 }
 
 /** When a backup last left the phone, or null if one never has. */

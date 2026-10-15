@@ -35,6 +35,16 @@ export async function shareFile(file: File): Promise<ShareOutcome> {
 }
 
 /**
+ * Whether a backup goes to a share sheet here, or is downloaded. Chrome on
+ * Android refuses `.json` files, so on the shop phone it lands in Downloads,
+ * where anyone holding the phone can open it.
+ */
+export function sharesJsonFiles(): boolean {
+  const probe = new File(['{}'], 'backup.json', { type: 'application/json' });
+  return navigator.canShare?.({ files: [probe] }) ?? false;
+}
+
+/**
  * Hand text to the share sheet — an order to a supplier on LINE — or, where
  * there is no share sheet, or it refuses, copy it. Call it straight from the tap.
  */

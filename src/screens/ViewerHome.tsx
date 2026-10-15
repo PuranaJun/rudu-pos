@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Button } from '../components/Button.tsx';
 import SyncPanel from '../components/SyncPanel.tsx';
+import BackupCard from '../components/BackupCard.tsx';
 import { Screen, ScreenBody, ScreenFooter } from '../components/Screen.tsx';
 import { formatTHB } from '../lib/money.ts';
 import { bangkokTime, formatBangkok } from '../lib/datetime.ts';
@@ -29,8 +30,8 @@ import type { CashSession } from '../db/types.ts';
 /**
  * Home on a view-only device (CLAUDE.md §8): the shop's day as the shop phone
  * last sent it — cups, takings, the drawer, what is running low, the bills —
- * and the reports. Nothing here sells, voids or edits: this device's copy is
- * the cloud's, and only the shop phone writes.
+ * the reports, and the backup file. Nothing here sells, voids or edits: this
+ * device's copy is the cloud's, and only the shop phone writes.
  *
  * It refreshes when it is opened and on the button. Never on a timer.
  */
@@ -39,15 +40,35 @@ export default function ViewerHome() {
   const session = useOpenSession();
   const open = useNav((state) => state.open);
   const [busy, setBusy] = useState(false);
-  const [showSync, setShowSync] = useState(false);
+  const [panel, setPanel] = useState<'SYNC' | 'BACKUP' | null>(null);
+  const backHome = { label: 'กลับไปดูยอด', onClick: () => setPanel(null) };
 
-  if (showSync) {
+  if (panel === 'SYNC') {
     return (
       <Screen title="ซิงค์ออนไลน์">
         <ScreenBody>
           <SyncPanel />
         </ScreenBody>
-        <ScreenFooter back={{ label: 'กลับไปดูยอด', onClick: () => setShowSync(false) }} />
+        <ScreenFooter back={backHome} />
+      </Screen>
+    );
+  }
+
+  if (panel === 'BACKUP') {
+    // The owner's copy, saved off both phones and the cloud: the shop phone
+    // would only download it where the staff can open it (CLAUDE.md §13).
+    return (
+      <Screen title="สำรองข้อมูล">
+        <ScreenBody>
+          <p className="mt-3 text-lg font-bold">
+            ทุกอย่างของร้านเป็นไฟล์เดียว รวมต้นทุน — เก็บไว้ใน iCloud Drive หรือ Files
+            อย่าส่งเข้ากลุ่ม LINE ที่พนักงานอยู่
+          </p>
+          <div className="mt-3">
+            <BackupCard backLabel="กลับไปดูยอด" />
+          </div>
+        </ScreenBody>
+        <ScreenFooter back={backHome} />
       </Screen>
     );
   }
@@ -88,7 +109,10 @@ export default function ViewerHome() {
           <Button variant="secondary" onClick={() => open('REPORTS')} className="flex-1">
             รายงาน
           </Button>
-          <Button variant="secondary" onClick={() => setShowSync(true)} className="flex-1">
+          <Button variant="secondary" onClick={() => setPanel('BACKUP')} className="flex-1">
+            สำรอง
+          </Button>
+          <Button variant="secondary" onClick={() => setPanel('SYNC')} className="flex-1">
             ซิงค์
           </Button>
         </div>

@@ -6,6 +6,7 @@ import { buttonClass } from '../components/button.ts';
 import { Screen, ScreenBody, ScreenFooter, type BackTo } from '../components/Screen.tsx';
 import { useCart, useCostCatalog, useQueue } from '../db/hooks.ts';
 import { useNav } from '../nav/nav-store.ts';
+import { useOwnerLock } from '../nav/owner-lock.ts';
 import type { CashSession } from '../db/types.ts';
 
 /**
@@ -26,6 +27,8 @@ export default function MenuHubScreen({
   const open = useNav((state) => state.open);
   const cart = useCart();
   const dayOpen = session !== null;
+  // Said on the tile, so nobody is surprised by the PIN pad.
+  const owner = useOwnerLock().pinSet ? ['ต้องใช้รหัส'] : [];
 
   return (
     <Screen title="เมนู">
@@ -46,17 +49,17 @@ export default function MenuHubScreen({
             <Tile title="ผลิต" detail={['บันทึกของที่ทำ']} onOpen={() => open('PRODUCTION')} />
             <Tile
               title="สั่งของ"
-              detail={['แก้ว ฝา หลอด', 'ใบสั่งของ']}
+              detail={['แก้ว ฝา หลอด', 'ใบสั่งของ', ...owner]}
               onOpen={() => open('PURCHASING')}
             />
             <Tile
               title="รายงาน"
-              detail={['วันที่ผ่านมา', 'ทั้งปี']}
+              detail={['วันที่ผ่านมา', 'ทั้งปี', ...owner]}
               onOpen={() => open('REPORTS')}
             />
             <Tile
               title="ตั้งค่า"
-              detail={['เครื่องดื่ม', 'ราคา', 'สูตร']}
+              detail={['เครื่องดื่ม', 'ราคา', 'สูตร', ...owner]}
               onOpen={() => open('SETTINGS')}
             />
           </div>

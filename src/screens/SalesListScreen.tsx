@@ -9,6 +9,7 @@ import { ORDER_TYPE_TH } from '../domain/queue.ts';
 import { useCostCatalog, useSessionTotals, useSettings, useTodaySales } from '../db/hooks.ts';
 import { sessionBusinessDate } from '../db/session-repo.ts';
 import { voidSale } from '../db/stock-repo.ts';
+import { useOwnerLock } from '../nav/owner-lock.ts';
 import { loadReceipt, type Receipt } from '../db/sale-repo.ts';
 import type { CashSession } from '../db/types.ts';
 
@@ -28,6 +29,8 @@ export default function SalesListScreen({ session, back }: { session: CashSessio
   const settings = useSettings();
   const sales = useTodaySales(catalog, sessionBusinessDate(session));
   const totals = useSessionTotals(session) ?? EMPTY_DAY_TOTALS;
+  // Profit is the owner's; the staff see the day in cups, as on the sell screen.
+  const costs = useOwnerLock().open;
 
   const [voiding, setVoiding] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -68,7 +71,9 @@ export default function SalesListScreen({ session, back }: { session: CashSessio
       below={
         even ? (
           <p className="text-lg font-bold tabular-nums">
-            กำไรขั้นต้น {formatTHB(even.grossProfit)} จาก {formatTHB(even.fixedCost)}
+            {costs
+              ? `กำไรขั้นต้น ${formatTHB(even.grossProfit)} จาก ${formatTHB(even.fixedCost)}`
+              : `คุ้มทุน ${even.cups}/${even.cupsTarget} แก้ว`}
             {even.past ? ' · ผ่านจุดคุ้มทุน' : ''}
           </p>
         ) : null

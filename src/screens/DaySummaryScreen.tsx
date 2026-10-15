@@ -2,9 +2,9 @@ import { formatTHB } from '../lib/money.ts';
 import { formatQty } from '../lib/quantity.ts';
 import { bangkokWeekday } from '../lib/datetime.ts';
 import { discountLabel } from '../domain/promotions.ts';
-import { useDaySummary } from '../db/hooks.ts';
-import { backupAsFile, markBackedUp } from '../db/backup.ts';
-import ShareFileButton from '../components/ShareFileButton.tsx';
+import { useDaySummary, useSyncState } from '../db/hooks.ts';
+import BackupFileButton from '../components/BackupFileButton.tsx';
+import { useOwnerLock } from '../nav/owner-lock.ts';
 import { Screen, ScreenBody, ScreenFooter, type BackTo } from '../components/Screen.tsx';
 import type { Satang } from '../lib/money.ts';
 
@@ -13,8 +13,9 @@ interface Props {
   /** To open day straight after a close; to the list when opened from reports. */
   back: BackTo;
   /**
-   * Straight after a close: offer the day's backup, one tap. This is the
-   * routine that keeps the records alive (CLAUDE.md §13).
+   * Straight after a close: offer the day's backup, one tap — on a phone
+   * without sync, where this is the routine that keeps the records alive
+   * (CLAUDE.md §13).
    */
   promptBackup?: boolean;
 }
@@ -29,6 +30,13 @@ interface Props {
  */
 export default function DaySummaryScreen({ sessionId, back, promptBackup = false }: Props) {
   const summary = useDaySummary(sessionId);
+  // The staff close the day: they see the cups, the takings, what was thrown
+  // away and the drawer — never what any of it cost.
+  const costs = useOwnerLock().open;
+  // A shop phone that syncs sends the day to the cloud on its own; the file
+  // is for a phone that holds the only copy (CLAUDE.md §13).
+  const sync = useSyncState();
+  const offerBackup = promptBackup && sync !== undefined && sync.mode !== 'SHOP';
 
   if (!summary) {
     // Loading: the title and the way out are there from the first frame.
@@ -56,23 +64,41 @@ export default function DaySummaryScreen({ sessionId, back, promptBackup = false
           <p className="text-2xl font-bold">
             {breakeven.past ? 'ผ่านจุดคุ้มทุน' : 'ยังไม่ถึงจุดคุ้มทุน'}
           </p>
-          <p className="text-lg font-bold">
-            {breakeven.cups}/{breakeven.cupsTarget} แก้ว · กำไรขั้นต้น{' '}
-            {formatTHB(breakeven.grossProfit)} จาก {formatTHB(breakeven.fixedCost)}
-          </p>
-          <p className="text-lg font-bold">หลังหักของเสีย {formatTHB(breakeven.afterWaste)}</p>
+          {costs ? (
+            <>
+              <p className="text-lg font-bold">
+                {breakeven.cups}/{breakeven.cupsTarget} แก้ว · กำไรขั้นต้น{' '}
+                {formatTHB(breakeven.grossProfit)} จาก {formatTHB(breakeven.fixedCost)}
+              </p>
+              <p className="text-lg font-bold">หลังหักของเสีย {formatTHB(breakeven.afterWaste)}</p>
+            </>
+          ) : (
+            <p className="text-lg font-bold">
+              {breakeven.cups}/{breakeven.cupsTarget} แก้ว
+            </p>
+          )}
         </div>
 
         <dl className="mt-3 grid grid-cols-2 gap-2">
           <Figure label="ยอดขาย" value={formatTHB(totals.revenue)} />
           <Figure label="แก้ว" value={String(totals.units)} />
-          <Figure label="ต้นทุน" value={formatTHB(totals.cogs)} />
-          <Figure label="กำไรขั้นต้น" value={formatTHB(totals.grossProfit)} />
-          <Figure
-            label="ของเสีย"
-            value={formatTHB(summary.wasteCost)}
-            loud={summary.wasteCost > 0}
-          />
+          {costs ? (
+            <>
+              <Figure label="ต้นทุน" value={formatTHB(totals.cogs)} />
+              <Figure label="กำไรขั้นต้น" value={formatTHB(totals.grossProfit)} />
+              <Figure
+                label="ของเสีย"
+                value={formatTHB(summary.wasteCost)}
+                loud={summary.wasteCost > 0}
+              />
+            </>
+          ) : (
+            <Figure
+              label="ของเสีย"
+              value={summary.waste.length === 0 ? 'ไม่มี' : `${summary.waste.length} อย่าง`}
+              loud={summary.waste.length > 0}
+            />
+          )}
           <Figure
             label="เงินสด"
             value={cash ? varianceLabel(cash.variance) : '—'}
@@ -116,8 +142,8 @@ export default function DaySummaryScreen({ sessionId, back, promptBackup = false
             summary.waste.map((line) => (
               <Row
                 key={line.componentId}
-                label={`${line.name} ${formatQty(line.qty, line.unit)}`}
-                value={formatTHB(line.cost)}
+                label={costs ? `${line.name} ${formatQty(line.qty, line.unit)}` : line.name}
+                value={costs ? formatTHB(line.cost) : formatQty(line.qty, line.unit)}
               />
             ))
           )}
@@ -134,13 +160,9 @@ export default function DaySummaryScreen({ sessionId, back, promptBackup = false
       </ScreenBody>
 
       <ScreenFooter back={back}>
-        {promptBackup ? (
+        {offerBackup ? (
           <div className="mb-3">
-            <ShareFileButton
-              label="สำรองข้อมูลวันนี้"
-              build={() => backupAsFile()}
-              onDone={() => void markBackedUp()}
-            />
+            <BackupFileButton label="สำรองข้อมูลวันนี้" backLabel="กลับไปสรุปวัน" />
           </div>
         ) : null}
       </ScreenFooter>

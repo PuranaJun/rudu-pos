@@ -6,9 +6,11 @@ import ProductionScreen from '../screens/ProductionScreen.tsx';
 import ReportsScreen from '../screens/ReportsScreen.tsx';
 import SettingsScreen from '../screens/SettingsScreen.tsx';
 import CloseDayScreen from '../screens/CloseDayScreen.tsx';
+import OwnerLockScreen from '../components/OwnerLockScreen.tsx';
 import type { BackTo } from '../components/Screen.tsx';
 import type { CashSession } from '../db/types.ts';
 import { homeLabel, useNav } from './nav-store.ts';
+import { OWNER_ROUTES, useOwnerLock } from './owner-lock.ts';
 
 /**
  * The one screen open over home, if any. Rendered once, beside the home
@@ -16,14 +18,25 @@ import { homeLabel, useNav } from './nav-store.ts';
  * backup from settings does not throw the operator out of settings.
  *
  * Every screen here gets the same way out: straight home, named for where
- * home is.
+ * home is. The owner's screens wait behind the PIN pad when a PIN is set,
+ * whichever way they were opened.
  */
 export default function ScreenHost({ session }: { session: CashSession | null }) {
   const route = useNav((state) => state.route);
   const home = useNav((state) => state.home);
   const dayClosed = useNav((state) => state.dayClosed);
 
+  const lock = useOwnerLock();
+
   const back: BackTo = { label: homeLabel(session !== null), onClick: home };
+
+  const ownerScreen = route === null ? undefined : OWNER_ROUTES[route];
+  if (ownerScreen !== undefined && !lock.open) {
+    // Loading: nothing yet, rather than a flash of the costs behind the lock.
+    return lock.pin ? (
+      <OwnerLockScreen pin={lock.pin} purpose={`เปิด${ownerScreen}`} back={back} />
+    ) : null;
+  }
 
   switch (route) {
     case null:
