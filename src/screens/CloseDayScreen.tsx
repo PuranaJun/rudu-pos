@@ -18,9 +18,16 @@ import {
   type CloseLine,
   type Decision,
 } from '../domain/close-day.ts';
-import { useCart, useCostCatalog, useExpectedCash, useStockSnapshot } from '../db/hooks.ts';
+import {
+  useCart,
+  useCashMovements,
+  useCostCatalog,
+  useExpectedCash,
+  useStockSnapshot,
+} from '../db/hooks.ts';
+import { movementTotals } from '../domain/drawer.ts';
 import { closeDay } from '../db/close-repo.ts';
-import { useOwnerLock } from '../nav/owner-lock.ts';
+import { useExpectedCashShown, useOwnerLock } from '../nav/owner-lock.ts';
 import type { CashSession, WasteReason } from '../db/types.ts';
 
 interface Props {
@@ -56,8 +63,11 @@ export default function CloseDayScreen({ session, back, onClosed }: Props) {
   // With an owner PIN, a discard says what goes, not what it cost: the baht
   // on the button is the component's cost per ml, read backwards.
   const costs = useOwnerLock().open;
+  // Blind count: the drawer is counted without knowing what it should hold.
+  const cashShown = useExpectedCashShown();
   const cart = useCart();
   const expected = useExpectedCash(session);
+  const movements = useCashMovements(session);
 
   const [now] = useState(nowIso);
   const [step, setStep] = useState<'STOCK' | 'CASH'>('STOCK');
@@ -97,7 +107,9 @@ export default function CloseDayScreen({ session, back, onClosed }: Props) {
 
   const counted = countedCash(cashMode, totalText, notes);
   const variance = counted === null ? null : counted - expected;
-  const cashSales = expected - session.opening_float;
+  // Pay-ins and pay-outs are in expected; taken back out, what is left is the sales.
+  const { paidIn, paidOut } = movementTotals(session, movements ?? []);
+  const cashSales = expected - session.opening_float - paidIn + paidOut;
 
   const change = (batchId: string, patch: Override) =>
     setOverrides((current) => ({ ...current, [batchId]: { ...current[batchId], ...patch } }));
@@ -241,15 +253,36 @@ export default function CloseDayScreen({ session, back, onClosed }: Props) {
                 <dt>เงินทอนเริ่มต้น</dt>
                 <dd className="tabular-nums">{formatTHB(session.opening_float)}</dd>
               </div>
-              <div className="flex justify-between">
-                <dt>ขายเงินสด</dt>
-                <dd className="tabular-nums">{formatTHB(cashSales)}</dd>
-              </div>
-              <div className="flex items-baseline justify-between text-2xl font-bold">
-                <dt>ควรมี</dt>
-                <dd className="tabular-nums">{formatTHB(expected)}</dd>
-              </div>
+              {cashShown ? (
+                <div className="flex justify-between">
+                  <dt>ขายเงินสด</dt>
+                  <dd className="tabular-nums">{formatTHB(cashSales)}</dd>
+                </div>
+              ) : null}
+              {paidIn > 0 ? (
+                <div className="flex justify-between">
+                  <dt>เอาเข้าลิ้นชัก</dt>
+                  <dd className="tabular-nums">+{formatTHB(paidIn)}</dd>
+                </div>
+              ) : null}
+              {paidOut > 0 ? (
+                <div className="flex justify-between">
+                  <dt>จ่ายออกจากลิ้นชัก</dt>
+                  <dd className="tabular-nums">−{formatTHB(paidOut)}</dd>
+                </div>
+              ) : null}
+              {cashShown ? (
+                <div className="flex items-baseline justify-between text-2xl font-bold">
+                  <dt>ควรมี</dt>
+                  <dd className="tabular-nums">{formatTHB(expected)}</dd>
+                </div>
+              ) : null}
             </dl>
+            {cashShown ? null : (
+              <p className="bg-paper-sunk mt-2 rounded-xl px-4 py-2 text-lg font-bold">
+                นับเงินทั้งหมดในลิ้นชักแล้วใส่ยอด — เจ้าของดูผลต่างเอง
+              </p>
+            )}
 
             <div className="mt-4 flex gap-2" role="group" aria-label="วิธีนับ">
               {(
@@ -318,7 +351,7 @@ export default function CloseDayScreen({ session, back, onClosed }: Props) {
               role="status"
               aria-label="ผลต่าง"
               className={`mt-4 rounded-xl px-4 py-3 ${
-                variance === null
+                variance === null || !cashShown
                   ? 'border-ink-soft border-2 border-dashed'
                   : variance === 0
                     ? 'bg-brand-2 text-white'
@@ -331,11 +364,13 @@ export default function CloseDayScreen({ session, back, onClosed }: Props) {
               <p className="text-3xl font-bold">
                 {variance === null
                   ? 'ยังไม่ได้นับ'
-                  : variance === 0
-                    ? 'ตรง'
-                    : variance < 0
-                      ? `ขาด ${formatTHB(-variance)}`
-                      : `เกิน ${formatTHB(variance)}`}
+                  : !cashShown
+                    ? 'นับแล้ว'
+                    : variance === 0
+                      ? 'ตรง'
+                      : variance < 0
+                        ? `ขาด ${formatTHB(-variance)}`
+                        : `เกิน ${formatTHB(variance)}`}
               </p>
             </div>
 

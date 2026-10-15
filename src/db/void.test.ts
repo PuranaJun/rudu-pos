@@ -184,6 +184,8 @@ describe('three sales, one voided', () => {
       created_at: before!.created_at,
       is_voided: true,
       void_reason: 'กดผิด',
+      // When, for the owner's void log.
+      voided_at: NOW,
     });
     expect(await db.sale_line.where('sale_id').equals(saleId).count()).toBe(1);
   });

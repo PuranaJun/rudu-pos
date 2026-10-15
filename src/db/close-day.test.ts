@@ -225,6 +225,8 @@ describe('a full day', () => {
     // 1,800 counted against 1,817 expected: 17 short, recorded, not refused.
     expect(summary.cash).toEqual({
       openingFloat: 150_000,
+      paidIn: 0,
+      paidOut: 0,
       expected: 181_700,
       counted: 180_000,
       variance: -1_700,

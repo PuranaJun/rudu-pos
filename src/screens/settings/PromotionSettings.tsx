@@ -15,7 +15,8 @@ import { parseNumber } from '../../lib/number.ts';
 import { WEEKDAY_TH } from '../../domain/period-report.ts';
 import { promotionSummary } from '../../domain/promotions.ts';
 import type { CostCatalog } from '../../domain/cost.ts';
-import type { Promotion, PromotionActivation, PromotionKind } from '../../db/types.ts';
+import { isRemovedVariant } from '../../domain/removal.ts';
+import type { OrderType, Promotion, PromotionActivation, PromotionKind } from '../../db/types.ts';
 import { blankPromotion, savePromotion } from '../../db/promotion-repo.ts';
 import { AddButton } from './shared.tsx';
 import { problemsOf } from './problems.ts';
@@ -23,7 +24,12 @@ import { problemsOf } from './problems.ts';
 const KINDS: readonly (readonly [PromotionKind, string])[] = [
   ['AMOUNT_OFF', 'ลดเป็นบาท'],
   ['PERCENT_OFF', 'ลดเป็น %'],
+  ['FIXED_PRICE', 'ขายราคาเดียว'],
   ['BUY_X_GET_Y', 'ซื้อ X แถม Y'],
+];
+const ORDER_TYPES: readonly (readonly [OrderType, string])[] = [
+  ['DINE_IN', 'ทานที่ร้าน'],
+  ['TAKEAWAY', 'กลับบ้าน'],
 ];
 const ACTIVATIONS: readonly (readonly [PromotionActivation, string])[] = [
   ['AUTO', 'อัตโนมัติตามวันเวลา'],
@@ -112,7 +118,7 @@ function PromotionEditor({
   back: BackTo;
 }) {
   const drinks = [...catalog.variants.values()]
-    .filter((variant) => variant.is_active)
+    .filter((variant) => variant.is_active && !isRemovedVariant(catalog, variant))
     .sort((a, b) => {
       const pa = catalog.products.get(a.product_id)?.sort_order ?? 0;
       const pb = catalog.products.get(b.product_id)?.sort_order ?? 0;
@@ -133,6 +139,7 @@ function PromotionEditor({
   const [from, setFrom] = useState(promotion.hours_from ?? '');
   const [to, setTo] = useState(promotion.hours_to ?? '');
   const [stacks, setStacks] = useState(promotion.stacks_with_two_cup);
+  const [orderTypes, setOrderTypes] = useState<OrderType[]>(promotion.order_types ?? []);
   const [active, setActive] = useState(promotion.is_active);
   const [problems, setProblems] = useState<string[]>([]);
   const form = useDirty({
@@ -150,13 +157,15 @@ function PromotionEditor({
     from,
     to,
     stacks,
+    orderTypes,
     active,
   });
 
   const toggle = <T,>(list: T[], item: T) =>
     list.includes(item) ? list.filter((x) => x !== item) : [...list, item];
 
-  function save(): Promise<boolean> {
+  /** The promotion as it stands on screen — saved as is, and summed up live above. */
+  function draft(): Promotion {
     const amountSatang = parseBaht(amount);
     const numbers = {
       percent: parseNumber(percent),
@@ -164,7 +173,7 @@ function PromotionEditor({
       free: parseNumber(free),
     };
     const auto = activation === 'AUTO';
-    const next: Promotion = {
+    return {
       ...promotion,
       name_th: name,
       kind,
@@ -180,9 +189,14 @@ function PromotionEditor({
       hours_from: auto ? from || null : null,
       hours_to: auto ? to || null : null,
       stacks_with_two_cup: stacks,
+      // Both chosen is the same as neither: every order.
+      order_types: orderTypes.length === ORDER_TYPES.length ? [] : orderTypes,
       is_active: active,
     };
-    return savePromotion(next).then(
+  }
+
+  function save(): Promise<boolean> {
+    return savePromotion(draft()).then(
       () => {
         setProblems([]);
         form.markSaved();
@@ -204,10 +218,36 @@ function PromotionEditor({
       dirty={form.dirty}
       justSaved={form.justSaved}
     >
+      {/* Read back in one line before saving: a typo in a price is caught here,
+          not by a customer at the counter. */}
+      <p
+        role="status"
+        aria-label="สรุป"
+        className="bg-paper-sunk mt-3 rounded-xl px-4 py-3 text-lg font-bold"
+      >
+        สรุป:{' '}
+        {promotionSummary(catalog, draft())
+          .split(' · ')
+          .map((phrase, index) => (
+            // Each phrase whole on a line: Thai has no spaces to break at.
+            <span key={phrase}>
+              {index > 0 ? ' · ' : null}
+              <span className="whitespace-nowrap">{phrase}</span>
+            </span>
+          ))}
+      </p>
       <TextField label="ชื่อโปรโมชั่น" value={name} onChange={setName} hint="ขึ้นบนบิลและใบเสร็จ" />
       <Choice label="แบบ" value={kind} options={KINDS} onChange={setKind} />
       {kind === 'AMOUNT_OFF' ? (
         <NumberField label="ลดแก้วละ" value={amount} onChange={setAmount} suffix="บาท" />
+      ) : kind === 'FIXED_PRICE' ? (
+        <NumberField
+          label="ขายแก้วละ"
+          value={amount}
+          onChange={setAmount}
+          suffix="บาท"
+          hint="ราคาเครื่องดื่ม · ท็อปปิ้งยังคิดเพิ่มตามปกติ · แก้วที่ถูกกว่านี้อยู่แล้วไม่ลด"
+        />
       ) : kind === 'PERCENT_OFF' ? (
         <NumberField label="ลดแก้วละ" value={percent} onChange={setPercent} suffix="%" />
       ) : (
@@ -270,6 +310,22 @@ function PromotionEditor({
           เปิดได้ที่หน้าเปิดร้าน ใช้ได้วันนั้นวันเดียว
         </p>
       )}
+
+      <div className="mt-3" role="group" aria-label="ใช้กับการสั่ง">
+        <span className="text-lg font-bold">ใช้กับการสั่ง</span>
+        <div className="mt-1 flex flex-wrap gap-2">
+          {ORDER_TYPES.map(([type, label]) => (
+            <ChoiceChip
+              key={type}
+              selected={orderTypes.includes(type)}
+              onClick={() => setOrderTypes((current) => toggle(current, type))}
+            >
+              {label}
+            </ChoiceChip>
+          ))}
+        </div>
+        <span className="text-ink-soft block text-base font-bold">ไม่เลือก = ทั้งสองแบบ</span>
+      </div>
 
       <Toggle label="ใช้ร่วมกับส่วนลด 2 แก้ว" value={stacks} onChange={setStacks} />
       <Toggle label="เปิดใช้โปรนี้" value={active} onChange={setActive} />

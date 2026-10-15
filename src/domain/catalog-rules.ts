@@ -69,6 +69,7 @@ export function checkBomRow(row: Bom, others: readonly Bom[]): string[] {
     others.some(
       (other) =>
         other.id !== row.id &&
+        !other.removed_at &&
         other.variant_id === row.variant_id &&
         other.component_id === row.component_id,
     )

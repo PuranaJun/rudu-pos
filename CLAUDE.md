@@ -99,7 +99,7 @@ Cutting a slab is an **explicit action that records grams cut**, so the uncut re
 | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `PROMO_TWO_CUP`   | 10 THB off per pair of qualifying **drinks** in one transaction: `floor(qty/2) × 10`. Bottles excluded. Free/0 THB loyalty lines do **not** qualify. **Applies automatically** — the operator will forget, and a forgotten discount is a complaint.                  |
 | `PROMO_RAINY_DAY` | Hot pear 59 → 54. **Manually toggled by the operator. Never date-automated.** `VAR_PEAR_HOT` only.                                                                                                                                                                   |
-| `PROMO_CUSTOM`    | The owner's own promotions, rows in settings: **฿ off / % off per cup, or buy X get Y** (cheapest cups free), on chosen drinks (none chosen = every drink, never a bottle). Either **AUTO** on a schedule (dates, weekdays, hours — Bangkok clock) or **MANUAL**: switched on at open day for that day only, reset every morning like the rainy day. **Applies automatically — never a tap on the sale.** Order: a given-away line is untouched; each cup gets the **single best** per-cup offer (rainy day included, never two); buy-X-get-Y next; `PROMO_TWO_CUP` on top unless the promotion says it does not combine. Free cups never count towards a pair. Each discount stores `promotion_id` and a **snapshot of the promotion's name**. |
+| `PROMO_CUSTOM`    | The owner's own promotions, rows in settings: **฿ off / % off per cup, a set price per cup** (the drink's own price; paid toppings still charged; a cheaper drink is left alone), **or buy X get Y** (cheapest cups free), on chosen drinks (none chosen = every drink, never a bottle), optionally **dine-in only or takeaway only** (read from the cart's remembered order-type toggle — never a question). Either **AUTO** on a schedule (dates, weekdays, hours — Bangkok clock) or **MANUAL**: switched on at open day for that day only, reset every morning like the rainy day. **Applies automatically — never a tap on the sale.** Order: a given-away line is untouched; each cup gets the **single best** per-cup offer (rainy day included, never two); buy-X-get-Y next; `PROMO_TWO_CUP` on top unless the promotion says it does not combine. Free cups never count towards a pair. Each discount stores `promotion_id` and a **snapshot of the promotion's name**. |
 | `LOYALTY_STAMP`   | Physical paper punch card. Buy 10 get 1 free, one stamp per drink. **Do not build customer accounts, phone capture or a CRM.** The POS only rings the free drink at 0 THB: it **counts as a unit, deducts components, lands in COGS, and is excluded from revenue.** |
 
 **Every discounted or zero-price line must record a reason code:** `PROMO_TWO_CUP`, `PROMO_RAINY_DAY`, `PROMO_CUSTOM` (with its promotion), `LOYALTY_REDEEM`, `STAFF_DRINK`, `COMP_GOODWILL`. Without a reason, shrinkage and generosity are indistinguishable.
@@ -155,6 +155,8 @@ Pick component → quantity (defaults from the catalog) → made-at time. `ready
 Per component: how much is left → **carry over** (within shelf life) or **discard** → count cash → record variance → day summary.
 Same-day components (`CUT` jelly, Pile B pear, basil seed) **default to discarded and must be one tap**.
 
+**Cash in and out of the drawer** that is not a sale (เมนู → ลิ้นชัก, never on the sell path, never behind the PIN): the ice bought from the till, change topped up, the owner taking money out. A `cash_movement` row with a reason; **expected cash = float + cash sales + paid in − paid out**. Money only: what the cash bought is costed where it is used (ice is in each cup's packaging), never as a second expense. A mistake is cancelled (`voided_at`), never deleted.
+
 ### 6.5 Purchase orders
 
 Recording what the shop buys from suppliers (tea leaves, pears, sugar, cups, lids):
@@ -185,6 +187,7 @@ The owner does not sell; the staff do, and they must not see what things cost. S
 - **Never behind it:** selling, the queue, production, open day, counting the drawer. **Selling never asks for it.**
 - The gate is in `ScreenHost` (`OWNER_ROUTES`) and `useOwnerLock().open` (`src/nav/owner-lock.ts`). **Any new cost or profit figure on a staff screen must check it.**
 - Unlocked until going home, or the app away for over a minute (a listener, not a timer).
+- **Blind count** (Settings → ร้าน, off by default): with a PIN set, staff screens hide what the drawer should hold — the sell screen's drawer figure, expected cash, cash sales and the variance at close and in the day summary. Staff count without knowing the answer; the owner sees it unlocked or on the view-only phone. Checked through `useExpectedCashShown()`.
 - **The PIN belongs to the phone:** not synced (the owner's view-only phone sees everything), not in backup files, kept on restore. Stored as salt + SHA-256. **No reset, by the owner's choice.**
 - It is a curtain, not a safe: the phone holds the costs to compute COGS offline, and a backup file contains them. **On the Samsung a backup file is downloaded into the Downloads folder, where staff can open it** — the app says so before the owner saves one there (§13).
 
@@ -206,7 +209,7 @@ The owner does not sell; the staff do, and they must not see what things cost. S
 - **Prep reminders**: "start red tea steeping by 21:00 to be ready tomorrow" (10 h and 12–14 h lead times).
 - Average basket size — tests whether the 2-cup discount works.
 
-**Built (reports screen, period = 7 days · 30 days · this month · last month):** totals, average per trading day and per bill, best sellers by variant, revenue per weekday **averaged over the days traded on it**, cups by Bangkok hour, paid-topping attach rate against 1 in 3, waste % per component (`wasted ÷ (used in sales + wasted)`) against 10%, dine-in/takeaway and cash/PromptPay splits. Labelled bar lists with the number beside each bar — no hover-only information, no colour-only meaning. Everything computed from records each time; a period report must agree with the sum of its closed days.
+**Built (reports screen, period = 7 days · 30 days · this month · last month):** totals, average per trading day and per bill, best sellers by variant, revenue per weekday **averaged over the days traded on it**, cups by Bangkok hour, paid-topping attach rate against 1 in 3, waste % per component (`wasted ÷ (used in sales + wasted)`) against 10%, dine-in/takeaway and cash/PromptPay splits, **count gap** per component (open-day and close-day counts against what the recipes say should be left — `ADJUSTMENT` movements; short = over-pouring, spills or cups never rung), and the **void log** (every voided bill: who, why, when rung, when voided, per operator). Any custom date range as well as the presets, and any past bill found by date + order number. Labelled bar lists with the number beside each bar — no hover-only information, no colour-only meaning. Everything computed from records each time; a period report must agree with the sum of its closed days.
 
 > **The financial risk is product thrown away, not cost per cup.** Breakeven is 10 cups/day and gross margin is ~81%; a day cannot realistically lose money on margin. It loses money on a batch that did not sell. Waste reporting matters more than margin reporting.
 
@@ -218,16 +221,16 @@ Offline-friendly. Every row carries a **client-generated UUID** and a nullable `
 
 ```
 product          id, name_full_th, name_short_th, name_en, base_price,
-                 advisory_th, is_active, sort_order
+                 advisory_th, is_active, sort_order, removed_at?, sold_out_on?
 variant          id, product_id, name_th, temp (ICED|HOT), price_override,
                  packaging_set_id, is_active
 component        id, name_th, unit (ML|G), default_batch_qty, yield_cups,
                  shelf_life_hours, cut_shelf_life_hours, lead_time_hours,
                  cost_per_unit, lifecycle (SIMPLE|STEEP|SOAK_BLANCH|SLAB_CUT),
-                 recipe_note_th, is_batch_tracked
-bom              id, variant_id, component_id, qty_per_cup      -- VARIANT-level
+                 recipe_note_th, is_batch_tracked, removed_at?
+bom              id, variant_id, component_id, qty_per_cup, removed_at?  -- VARIANT-level
 packaging_set    id, name, items[] {packaging_item_id, qty}
-packaging_item   id, name_th, unit_cost, is_stock_tracked, reorder_at?
+packaging_item   id, name_th, unit_cost, is_stock_tracked, reorder_at?, removed_at?
 modifier         id, name_th, price_delta, is_paid, kind (PAID|PREP),
                  applies_to_variant_ids[], component_id?, qty_per_cup?,
                  cost_delta, advisory_th, sort_order
@@ -237,15 +240,15 @@ sale             id, created_at, business_date, operator_id, total_gross,
                  total_discount, total_net, total_cost,
                  payment_method (CASH|PROMPTPAY), cash_received, cash_change,
                  order_no, order_type (TAKEAWAY|DINE_IN), handed_over_at?,
-                 is_voided, void_reason, device_id, synced_at
+                 is_voided, void_reason, voided_at?, device_id, synced_at
 sale_line        id, sale_id, variant_id, qty, unit_price, line_discount,
                  discount_reason, unit_cost
 sale_line_mod    id, sale_line_id, modifier_id, price_delta, cost_delta
 sale_line_discount id, sale_line_id, reason, amount, promotion_id?, label?
-promotion        id, name_th, kind (AMOUNT_OFF|PERCENT_OFF|BUY_X_GET_Y), amount,
+promotion        id, name_th, kind (AMOUNT_OFF|PERCENT_OFF|FIXED_PRICE|BUY_X_GET_Y), amount,
                  percent, buy_qty, free_qty, variant_ids[], activation (AUTO|MANUAL),
                  manual_on, starts_on?, ends_on?, weekdays[], hours_from?, hours_to?,
-                 stacks_with_two_cup, is_active, sort_order
+                 stacks_with_two_cup, order_types[]?, is_active, sort_order
 stock_movement   id, sale_line_id?, component_batch_id, qty_delta,
                  reason (SALE|PRODUCTION|WASTE|ADJUSTMENT|OVERRIDE|VOID_REVERSAL)
 packaging_movement id, packaging_item_id, qty_delta,
@@ -255,6 +258,8 @@ waste_event      id, component_batch_id, qty_discarded, reason
                  (EXPIRED|END_OF_DAY_PERISHABLE|QUALITY|SPILLAGE), recorded_at, note
 cash_session     id, opened_at, closed_at, operator_id, opening_float,
                  expected_cash, counted_cash, variance, note
+cash_movement    id, cash_session_id, created_at, direction (IN|OUT), amount,
+                 reason (ICE|SUPPLIES|CHANGE|OWNER|OTHER), note, operator_id, voided_at?
 supplier         id, name, contact_note, is_active
 purchase_item    id, name_th, unit, pack_size?, packaging_item_id?,
                  default_supplier_id?, last_unit_cost?, is_active
@@ -271,6 +276,7 @@ setting          key, value
 - **One writer:** the **shop phone** sends; any other device with the shop's key is **view-only** (`ViewerHome`: today's figures, cups left, packaging warnings, bills, reports, and **saving a backup file** of its full copy — nothing that writes to the shop's records). A new phone can **replace** the shop phone by taking everything from the cloud (refused if it already has sales). **Two selling devices is not built** — it needs a shared session and drawer.
 - **Two keys, enforced by the server:** the **shop key** (sends, fetches, rotates; stored only as SHA-256) stays on the shop phone; the **view key** is the one shared (`#pair=` link or typed) and the server refuses it anything that writes (403). Rotating replaces both and locks out every viewer. Taking over as the shop phone needs the shop key. **Setup itself needs `SYNC_SETUP_CODE`**, a Cloudflare secret the owner sets — no first-come claiming of the shop. **Backup files never contain `sync_*` settings** (the shop key would travel through LINE/iCloud), and a restore keeps the phone's own.
 - **Change tracking** is in the database's own hooks: every write sets `sync_dirty = 1` (indexed) and bumps `sync_rev`; a send clears the flag only if the rev did not move meanwhile. Writes that came from the cloud, and a backup restore, are applied without marking.
+- **Nothing is ever deleted from a synced table.** Sync sends rows, never deletions: a deleted row lives on in the cloud and on every view-only phone. Removing a drink, component, packaging item or recipe line sets `removed_at` — off everywhere, listed only under ลบแล้ว (restorable), still there for the history that names it. Removal is refused while something still uses the thing, naming what (`src/domain/removal.ts`). A new synced table goes in its own Dexie version (`ADDED_SYNCED` in `database.ts`); a past version never changes shape.
 - **Never synced:** the open cart, and this phone's own settings (`device_id`, storage note, last backup, order type, the owner PIN, the sync settings themselves).
 - **Triggers, never a loop (§1):** a change arms **one** send 15 s later (re-armed by the next change); opening the app or getting signal back does one round; and a button. **Nothing on the sell path imports sync** (`src/test/no-network.test.ts` enforces it, and that only `src/sync/sync-client.ts` touches the network).
 
@@ -295,6 +301,7 @@ The pair **แดง / ขาว** (red / white) encodes the tea base. Keep both
 | Situation                           | Required behaviour                                                                                                     |
 | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
 | Component hits zero mid-service     | Affected drinks **sold out**, greyed out, override allowed and recorded                                                |
+| Something untracked runs out        | เมนู → หมดวันนี้: the drink is sold out for that **business date** only (`sold_out_on`), override still allowed and recorded; back the next day with no reset |
 | Sale rung against an expired batch  | Warn prominently, allow override, record it                                                                            |
 | Jelly slab not yet cut at open      | Drink **not sellable** until the cut action runs — prompt on open-day                                                  |
 | Two active batches of one component | **FEFO**; show combined remaining                                                                                      |

@@ -9,12 +9,14 @@ import PackagingBanner from '../components/PackagingBanner.tsx';
 import { Button, ChoiceChip } from '../components/Button.tsx';
 import MenuButton from '../nav/MenuButton.tsx';
 import { useNav } from '../nav/nav-store.ts';
+import { useExpectedCashShown } from '../nav/owner-lock.ts';
 import { formatTHB } from '../lib/money.ts';
 import { defaultVariantOf } from '../domain/cart.ts';
 import { unitPrice } from '../domain/cost.ts';
 import { discountLabel } from '../domain/promotions.ts';
 import { breakeven, EMPTY_DAY_TOTALS } from '../domain/reporting.ts';
 import { availableCups } from '../domain/stock.ts';
+import { soldOutToday } from '../domain/sold-out.ts';
 import { prepReminders } from '../domain/production.ts';
 import { ORDER_TYPE_TH } from '../domain/queue.ts';
 import { packagingWarnings } from '../domain/packaging.ts';
@@ -84,6 +86,7 @@ export default function SellScreen({ session }: { session: CashSession }) {
   const queue = useQueue(catalog, session);
   const packaging = usePackagingStock(catalog);
   const open = useNav((state) => state.open);
+  const cashShown = useExpectedCashShown();
 
   const [pendingSoldOut, setPendingSoldOut] = useState<Product | null>(null);
   // Only PromptPay has a screen of its own: cash completes from the footer.
@@ -127,6 +130,15 @@ export default function SellScreen({ session }: { session: CashSession }) {
   function stockFor(product: Product) {
     const variant = defaultVariantOf(catalog!, product.id);
     if (!variant) return { cups: 0, limitingComponentName: null, variantId: null, price: 0 };
+    // Taken off for the day by hand: out, whatever the stock says.
+    if (soldOutToday(product, businessDate)) {
+      return {
+        cups: 0,
+        limitingComponentName: null,
+        variantId: variant.id,
+        price: unitPrice(catalog!, variant.id),
+      };
+    }
 
     const { cups, limitingComponentId } = availableCups(catalog!, stock!, variant.id);
     const limiting = limitingComponentId ? catalog!.components.get(limitingComponentId) : undefined;
@@ -218,9 +230,14 @@ export default function SellScreen({ session }: { session: CashSession }) {
             <span className="text-2xl font-bold tabular-nums">{formatTHB(today.revenue)}</span>
           </p>
           <p className="flex flex-wrap items-center justify-between gap-x-2 text-lg font-bold">
-            <span className="tabular-nums">
-              ลิ้นชัก {drawer === undefined ? '—' : formatTHB(drawer)}
-            </span>
+            {/* Under the owner's blind count, staff do not see what it should hold. */}
+            {cashShown ? (
+              <span className="tabular-nums">
+                ลิ้นชัก {drawer === undefined ? '—' : formatTHB(drawer)}
+              </span>
+            ) : (
+              <span />
+            )}
             <span
               className={`rounded-lg px-2 tabular-nums ${even.past ? 'bg-brand-2 text-white' : ''}`}
             >
@@ -291,6 +308,7 @@ export default function SellScreen({ session }: { session: CashSession }) {
                     cups={info.cups}
                     limitingComponentName={info.limitingComponentName}
                     colorVar={MENU_COLORS[index % MENU_COLORS.length]!}
+                    outNote={soldOutToday(product, businessDate) ? 'ปิดไว้วันนี้' : null}
                     size={compact ? 'compact' : 'large'}
                     onTap={() => tapProduct(product)}
                   />
@@ -309,6 +327,7 @@ export default function SellScreen({ session }: { session: CashSession }) {
                 cups={info.cups}
                 limitingComponentName={info.limitingComponentName}
                 colorVar="--color-bottle"
+                outNote={soldOutToday(product, businessDate) ? 'ปิดไว้วันนี้' : null}
                 size="small"
                 onTap={() => tapProduct(product)}
               />

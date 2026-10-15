@@ -14,6 +14,7 @@ import { numberText, parseNumber } from '../../lib/number.ts';
 import { bahtInput, formatTHB, parseBaht } from '../../lib/money.ts';
 import { unitLabel } from '../../lib/quantity.ts';
 import type { CostCatalog } from '../../domain/cost.ts';
+import { isRemoved, isRemovedVariant } from '../../domain/removal.ts';
 import { createModifier, saveModifier } from '../../db/catalog-repo.ts';
 import type { ComponentRole, Modifier, ModifierKind } from '../../db/types.ts';
 import { AddButton } from './shared.tsx';
@@ -111,11 +112,13 @@ function ModifierEditor({
   modifier: Modifier;
   back: BackTo;
 }) {
-  const variants = [...catalog.variants.values()].sort((a, b) =>
-    a.name_th.localeCompare(b.name_th, 'th'),
-  );
-  const components = [...catalog.components.values()].sort((a, b) => a.sort_order - b.sort_order);
-  const items = [...catalog.packagingItems.values()];
+  const variants = [...catalog.variants.values()]
+    .filter((variant) => !isRemovedVariant(catalog, variant))
+    .sort((a, b) => a.name_th.localeCompare(b.name_th, 'th'));
+  const components = [...catalog.components.values()]
+    .filter((component) => !isRemoved(component))
+    .sort((a, b) => a.sort_order - b.sort_order);
+  const items = [...catalog.packagingItems.values()].filter((item) => !isRemoved(item));
 
   const [name, setName] = useState(modifier.name_th);
   const [kind, setKind] = useState<ModifierKind>(modifier.kind);

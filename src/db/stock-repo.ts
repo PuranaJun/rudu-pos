@@ -93,7 +93,7 @@ export async function voidSale(
       await db.packaging_movement.bulkAdd(
         reversePackaging(lineIds, await db.packaging_movement.toArray(), now),
       );
-      await db.sale.update(saleId, { is_voided: true, void_reason: reason });
+      await db.sale.update(saleId, { is_voided: true, void_reason: reason, voided_at: now });
 
       return reversals;
     },

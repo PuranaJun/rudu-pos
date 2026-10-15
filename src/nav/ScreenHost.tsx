@@ -1,6 +1,8 @@
 import MenuHubScreen from '../screens/MenuHubScreen.tsx';
 import SalesListScreen from '../screens/SalesListScreen.tsx';
 import QueueScreen from '../screens/QueueScreen.tsx';
+import DrawerScreen from '../screens/DrawerScreen.tsx';
+import SoldOutScreen from '../screens/SoldOutScreen.tsx';
 import PurchasingScreen from '../screens/PurchasingScreen.tsx';
 import ProductionScreen from '../screens/ProductionScreen.tsx';
 import ReportsScreen from '../screens/ReportsScreen.tsx';
@@ -47,6 +49,10 @@ export default function ScreenHost({ session }: { session: CashSession | null })
       return session ? <SalesListScreen session={session} back={back} /> : null;
     case 'QUEUE':
       return session ? <QueueScreen session={session} back={back} /> : null;
+    case 'DRAWER':
+      return session ? <DrawerScreen session={session} back={back} /> : null;
+    case 'SOLD_OUT':
+      return session ? <SoldOutScreen session={session} back={back} /> : null;
     case 'PRODUCTION':
       return <ProductionScreen back={back} />;
     case 'PURCHASING':

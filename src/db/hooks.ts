@@ -29,8 +29,9 @@ import {
 } from './report-repo.ts';
 import type { PeriodRange, PeriodReport } from '../domain/period-report.ts';
 import { loadDaySummary, loadExpectedCash } from './close-repo.ts';
+import { sessionMovements } from './drawer-repo.ts';
 import { lastOperator, loadOpenSession } from './session-repo.ts';
-import type { CashSession } from './types.ts';
+import type { CashMovement, CashSession } from './types.ts';
 import { loadQueue, type Queue } from './queue-repo.ts';
 import { loadPurchasing, type Purchasing } from './purchase-repo.ts';
 import { loadSyncState, pendingCount, type SyncState } from '../sync/sync-client.ts';
@@ -145,6 +146,11 @@ export function useLastOperator(): string | null | undefined {
 /** What should be in the drawer, live — moves with every cash sale and void. */
 export function useExpectedCash(session: CashSession): number | undefined {
   return useLiveQuery(() => loadExpectedCash(session, db), [session]);
+}
+
+/** This session's pay-ins and pay-outs, cancelled ones included. */
+export function useCashMovements(session: CashSession): CashMovement[] | undefined {
+  return useLiveQuery(() => sessionMovements(session.id, db), [session.id]);
 }
 
 /** A day's report by its session: null if there is no such session. */

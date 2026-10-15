@@ -12,8 +12,9 @@
  * - anything missing is created;
  * - a product, variant or component that is no longer on the menu is
  *   switched off, a modifier is taken off every drink; none is removed;
- * - a recipe line that is no longer in a recipe is removed. Nothing points at
- *   a BOM row: each sale line carries its own cost snapshot (CLAUDE.md §2.1.8).
+ * - a recipe line that is no longer in a recipe is marked removed. Nothing
+ *   points at a BOM row — each sale line carries its own cost snapshot
+ *   (CLAUDE.md §2.1.8) — but the cloud has to hear that it went.
  *
  * Runs inside the caller's transaction, over the tables in RECIPE_UPDATE_TABLES.
  */
@@ -299,15 +300,19 @@ export async function applyRecipeUpdate(db: RuduPosDB): Promise<void> {
   for (const row of bom) {
     if (
       recipeVariants.has(row.variant_id) &&
-      !wanted.has(`${row.variant_id}:${row.component_id}`)
+      !wanted.has(`${row.variant_id}:${row.component_id}`) &&
+      !row.removed_at
     ) {
-      await db.bom.delete(row.id);
+      // Marked, not deleted, so the cloud hears it went (Removable, types.ts).
+      await db.bom.update(row.id, { removed_at: new Date().toISOString() });
     }
   }
   for (const target of targetBom) {
     const key = `${target.variant_id}:${target.component_id}`;
     const row = existingByKey.get(key);
-    if (row) {
+    if (row?.removed_at) {
+      await db.bom.update(row.id, { removed_at: null, qty_per_cup: target.qty_per_cup });
+    } else if (row) {
       if (!keepQty.has(key)) await db.bom.update(row.id, { qty_per_cup: target.qty_per_cup });
     } else {
       await db.bom.add(target);

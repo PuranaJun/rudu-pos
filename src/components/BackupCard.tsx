@@ -61,6 +61,10 @@ export default function BackupCard({
             ข้อมูลถึง {sync.lastFetched ? formatBangkok(sync.lastFetched) : '—'}
           </span>
         ) : null}
+        {/* Waiting with a reason is not the same as waiting for signal: say which. */}
+        {shop && pending > 0 && sync.error ? (
+          <span className="block">ส่งครั้งล่าสุดไม่สำเร็จ: {sync.error}</span>
+        ) : null}
         <span className="block">
           {lastBackup === null
             ? shop

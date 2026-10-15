@@ -244,3 +244,67 @@ describe('when a promotion runs', () => {
     ).toBe(0);
   });
 });
+
+describe('a set price', () => {
+  const happyHour = promotion({ kind: 'FIXED_PRICE', amount: 4_500, name_th: 'ทุกแก้ว 45' });
+
+  it('sells the drink at the set price, toppings still on top', () => {
+    const cart = applyPromotions(
+      catalogWith(happyHour),
+      OFF,
+      [
+        line('VAR_PEAR_ICED', 1, 5_900),
+        // A 59 pear with a ฿10 topping: the drink drops to 45, the topping stays.
+        { ...line('VAR_PEAR_ICED', 1, 6_900), basePrice: 5_900 },
+      ],
+      TUESDAY_10AM,
+    );
+    expect(cart.lines.map((l) => l.net)).toEqual([4_500, 5_500]);
+    expect(cart.byReason).toEqual([
+      { reason: 'PROMO_CUSTOM', promotionId: 'P1', label: 'ทุกแก้ว 45', amount: 2_800 },
+    ]);
+  });
+
+  it('leaves a drink already cheaper than the set price alone', () => {
+    const cart = applyPromotions(
+      catalogWith(happyHour),
+      OFF,
+      [line('VAR_TAMARIND_ICED', 1, 4_000)],
+      TUESDAY_10AM,
+    );
+    expect(cart.totalDiscount).toBe(0);
+  });
+});
+
+describe('a promotion kept to one order type', () => {
+  const dineIn = promotion({ order_types: ['DINE_IN'], name_th: 'นั่งร้านลด 10' });
+
+  it('applies to dine-in only', () => {
+    const lines = [line('VAR_TAMARIND_ICED', 1, 4_000)];
+    const here = applyPromotions(
+      catalogWith(dineIn),
+      { ...OFF, orderType: 'DINE_IN' },
+      lines,
+      TUESDAY_10AM,
+    );
+    const away = applyPromotions(
+      catalogWith(dineIn),
+      { ...OFF, orderType: 'TAKEAWAY' },
+      lines,
+      TUESDAY_10AM,
+    );
+    expect(here.totalDiscount).toBe(1_000);
+    expect(away.totalDiscount).toBe(0);
+  });
+
+  it('applies to both when none is chosen', () => {
+    const both = promotion({ order_types: [] });
+    const cart = applyPromotions(
+      catalogWith(both),
+      { ...OFF, orderType: 'TAKEAWAY' },
+      [line('VAR_TAMARIND_ICED', 1, 4_000)],
+      TUESDAY_10AM,
+    );
+    expect(cart.totalDiscount).toBe(1_000);
+  });
+});

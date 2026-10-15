@@ -25,7 +25,7 @@
 import type { Satang } from '../lib/money.ts';
 import { bangkokDate, bangkokTime, weekdayIndex } from '../lib/datetime.ts';
 import { nowIso } from '../lib/id.ts';
-import type { DiscountReason, Promotion } from '../db/types.ts';
+import type { DiscountReason, OrderType, Promotion } from '../db/types.ts';
 import type { CostCatalog } from './cost.ts';
 
 export interface PromotionSettings {
@@ -36,6 +36,11 @@ export interface PromotionSettings {
   rainyDayEnabled: boolean;
   rainyDayAmount: Satang;
   rainyDayVariantId: string | null;
+  /**
+   * The cart's order type, for a promotion kept to dine-in or takeaway. The
+   * toggle on the cart is remembered, so this is known before the sale.
+   */
+  orderType?: OrderType;
 }
 
 export interface PriceableLine {
@@ -44,6 +49,8 @@ export interface PriceableLine {
   qty: number;
   /** The snapshot price for one cup, modifiers included. */
   unitPrice: Satang;
+  /** The drink's own price, before toppings: what a FIXED_PRICE promotion replaces. */
+  basePrice?: Satang;
   /** Set by the operator to give the line away. Requires a reason by type. */
   manualReason: DiscountReason | null;
 }
@@ -108,7 +115,10 @@ export function applyPromotions(
   }));
 
   const live = (catalog.promotions ?? [])
-    .filter((promotion) => promotionLive(promotion, now))
+    .filter(
+      (promotion) =>
+        promotionLive(promotion, now) && promotionForOrderType(promotion, settings.orderType),
+    )
     .sort((a, b) => a.sort_order - b.sort_order);
 
   for (const entry of work) {
@@ -162,6 +172,15 @@ export function promotionLive(promotion: Promotion, now: string): boolean {
   return true;
 }
 
+/** Kept to dine-in or takeaway, or — with neither chosen — both. */
+export function promotionForOrderType(
+  promotion: Promotion,
+  orderType: OrderType | undefined,
+): boolean {
+  const types = promotion.order_types ?? [];
+  return types.length === 0 || orderType === undefined || types.includes(orderType);
+}
+
 /** On a chosen drink, or — with none chosen — on any drink, never a bottle. */
 export function promotionAppliesTo(
   catalog: CostCatalog,
@@ -173,10 +192,21 @@ export function promotionAppliesTo(
   return catalog.products.get(variant?.product_id ?? '')?.kind === 'DRINK';
 }
 
-/** What a ฿ or % promotion takes off one cup at this price. */
-export function perCupOff(promotion: Promotion, unitPrice: Satang): Satang {
+/**
+ * What a ฿, % or set-price promotion takes off one cup at this price. A set
+ * price replaces the drink's own price only (`basePrice`): toppings added to
+ * the cup are still paid for, and a drink already cheaper is left alone.
+ */
+export function perCupOff(
+  promotion: Promotion,
+  unitPrice: Satang,
+  basePrice: Satang = unitPrice,
+): Satang {
   if (promotion.kind === 'AMOUNT_OFF') return Math.min(promotion.amount, unitPrice);
   if (promotion.kind === 'PERCENT_OFF') return Math.round((unitPrice * promotion.percent) / 100);
+  if (promotion.kind === 'FIXED_PRICE') {
+    return Math.max(0, Math.min(basePrice, unitPrice) - promotion.amount);
+  }
   return 0;
 }
 
@@ -199,7 +229,7 @@ function applyBestPerCup(
   for (const promotion of live) {
     if (promotion.kind === 'BUY_X_GET_Y') continue;
     if (!promotionAppliesTo(catalog, promotion, line.variantId)) continue;
-    const off = perCupOff(promotion, line.unitPrice);
+    const off = perCupOff(promotion, line.unitPrice, line.basePrice);
     // Strictly better: on a tie the earlier one — the rainy day, then the
     // promotions in their order — keeps the cup.
     if (off > (best?.off ?? 0)) best = { off, tag: customTag(promotion), promotion };
@@ -365,7 +395,16 @@ export function promotionSummary(
       ? `ลด ฿${promotion.amount / 100}`
       : promotion.kind === 'PERCENT_OFF'
         ? `ลด ${promotion.percent}%`
-        : `ซื้อ ${promotion.buy_qty} แถม ${promotion.free_qty}`;
+        : promotion.kind === 'FIXED_PRICE'
+          ? `ขายแก้วละ ฿${promotion.amount / 100}`
+          : `ซื้อ ${promotion.buy_qty} แถม ${promotion.free_qty}`;
+  const types = promotion.order_types ?? [];
+  const only =
+    types.length === 1
+      ? types[0] === 'DINE_IN'
+        ? 'ทานที่ร้านเท่านั้น'
+        : 'กลับบ้านเท่านั้น'
+      : null;
   const on =
     promotion.variant_ids.length === 0
       ? 'ทุกเมนู'
@@ -386,5 +425,5 @@ export function promotionSummary(
         ]
           .filter(Boolean)
           .join(' ') || 'ทุกวัน';
-  return (withWhen ? [what, on, when] : [what, on]).join(' · ');
+  return [what, on, ...(only ? [only] : []), ...(withWhen ? [when] : [])].join(' · ');
 }

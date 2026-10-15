@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { formatTHB } from '../../lib/money.ts';
 import { formatQty } from '../../lib/quantity.ts';
+import { bangkokDate, bangkokTime, businessDay } from '../../lib/datetime.ts';
 import { wastePct, type PeriodReport } from '../../domain/period-report.ts';
 import { discountLabel } from '../../domain/promotions.ts';
 
@@ -120,6 +121,84 @@ export default function PeriodReportView({ report }: { report: PeriodReport }) {
               {wasted.length === 0 ? 'ไม่มีของเสียเลย' : 'ส่วนประกอบอื่นไม่มีของเสีย'}
             </li>
           ) : null}
+        </Section>
+      ) : null}
+
+      {report.countGap.length > 0 ? (
+        <Section
+          title="นับจริงต่างจากสูตร"
+          note="ที่นับได้ตอนเปิด/ปิดร้าน เทียบกับที่สูตรบอกว่าควรเหลือ · ขาด = เทเกินสูตร ทำหก หรือทำแล้วไม่ได้กดขาย · บาทคิดจากต้นทุนวันนี้"
+        >
+          {report.countGap.map((entry) => {
+            const short = entry.gap < 0;
+            const share = short && entry.used > 0 ? -entry.gap / entry.used : null;
+            return (
+              <li
+                key={entry.componentId}
+                className="border-line flex items-baseline justify-between gap-3 border-b py-2"
+              >
+                <span className="min-w-0 text-lg font-bold">
+                  {entry.name}
+                  <span className="text-ink-soft block text-base">
+                    {short ? 'ขาด' : 'เกิน'} {formatQty(Math.abs(entry.gap), entry.unit)}
+                    {share !== null ? ` · ${percent(share)} ของที่ขาย` : ''}
+                  </span>
+                </span>
+                <span className="shrink-0 text-xl font-bold tabular-nums">
+                  {short ? '−' : '+'}
+                  {baht(Math.abs(entry.cost))}
+                </span>
+              </li>
+            );
+          })}
+        </Section>
+      ) : null}
+
+      {report.voids.length > 0 ? (
+        <Section
+          title={`บิลที่ยกเลิก (${report.voids.length})`}
+          note="ยกเลิกแล้วลบไม่ได้ · ยกเลิกห่างจากตอนขายนาน หรือคนเดียวยกเลิกบ่อย = ควรถาม"
+        >
+          {report.voidsByOperator.length > 1
+            ? report.voidsByOperator.map((entry) => (
+                <li
+                  key={entry.operator}
+                  className="flex justify-between gap-3 py-1 text-lg font-bold"
+                >
+                  <span>
+                    {entry.operator} · {entry.count} บิล
+                  </span>
+                  <span className="tabular-nums">{formatTHB(entry.amount)}</span>
+                </li>
+              ))
+            : null}
+          {report.voids.map((entry) => (
+            <li
+              key={entry.saleId}
+              className="border-line flex items-baseline justify-between gap-3 border-b py-2"
+            >
+              <span className="min-w-0 text-lg font-bold">
+                #{entry.orderNo} · {businessDay(entry.businessDate)} {bangkokTime(entry.rungAt)} ·{' '}
+                {entry.operator}
+                <span className="text-ink-soft block text-base">
+                  {entry.reason || 'ไม่ระบุเหตุผล'}
+                  {entry.voidedAt
+                    ? ` · ยกเลิก ${bangkokTime(entry.voidedAt)}${
+                        bangkokDate(entry.voidedAt) !== entry.businessDate
+                          ? ` (${businessDay(bangkokDate(entry.voidedAt))})`
+                          : ''
+                      }`
+                    : ''}
+                </span>
+              </span>
+              <span className="shrink-0 text-right text-xl font-bold tabular-nums">
+                {formatTHB(entry.amount)}
+                <span className="text-ink-soft block text-base">
+                  {entry.method === 'CASH' ? 'เงินสด' : 'พร้อมเพย์'}
+                </span>
+              </span>
+            </li>
+          ))}
         </Section>
       ) : null}
 

@@ -4,7 +4,7 @@ import { bangkokWeekday } from '../lib/datetime.ts';
 import { discountLabel } from '../domain/promotions.ts';
 import { useDaySummary, useSyncState } from '../db/hooks.ts';
 import BackupFileButton from '../components/BackupFileButton.tsx';
-import { useOwnerLock } from '../nav/owner-lock.ts';
+import { useExpectedCashShown, useOwnerLock } from '../nav/owner-lock.ts';
 import { Screen, ScreenBody, ScreenFooter, type BackTo } from '../components/Screen.tsx';
 import type { Satang } from '../lib/money.ts';
 
@@ -33,6 +33,7 @@ export default function DaySummaryScreen({ sessionId, back, promptBackup = false
   // The staff close the day: they see the cups, the takings, what was thrown
   // away and the drawer — never what any of it cost.
   const costs = useOwnerLock().open;
+  const cashShown = useExpectedCashShown();
   // A shop phone that syncs sends the day to the cloud on its own; the file
   // is for a phone that holds the only copy (CLAUDE.md §13).
   const sync = useSyncState();
@@ -101,8 +102,8 @@ export default function DaySummaryScreen({ sessionId, back, promptBackup = false
           )}
           <Figure
             label="เงินสด"
-            value={cash ? varianceLabel(cash.variance) : '—'}
-            loud={cash !== null && cash.variance !== 0}
+            value={cash ? (cashShown ? varianceLabel(cash.variance) : 'นับแล้ว') : '—'}
+            loud={cashShown && cash !== null && cash.variance !== 0}
           />
         </dl>
 
@@ -152,9 +153,16 @@ export default function DaySummaryScreen({ sessionId, back, promptBackup = false
         {cash ? (
           <Section title="เงินสด">
             <Row label="เงินทอนเริ่มต้น" value={formatTHB(cash.openingFloat)} />
-            <Row label="ควรมี" value={formatTHB(cash.expected)} />
+            {summary.drawerMovements.map((movement) => (
+              <Row
+                key={movement.id}
+                label={`${movement.label}${movement.note ? ` · ${movement.note}` : ''}`}
+                value={`${movement.direction === 'OUT' ? '−' : '+'}${formatTHB(movement.amount)}`}
+              />
+            ))}
+            {cashShown ? <Row label="ควรมี" value={formatTHB(cash.expected)} /> : null}
             <Row label="นับได้" value={formatTHB(cash.counted)} />
-            <Row label="ผลต่าง" value={varianceLabel(cash.variance)} />
+            {cashShown ? <Row label="ผลต่าง" value={varianceLabel(cash.variance)} /> : null}
           </Section>
         ) : null}
       </ScreenBody>

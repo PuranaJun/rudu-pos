@@ -6,9 +6,12 @@
  * unit_price and unit_cost, a waste event its own cost, and nothing that
  * reports on the past reads a price or a cost back out of the catalog.
  *
- * Nothing is deleted that history points at. A product or variant is switched
- * off, not removed; a component stays; a BOM row or a packaging line — which
- * no sale refers to — can go.
+ * Nothing is ever deleted from a synced table: sync only sends rows that
+ * exist, so a deleted row would live on in the cloud and on every view-only
+ * phone. A product, component, packaging item or recipe line the owner
+ * removes is marked removed instead (see Removable in types.ts) — off
+ * everywhere, still there for the history that names it, and able to come
+ * back. A packaging line lives inside its set, so it simply goes.
  */
 import type { RuduPosDB } from './database.ts';
 import { db as defaultDb } from './database.ts';
@@ -30,8 +33,10 @@ import {
   checkProduct,
   checkVariant,
 } from '../domain/catalog-rules.ts';
+import { componentRemovalBlockers, packagingItemRemovalBlockers } from '../domain/removal.ts';
+import { loadCostCatalog } from './catalog.ts';
 import type { Satang } from '../lib/money.ts';
-import { newId } from '../lib/id.ts';
+import { newId, nowIso } from '../lib/id.ts';
 
 /** An edit the rules refused, with the reasons in Thai for the screen. */
 export class CatalogError extends Error {
@@ -109,6 +114,102 @@ export async function createProduct(
     await db.variant.add(variant);
     return { product, variant };
   });
+}
+
+export interface PriceListChange {
+  products: { id: string; base_price: Satang; is_active: boolean }[];
+  /** Null: the variant sells at its product's price. */
+  variants: { id: string; price_override: Satang | null }[];
+}
+
+/**
+ * Every price on the menu at once, after a taste test or a cost rise
+ * (CLAUDE.md §12). Checked whole and written in one transaction: either the
+ * new price list stands or the old one does. Forward only, like any price
+ * change — each sale line keeps the price it was rung at (§2.1.8).
+ */
+export async function savePriceList(
+  change: PriceListChange,
+  db: RuduPosDB = defaultDb,
+): Promise<number> {
+  return db.transaction('rw', [db.product, db.variant], async () => {
+    let written = 0;
+    const problems: string[] = [];
+    const products = [];
+    for (const entry of change.products) {
+      const product = await db.product.get(entry.id);
+      if (!product) continue;
+      if (product.base_price === entry.base_price && product.is_active === entry.is_active)
+        continue;
+      const next = { ...product, base_price: entry.base_price, is_active: entry.is_active };
+      problems.push(...checkProduct(next).map((problem) => `${product.name_short_th}: ${problem}`));
+      products.push(next);
+    }
+    const variants = [];
+    for (const entry of change.variants) {
+      const variant = await db.variant.get(entry.id);
+      if (!variant || variant.price_override === entry.price_override) continue;
+      const next = { ...variant, price_override: entry.price_override };
+      problems.push(...checkVariant(next).map((problem) => `${variant.name_th}: ${problem}`));
+      variants.push(next);
+    }
+    refuse(problems);
+    for (const product of products) {
+      await db.product.put(product);
+      written += 1;
+    }
+    for (const variant of variants) {
+      await db.variant.put(variant);
+      written += 1;
+    }
+    return written;
+  });
+}
+
+/**
+ * The sell screen's order, top first: each product gets its place as its
+ * sort_order. One transaction, so the menu is never seen half rearranged.
+ * Only the rows whose place changed are written — fewer rows to sync.
+ */
+export async function saveProductOrder(
+  orderedIds: readonly string[],
+  db: RuduPosDB = defaultDb,
+): Promise<void> {
+  await db.transaction('rw', [db.product], async () => {
+    for (const [index, id] of orderedIds.entries()) {
+      const product = await db.product.get(id);
+      if (product && product.sort_order !== index + 1) {
+        await db.product.update(id, { sort_order: index + 1 });
+      }
+    }
+  });
+}
+
+/** Mark a drink หมดวันนี้ for this business date, or (null) back on sale. */
+export async function setSoldOutToday(
+  productId: string,
+  businessDate: string | null,
+  db: RuduPosDB = defaultDb,
+): Promise<void> {
+  await db.product.update(productId, { sold_out_on: businessDate });
+}
+
+/**
+ * Take a drink off the menu for good: off the sell screen, out of settings and
+ * every picker. Its variants are left as they are — with the product off and
+ * removed, none of them can be rung.
+ */
+export async function removeProduct(
+  id: string,
+  db: RuduPosDB = defaultDb,
+  at: string = nowIso(),
+): Promise<void> {
+  await db.product.update(id, { removed_at: at, is_active: false });
+}
+
+/** Back from ลบแล้ว, switched off: the owner looks it over before selling it again. */
+export async function restoreProduct(id: string, db: RuduPosDB = defaultDb): Promise<void> {
+  await db.product.update(id, { removed_at: null, is_active: false });
 }
 
 /**
@@ -199,6 +300,25 @@ export async function createComponent(
   return component;
 }
 
+/**
+ * Remove a component — refused while a recipe, a topping or another component
+ * still uses it, naming which (domain/removal.ts). Batches already made stay
+ * on open day and close day until they are used up or thrown away.
+ */
+export async function removeComponent(
+  id: string,
+  db: RuduPosDB = defaultDb,
+  at: string = nowIso(),
+): Promise<void> {
+  refuse(componentRemovalBlockers(await loadCostCatalog(db), id));
+  await db.component.update(id, { removed_at: at, is_active: false });
+}
+
+/** Back from ลบแล้ว, not in use: switched on again from its editor when wanted. */
+export async function restoreComponent(id: string, db: RuduPosDB = defaultDb): Promise<void> {
+  await db.component.update(id, { removed_at: null, is_active: false });
+}
+
 // --------------------------------------------------------------------- BOM
 
 /** Change how much of a component goes into one cup of a variant. */
@@ -227,9 +347,17 @@ export async function addBomRow(
   return row;
 }
 
-/** A recipe line can go: no sale points at a BOM row — each carries its own cost. */
-export async function removeBomRow(id: string, db: RuduPosDB = defaultDb): Promise<void> {
-  await db.bom.delete(id);
+/**
+ * Take a line out of a recipe. No sale points at a BOM row — each carries its
+ * own cost — but the cloud and the view-only phones still hold it, so it is
+ * marked removed rather than deleted, and drops out of every recipe there too.
+ */
+export async function removeBomRow(
+  id: string,
+  db: RuduPosDB = defaultDb,
+  at: string = nowIso(),
+): Promise<void> {
+  await db.bom.update(id, { removed_at: at });
 }
 
 // --------------------------------------------------------------- packaging
@@ -263,6 +391,27 @@ export async function createPackagingItem(
   };
   await savePackagingItem(item, db);
   return item;
+}
+
+/**
+ * Remove a packaging item — refused while a set, a topping or something bought
+ * still uses it. Its movements stay; it just stops being counted or warned of.
+ */
+export async function removePackagingItem(
+  id: string,
+  db: RuduPosDB = defaultDb,
+  at: string = nowIso(),
+): Promise<void> {
+  const [catalog, purchaseItems] = await Promise.all([
+    loadCostCatalog(db),
+    db.purchase_item.toArray(),
+  ]);
+  refuse(packagingItemRemovalBlockers(catalog, id, purchaseItems));
+  await db.packaging_item.update(id, { removed_at: at });
+}
+
+export async function restorePackagingItem(id: string, db: RuduPosDB = defaultDb): Promise<void> {
+  await db.packaging_item.update(id, { removed_at: null });
 }
 
 export async function savePackagingSet(

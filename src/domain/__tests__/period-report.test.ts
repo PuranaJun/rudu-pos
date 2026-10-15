@@ -274,3 +274,81 @@ describe('periodReport', () => {
     expect(wastePct(jelly)).toBeCloseTo(0.2);
   });
 });
+
+describe('count gap', () => {
+  const adjust = (id: string, qty: number, at: string): StockMovement => ({
+    id,
+    sale_line_id: null,
+    component_batch_id: 'B_JELLY',
+    qty_delta: qty,
+    reason: 'ADJUSTMENT',
+    reverses_movement_id: null,
+    created_at: at,
+    synced_at: null,
+  });
+
+  it('sums what the counts corrected, in range, against what sales used', () => {
+    const report = periodReport({
+      ...input(),
+      adjustments: [
+        adjust('A1', -24, '2026-10-10T11:00:00.000Z'), // counted 24 g short at close
+        adjust('A2', 6, '2026-10-11T01:00:00.000Z'), // 6 g over at open
+        adjust('A3', -500, '2026-09-20T11:00:00.000Z'), // another month
+      ],
+    });
+    expect(report.countGap).toEqual([
+      {
+        componentId: 'COMP_JELLY_CHRYS',
+        name: expect.any(String),
+        unit: 'G',
+        gap: -18,
+        used: 120,
+        cost: Math.round(-18 * 0.0136667 * 100),
+      },
+    ]);
+  });
+
+  it('is empty when the counts matched the recipes', () => {
+    expect(periodReport(input()).countGap).toEqual([]);
+    expect(
+      periodReport({
+        ...input(),
+        adjustments: [
+          adjust('A1', -5, '2026-10-10T11:00:00.000Z'),
+          adjust('A2', 5, '2026-10-11T01:00:00.000Z'),
+        ],
+      }).countGap,
+    ).toEqual([]);
+  });
+});
+
+describe('void log', () => {
+  it('lists every voided bill in range, with who, why and when', () => {
+    const report = periodReport({
+      ...input(),
+      sales: [
+        ...SALES.filter((s) => s.id !== 'VOID'),
+        sale('VOID', '2026-10-10', '04:00', {
+          is_voided: true,
+          void_reason: 'กดผิด',
+          voided_at: '2026-10-10T05:30:00.000Z',
+        }),
+        sale('VOID_OLD', '2026-09-20', '04:00', { is_voided: true, void_reason: 'นอกช่วง' }),
+        sale('VOID_B', '2026-10-11', '04:00', {
+          is_voided: true,
+          void_reason: 'ลูกค้าเปลี่ยนใจ',
+          operator_id: 'น้อง',
+          total_net: 5_900,
+        }),
+      ],
+    });
+    expect(report.voids.map((v) => [v.saleId, v.reason, v.voidedAt, v.operator])).toEqual([
+      ['VOID', 'กดผิด', '2026-10-10T05:30:00.000Z', 'เจ้าของ'],
+      ['VOID_B', 'ลูกค้าเปลี่ยนใจ', null, 'น้อง'],
+    ]);
+    expect(report.voidsByOperator).toEqual([
+      { operator: 'น้อง', count: 1, amount: 5_900 },
+      { operator: 'เจ้าของ', count: 1, amount: 4_000 },
+    ]);
+  });
+});

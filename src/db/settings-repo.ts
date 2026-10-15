@@ -37,6 +37,11 @@ export interface PosSettings extends PromotionSettings {
   annualRevenueWarnRatio: number;
   /** The cart's order type: whatever was chosen last, kept across sales. */
   orderType: OrderType;
+  /**
+   * Blind count: staff count the drawer without seeing what it should hold.
+   * Only while an owner PIN is set — see useExpectedCashShown.
+   */
+  blindCashCount: boolean;
 }
 
 const FALLBACK: PosSettings = {
@@ -58,6 +63,7 @@ const FALLBACK: PosSettings = {
   annualRevenueThreshold: 180_000_000,
   annualRevenueWarnRatio: 0.75,
   orderType: 'TAKEAWAY',
+  blindCashCount: false,
 };
 
 export async function loadSettings(db: RuduPosDB = defaultDb): Promise<PosSettings> {
@@ -106,5 +112,6 @@ export async function loadSettings(db: RuduPosDB = defaultDb): Promise<PosSettin
     annualRevenueThreshold: num('annual_revenue_warn_threshold', FALLBACK.annualRevenueThreshold),
     annualRevenueWarnRatio: num('annual_revenue_warn_ratio', FALLBACK.annualRevenueWarnRatio),
     orderType: values.get(ORDER_TYPE_KEY) === 'DINE_IN' ? 'DINE_IN' : FALLBACK.orderType,
+    blindCashCount: bool('drawer_blind_count', FALLBACK.blindCashCount),
   };
 }

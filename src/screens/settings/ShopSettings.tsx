@@ -8,6 +8,7 @@ import { parseNumber } from '../../lib/number.ts';
 import { bahtInput, parseBaht } from '../../lib/money.ts';
 import { imageToDataUrl } from '../../lib/image.ts';
 import type { CostCatalog } from '../../domain/cost.ts';
+import { isRemovedVariant } from '../../domain/removal.ts';
 import type { PosSettings } from '../../db/settings-repo.ts';
 import { saveSetting } from '../../db/catalog-repo.ts';
 import type { SettingValue } from '../../db/types.ts';
@@ -45,8 +46,10 @@ export default function ShopSettings({
   const [warnPercent, setWarnPercent] = useState(
     String(Math.round(settings.annualRevenueWarnRatio * 100)),
   );
+  const [blindCount, setBlindCount] = useState(settings.blindCashCount);
   const [problems, setProblems] = useState<string[]>([]);
   const form = useDirty({
+    blindCount,
     twoCupOn,
     twoCupAmount,
     rainyAmount,
@@ -64,7 +67,9 @@ export default function ShopSettings({
     warnPercent,
   });
 
-  const variants = [...catalog.variants.values()].filter((variant) => variant.is_active);
+  const variants = [...catalog.variants.values()].filter(
+    (variant) => variant.is_active && !isRemovedVariant(catalog, variant),
+  );
 
   function save(): Promise<boolean> {
     const money = {
@@ -123,6 +128,7 @@ export default function ShopSettings({
       branding_line_th: branding.trim(),
       promptpay_id: promptPay?.digits ?? null,
       annual_revenue_warn_ratio: percent! / 100,
+      drawer_blind_count: blindCount,
     };
 
     return Promise.all(Object.entries(rows).map(([key, value]) => saveSetting(key, value))).then(
@@ -169,6 +175,15 @@ export default function ShopSettings({
 
       <h3 className="mt-6 text-xl font-bold">เงิน</h3>
       <NumberField label="เงินทอนเริ่มต้น" value={float} onChange={setFloat} suffix="บาท" />
+      <Toggle
+        label="พนักงานนับเงินโดยไม่เห็นยอดที่ควรมี"
+        value={blindCount}
+        onChange={setBlindCount}
+      />
+      <p className="text-ink-soft text-base font-bold">
+        ซ่อนยอดลิ้นชัก ยอดที่ควรมี และผลต่าง จากพนักงาน — ใช้ได้เมื่อตั้งรหัสเจ้าของแล้ว
+        เจ้าของเห็นเมื่อใส่รหัส หรือในมือถือที่ดูอย่างเดียว
+      </p>
       <TextField
         label="ปุ่มรับเงิน"
         value={tender}

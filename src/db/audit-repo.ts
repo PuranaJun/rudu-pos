@@ -32,5 +32,9 @@ export async function auditDatabase(db: RuduPosDB = defaultDb): Promise<Finding[
     });
   }
 
-  return auditBooks({ sales, lines, discounts, batches, movements, waste, sessions }, reported);
+  const cashMovements = await db.cash_movement.toArray();
+  return auditBooks(
+    { sales, lines, discounts, batches, movements, waste, sessions, cashMovements },
+    reported,
+  );
 }

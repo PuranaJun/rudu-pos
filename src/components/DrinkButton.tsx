@@ -11,6 +11,8 @@ interface Props {
   limitingComponentName: string | null;
   /** A CSS custom property name from the menu palette. */
   colorVar: string;
+  /** Said under หมด instead of the missing component: why it is out. */
+  outNote?: string | null;
   /**
    * `large` while the menu is a few drinks; `compact` once it is long enough
    * that large buttons would push the cart and the pay buttons off a phone;
@@ -44,6 +46,7 @@ export default function DrinkButton({
   cups,
   limitingComponentName,
   colorVar,
+  outNote = null,
   size = 'large',
   onTap,
 }: Props) {
@@ -98,6 +101,9 @@ export default function DrinkButton({
           ) : (
             <span>เหลือ {cups} แก้ว</span>
           )}
+          {level === 'OUT' && outNote ? (
+            <span className={`tablet:text-lg ${compact ? 'text-sm' : 'text-base'}`}>{outNote}</span>
+          ) : null}
           {/* What binds, named (CLAUDE.md §2.2): it decides what to make next. */}
           {limitingComponentName ? (
             <span className={`tablet:text-lg ${compact ? 'text-sm' : 'text-base'}`}>

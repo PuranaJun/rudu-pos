@@ -123,6 +123,7 @@ export function priceCart(
       variantId: item.line.variant_id,
       qty: item.line.qty,
       unitPrice: unitPrice(catalog, item.line.variant_id, item.modifierIds),
+      basePrice: unitPrice(catalog, item.line.variant_id),
       manualReason: item.line.manual_discount_reason ?? null,
     })),
     now,
@@ -389,6 +390,20 @@ export function describeItems(catalog: CostCatalog, lines: readonly SaleLine[]):
       return line.qty > 1 ? `${name} × ${line.qty}` : name;
     })
     .join(' · ');
+}
+
+/**
+ * The sale with this order number on this business date — order numbers
+ * start again at 1 each day (CLAUDE.md §6.1), so the date is part of the
+ * name. Voided ones are found too: a void keeps its number.
+ */
+export async function findSaleByOrderNo(
+  businessDate: string,
+  orderNo: number,
+  db: RuduPosDB = defaultDb,
+): Promise<Sale | null> {
+  const sales = await db.sale.where('business_date').equals(businessDate).toArray();
+  return sales.find((sale) => sale.order_no === orderNo) ?? null;
 }
 
 /**

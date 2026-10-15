@@ -13,9 +13,15 @@ import { useDirty } from '../../components/use-dirty.ts';
 import { numberText, parseNumber } from '../../lib/number.ts';
 import { unitLabel } from '../../lib/quantity.ts';
 import type { CostCatalog } from '../../domain/cost.ts';
-import { createComponent, saveComponent } from '../../db/catalog-repo.ts';
+import {
+  createComponent,
+  removeComponent,
+  restoreComponent,
+  saveComponent,
+} from '../../db/catalog-repo.ts';
+import { isRemoved } from '../../domain/removal.ts';
 import type { Component, ComponentRole, Lifecycle, Unit } from '../../db/types.ts';
-import { AddButton } from './shared.tsx';
+import { AddButton, RemoveButton, RemovedList } from './shared.tsx';
 import { problemsOf } from './problems.ts';
 
 const UNITS = [
@@ -74,11 +80,14 @@ export default function ComponentSettings({
         catalog={catalog}
         component={component}
         back={{ label: 'กลับไปรายการ', onClick: toList }}
+        onRemoved={toList}
       />
     );
   }
 
-  const components = [...catalog.components.values()].sort((a, b) => a.sort_order - b.sort_order);
+  const all = [...catalog.components.values()].sort((a, b) => a.sort_order - b.sort_order);
+  const components = all.filter((component) => !isRemoved(component));
+  const removed = all.filter(isRemoved);
 
   return (
     <ListPage exit={exit}>
@@ -99,6 +108,10 @@ export default function ComponentSettings({
           ))}
         </ul>
         <AddButton label="เพิ่มส่วนประกอบ" onClick={() => setView({ kind: 'NEW' })} />
+        <RemovedList
+          rows={removed.map((component) => ({ id: component.id, name: component.name_th }))}
+          onRestore={(id) => restoreComponent(id)}
+        />
       </section>
     </ListPage>
   );
@@ -153,10 +166,12 @@ function ComponentEditor({
   catalog,
   component,
   back,
+  onRemoved,
 }: {
   catalog: CostCatalog;
   component: Component;
   back: BackTo;
+  onRemoved: () => void;
 }) {
   const [name, setName] = useState(component.name_th);
   const [unit, setUnit] = useState<Unit>(component.unit);
@@ -194,7 +209,9 @@ function ComponentEditor({
     active,
   });
 
-  const others = [...catalog.components.values()].filter((other) => other.id !== component.id);
+  const others = [...catalog.components.values()].filter(
+    (other) => other.id !== component.id && !isRemoved(other),
+  );
   const sourceComponent = source === 'NONE' ? undefined : catalog.components.get(source);
 
   function save(): Promise<boolean> {
@@ -307,6 +324,12 @@ function ComponentEditor({
           hint="เช่น เยลลี่ 1,000 g ใช้ชาขาว 500 ml = 0.5"
         />
       ) : null}
+
+      <RemoveButton
+        name={component.name_th}
+        onRemove={() => removeComponent(component.id)}
+        onRemoved={onRemoved}
+      />
     </Editor>
   );
 }

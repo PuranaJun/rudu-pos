@@ -10,6 +10,7 @@ import { bangkokDate } from '../lib/datetime.ts';
 import { newId } from '../lib/id.ts';
 import type { Satang } from '../lib/money.ts';
 import type {
+  CashMovement,
   CashSession,
   Component,
   ComponentBatch,
@@ -21,6 +22,7 @@ import type {
 import type { CostCatalog } from './cost.ts';
 import { adjustmentMovement, shelfStatus, type ShelfStatus } from './open-day.ts';
 import { batchRemaining, isSellable, type StockSnapshot } from './stock.ts';
+import { movementTotals } from './drawer.ts';
 
 export const WASTE_REASONS: readonly WasteReason[] = [
   'END_OF_DAY_PERISHABLE',
@@ -213,11 +215,20 @@ export function salesInSession(sales: readonly Sale[], session: CashSession): Sa
   );
 }
 
-/** Float plus what cash sales put in the drawer. Voided sales took their cash back out. */
-export function expectedCash(session: CashSession, sales: readonly Sale[]): Satang {
+/**
+ * Float plus what cash sales put in the drawer, plus cash paid in, less cash
+ * paid out (domain/drawer.ts). Voided sales took their cash back out; a
+ * cancelled pay-out never happened.
+ */
+export function expectedCash(
+  session: CashSession,
+  sales: readonly Sale[],
+  movements: readonly CashMovement[] = [],
+): Satang {
+  const { paidIn, paidOut } = movementTotals(session, movements);
   return salesInSession(sales, session)
     .filter((sale) => sale.payment_method === 'CASH' && !sale.is_voided)
-    .reduce((total, sale) => total + sale.total_net, session.opening_float);
+    .reduce((total, sale) => total + sale.total_net, session.opening_float + paidIn - paidOut);
 }
 
 /** Thai notes and coins, largest first, in satang. A currency, not a recipe. */

@@ -15,9 +15,16 @@ import { numberText, parseNumber } from '../../lib/number.ts';
 import { bahtInput, formatTHB, parseBaht } from '../../lib/money.ts';
 import { newId } from '../../lib/id.ts';
 import type { CostCatalog } from '../../domain/cost.ts';
-import { createPackagingItem, savePackagingItem, savePackagingSet } from '../../db/catalog-repo.ts';
+import {
+  createPackagingItem,
+  removePackagingItem,
+  restorePackagingItem,
+  savePackagingItem,
+  savePackagingSet,
+} from '../../db/catalog-repo.ts';
+import { isRemoved } from '../../domain/removal.ts';
 import type { PackagingItem, PackagingSet } from '../../db/types.ts';
-import { AddButton } from './shared.tsx';
+import { AddButton, RemoveButton, RemovedList } from './shared.tsx';
 import { problemsOf } from './problems.ts';
 
 type View =
@@ -45,6 +52,7 @@ export default function PackagingSettings({
         item={item}
         back={{ label: item ? 'กลับไปรายการ' : 'ยกเลิก', onClick: toList }}
         onCreated={toList}
+        onRemoved={toList}
       />
     );
   }
@@ -60,6 +68,9 @@ export default function PackagingSettings({
       />
     );
   }
+
+  const allItems = [...catalog.packagingItems.values()];
+  const removedItems = allItems.filter(isRemoved);
 
   return (
     <ListPage exit={exit}>
@@ -79,16 +90,22 @@ export default function PackagingSettings({
 
         <h2 className="pt-6 text-xl font-bold">ของแต่ละชิ้น</h2>
         <ul>
-          {[...catalog.packagingItems.values()].map((item) => (
-            <ListRow
-              key={item.id}
-              title={item.name_th}
-              detail={formatTHB(item.unit_cost)}
-              onOpen={() => setView({ kind: 'ITEM', id: item.id })}
-            />
-          ))}
+          {allItems
+            .filter((item) => !isRemoved(item))
+            .map((item) => (
+              <ListRow
+                key={item.id}
+                title={item.name_th}
+                detail={formatTHB(item.unit_cost)}
+                onOpen={() => setView({ kind: 'ITEM', id: item.id })}
+              />
+            ))}
         </ul>
         <AddButton label="เพิ่มชิ้น" onClick={() => setView({ kind: 'ITEM', id: null })} />
+        <RemovedList
+          rows={removedItems.map((item) => ({ id: item.id, name: item.name_th }))}
+          onRestore={(id) => restorePackagingItem(id)}
+        />
       </section>
     </ListPage>
   );
@@ -106,10 +123,12 @@ function ItemEditor({
   item,
   back,
   onCreated,
+  onRemoved,
 }: {
   item: PackagingItem | undefined;
   back: BackTo;
   onCreated: () => void;
+  onRemoved: () => void;
 }) {
   const [name, setName] = useState(item?.name_th ?? '');
   const [cost, setCost] = useState(item ? bahtInput(item.unit_cost) : '');
@@ -177,6 +196,11 @@ function ItemEditor({
               hint="ว่างไว้ = เตือนเมื่อหมดเท่านั้น"
             />
           ) : null}
+          <RemoveButton
+            name={item.name_th}
+            onRemove={() => removePackagingItem(item.id)}
+            onRemoved={onRemoved}
+          />
         </>
       ) : null}
     </Editor>
@@ -192,7 +216,7 @@ function SetEditor({
   set: PackagingSet | undefined;
   back: BackTo;
 }) {
-  const items = [...catalog.packagingItems.values()];
+  const items = [...catalog.packagingItems.values()].filter((item) => !isRemoved(item));
   // One id from the first render on, so a new set saved twice — a retry after
   // a problem, or a double tap — is the same set written twice, not two sets.
   const [id] = useState(() => set?.id ?? newId());

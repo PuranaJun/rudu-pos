@@ -13,7 +13,16 @@ import { create } from 'zustand';
  * the app comes back on its home screen, which is the right place to be.
  */
 export type Route =
-  'HUB' | 'SALES' | 'QUEUE' | 'PRODUCTION' | 'PURCHASING' | 'REPORTS' | 'SETTINGS' | 'CLOSE_DAY';
+  | 'HUB'
+  | 'SALES'
+  | 'QUEUE'
+  | 'DRAWER'
+  | 'SOLD_OUT'
+  | 'PRODUCTION'
+  | 'PURCHASING'
+  | 'REPORTS'
+  | 'SETTINGS'
+  | 'CLOSE_DAY';
 
 interface NavState {
   /** null: the home screen. */

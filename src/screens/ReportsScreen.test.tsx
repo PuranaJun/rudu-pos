@@ -169,3 +169,49 @@ describe('a week or a month', () => {
     );
   });
 });
+
+describe('a range of my own', () => {
+  it('reports any stretch of days, and says when the dates are the wrong way round', async () => {
+    const user = userEvent.setup();
+    render(<ReportsScreen back={BACK} />);
+
+    await user.click(await screen.findByRole('button', { name: 'เลือกวันเอง' }));
+    const from = screen.getByLabelText('ตั้งแต่');
+    const to = screen.getByLabelText('ถึง');
+    await user.clear(from);
+    await user.type(from, '2026-10-01');
+    await user.clear(to);
+    await user.type(to, '2026-10-05');
+    expect(await screen.findByText(/1 ต\.ค\. – 5 ต\.ค\./)).toBeInTheDocument();
+
+    await user.clear(from);
+    await user.type(from, '2026-10-09');
+    expect(await screen.findByRole('alert')).toHaveTextContent('วันเริ่มต้องไม่หลังวันสุดท้าย');
+  });
+});
+
+describe('finding a past bill', () => {
+  it('opens a bill from another day by its order number', async () => {
+    const session = await tradedDay(26, 2);
+    const user = userEvent.setup();
+    render(<ReportsScreen back={BACK} />);
+
+    const find = await screen.findByRole('region', { name: 'ค้นหาบิล' });
+    const date = within(find).getByLabelText('วันที่');
+    await user.clear(date);
+    await user.type(date, sessionBusinessDate(session));
+    await user.type(within(find).getByLabelText('เลขบิล'), '2');
+    await user.click(within(find).getByRole('button', { name: 'ค้นหา' }));
+    expect(await screen.findByRole('button', { name: 'กลับไปรายงาน' })).toBeInTheDocument();
+    expect(screen.getByText('คิว 2')).toBeInTheDocument();
+  });
+
+  it('says so when there is no such bill', async () => {
+    const user = userEvent.setup();
+    render(<ReportsScreen back={BACK} />);
+    const find = await screen.findByRole('region', { name: 'ค้นหาบิล' });
+    await user.type(within(find).getByLabelText('เลขบิล'), '99');
+    await user.click(within(find).getByRole('button', { name: 'ค้นหา' }));
+    expect(await within(find).findByRole('alert')).toHaveTextContent('ไม่พบบิล #99');
+  });
+});

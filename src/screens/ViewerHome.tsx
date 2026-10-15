@@ -7,6 +7,7 @@ import { formatTHB } from '../lib/money.ts';
 import { bangkokTime, formatBangkok } from '../lib/datetime.ts';
 import { defaultVariantOf } from '../domain/cart.ts';
 import { availableCups } from '../domain/stock.ts';
+import { soldOutToday } from '../domain/sold-out.ts';
 import { packagingWarnings } from '../domain/packaging.ts';
 import { breakeven, EMPTY_DAY_TOTALS } from '../domain/reporting.ts';
 import { ORDER_TYPE_TH } from '../domain/queue.ts';
@@ -180,8 +181,14 @@ function OpenDay({ session }: { session: CashSession }) {
               <li key={product.id} className="flex justify-between gap-3 py-1 text-lg font-bold">
                 <span>{product.name_short_th}</span>
                 <span className="text-right tabular-nums">
-                  {Number.isFinite(cups) ? `${cups} แก้ว` : '—'}
-                  {Number.isFinite(cups) && limiting ? ` · ${limiting}` : ''}
+                  {soldOutToday(product, sessionBusinessDate(session)) ? (
+                    'หมดวันนี้'
+                  ) : (
+                    <>
+                      {Number.isFinite(cups) ? `${cups} แก้ว` : '—'}
+                      {Number.isFinite(cups) && limiting ? ` · ${limiting}` : ''}
+                    </>
+                  )}
                 </span>
               </li>
             );

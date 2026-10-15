@@ -158,7 +158,8 @@ export function packagingStock(
     movements.filter((m) => m.reason === 'COUNT').map((m) => m.packaging_item_id),
   );
   return [...catalog.packagingItems.values()]
-    .filter((item) => item.is_stock_tracked)
+    // A removed item is no longer on the shelf to count or to run out of.
+    .filter((item) => item.is_stock_tracked && !item.removed_at)
     .map((item) => {
       if (!counted.has(item.id)) return { item, remaining: null, level: 'UNCOUNTED' as const };
       const remaining = packagingRemaining(item.id, movements);

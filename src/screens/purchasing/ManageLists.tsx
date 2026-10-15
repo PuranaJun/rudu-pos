@@ -7,6 +7,7 @@ import { parseNumber, numberText } from '../../lib/number.ts';
 import { newId } from '../../lib/id.ts';
 import { savePurchaseItem, saveSupplier, type Purchasing } from '../../db/purchase-repo.ts';
 import type { CostCatalog } from '../../domain/cost.ts';
+import { isRemoved } from '../../domain/removal.ts';
 import type { PurchaseItem, Supplier } from '../../db/types.ts';
 import { AddButton } from '../settings/shared.tsx';
 import { problemsOf } from '../settings/problems.ts';
@@ -161,7 +162,9 @@ function ItemEditor({
   catalog: CostCatalog;
   back: BackTo;
 }) {
-  const counted = [...catalog.packagingItems.values()].filter((p) => p.is_stock_tracked);
+  const counted = [...catalog.packagingItems.values()].filter(
+    (p) => p.is_stock_tracked && !isRemoved(p),
+  );
   const [id] = useState(() => item?.id ?? newId());
   const [name, setName] = useState(item?.name_th ?? '');
   const [unit, setUnit] = useState(item?.unit ?? '');

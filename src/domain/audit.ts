@@ -7,6 +7,7 @@
  * each other. An empty list is a clean set of books.
  */
 import type {
+  CashMovement,
   CashSession,
   ComponentBatch,
   Sale,
@@ -41,6 +42,8 @@ export interface Books {
   movements: readonly StockMovement[];
   waste: readonly WasteEvent[];
   sessions: readonly CashSession[];
+  /** Pay-ins and pay-outs; optional so books from before they existed still audit. */
+  cashMovements?: readonly CashMovement[];
 }
 
 /** What a report said about one closed day, to check against the rows. */
@@ -183,7 +186,7 @@ function wasteCounted({ waste, movements }: Books): Finding[] {
  * counted less expected, and every cash sale's change is what was handed
  * over less what it cost.
  */
-function cash({ sales, sessions }: Books): Finding[] {
+function cash({ sales, sessions, cashMovements = [] }: Books): Finding[] {
   const findings: Finding[] = [];
 
   for (const sale of sales) {
@@ -203,7 +206,7 @@ function cash({ sales, sessions }: Books): Finding[] {
 
   for (const session of sessions) {
     if (session.closed_at === null) continue;
-    const expected = expectedCash(session, sales);
+    const expected = expectedCash(session, sales, cashMovements);
     if (session.expected_cash !== expected) {
       findings.push({
         check: 'CASH_DOES_NOT_RECONCILE',

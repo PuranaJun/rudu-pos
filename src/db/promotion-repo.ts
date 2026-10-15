@@ -21,6 +21,12 @@ export function promotionProblems(promotion: Promotion): string[] {
   ) {
     wrong.push('ลดกี่บาท ต้องมากกว่า 0');
   }
+  if (
+    promotion.kind === 'FIXED_PRICE' &&
+    !(Number.isInteger(promotion.amount) && promotion.amount > 0)
+  ) {
+    wrong.push('ขายแก้วละกี่บาท ต้องมากกว่า 0');
+  }
   if (promotion.kind === 'PERCENT_OFF' && !(promotion.percent > 0 && promotion.percent <= 100)) {
     wrong.push('ลดกี่ % ต้องอยู่ระหว่าง 1–100');
   }
@@ -84,6 +90,7 @@ export function blankPromotion(sortOrder: number): Promotion {
     hours_from: null,
     hours_to: null,
     stacks_with_two_cup: true,
+    order_types: [],
     is_active: true,
     sort_order: sortOrder,
     synced_at: null,

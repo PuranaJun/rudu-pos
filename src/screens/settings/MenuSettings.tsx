@@ -28,16 +28,28 @@ import {
   createProduct,
   createVariant,
   removeBomRow,
+  removeProduct,
+  restoreProduct,
   saveBomRow,
+  saveProductOrder,
   saveProduct,
   saveVariant,
 } from '../../db/catalog-repo.ts';
+import { isRemoved } from '../../domain/removal.ts';
+import { moveEntry, orderBySales } from '../../domain/menu-order.ts';
+import { presetRange } from '../../domain/period-report.ts';
+import { loadUnitsByProduct } from '../../db/report-repo.ts';
+import { bangkokDate } from '../../lib/datetime.ts';
+import { nowIso } from '../../lib/id.ts';
 import type { Bom, Product, ProductKind, Temp, Variant } from '../../db/types.ts';
-import { AddButton } from './shared.tsx';
+import { AddButton, RemoveButton, RemovedList } from './shared.tsx';
+import PriceList from './PriceList.tsx';
 import { problemsOf } from './problems.ts';
 
 type View =
   | { kind: 'LIST' }
+  | { kind: 'ARRANGE' }
+  | { kind: 'PRICES' }
   | { kind: 'NEW' }
   | { kind: 'PRODUCT'; id: string }
   | { kind: 'VARIANT'; id: string };
@@ -56,6 +68,14 @@ const KINDS = [
 export default function MenuSettings({ catalog, exit }: { catalog: CostCatalog; exit: BackTo }) {
   const [view, setView] = useState<View>({ kind: 'LIST' });
   const toList: BackTo = { label: 'กลับไปรายการ', onClick: () => setView({ kind: 'LIST' }) };
+
+  if (view.kind === 'ARRANGE') {
+    return <ArrangeMenu catalog={catalog} back={toList} />;
+  }
+
+  if (view.kind === 'PRICES') {
+    return <PriceList catalog={catalog} back={toList} />;
+  }
 
   if (view.kind === 'NEW') {
     return (
@@ -77,6 +97,7 @@ export default function MenuSettings({ catalog, exit }: { catalog: CostCatalog; 
         product={product}
         back={toList}
         onOpenVariant={(id) => setView({ kind: 'VARIANT', id })}
+        onRemoved={toList.onClick}
       />
     );
   }
@@ -98,11 +119,29 @@ export default function MenuSettings({ catalog, exit }: { catalog: CostCatalog; 
     );
   }
 
-  const products = [...catalog.products.values()].sort((a, b) => a.sort_order - b.sort_order);
+  const all = [...catalog.products.values()].sort((a, b) => a.sort_order - b.sort_order);
+  const products = all.filter((product) => !isRemoved(product));
+  const removed = all.filter(isRemoved);
 
   return (
     <ListPage exit={exit}>
       <section aria-label="เครื่องดื่ม">
+        <div className="mt-3 flex gap-2">
+          <Button
+            variant="secondary"
+            onClick={() => setView({ kind: 'PRICES' })}
+            className="flex-1"
+          >
+            ราคาทั้งหมด
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={() => setView({ kind: 'ARRANGE' })}
+            className="flex-1"
+          >
+            จัดลำดับหน้าขาย
+          </Button>
+        </div>
         <ul>
           {products.map((product) => (
             <ListRow
@@ -115,6 +154,10 @@ export default function MenuSettings({ catalog, exit }: { catalog: CostCatalog; 
           ))}
         </ul>
         <AddButton label="เพิ่มเครื่องดื่ม" onClick={() => setView({ kind: 'NEW' })} />
+        <RemovedList
+          rows={removed.map((product) => ({ id: product.id, name: product.name_short_th }))}
+          onRestore={(id) => restoreProduct(id)}
+        />
       </section>
     </ListPage>
   );
@@ -200,11 +243,13 @@ function ProductEditor({
   product,
   back,
   onOpenVariant,
+  onRemoved,
 }: {
   catalog: CostCatalog;
   product: Product;
   back: BackTo;
   onOpenVariant: (variantId: string) => void;
+  onRemoved: () => void;
 }) {
   const guard = useLeaveGuard();
   const [shortName, setShortName] = useState(product.name_short_th);
@@ -312,6 +357,12 @@ function ProductEditor({
               .catch((cause: unknown) => setProblems(problemsOf(cause)));
           })
         }
+      />
+
+      <RemoveButton
+        name={product.name_short_th}
+        onRemove={() => removeProduct(product.id)}
+        onRemoved={onRemoved}
       />
     </Editor>
   );
@@ -504,7 +555,7 @@ function AddBomRow({
 }) {
   const used = new Set(existing.map((row) => row.component_id));
   const available = [...catalog.components.values()]
-    .filter((component) => !used.has(component.id))
+    .filter((component) => !used.has(component.id) && !isRemoved(component))
     .sort((a, b) => a.sort_order - b.sort_order);
   const [componentId, setComponentId] = useState(available[0]?.id ?? '');
   const [qty, setQty] = useState('');
@@ -544,5 +595,102 @@ function AddBomRow({
         เพิ่มในสูตร
       </Button>
     </div>
+  );
+}
+
+// ------------------------------------------------------------------ arrange
+
+/**
+ * The sell screen's order, top first (domain/menu-order.ts). Moved with big
+ * ▲ ▼ buttons rather than by dragging: wet thumbs, and a long-press must
+ * never be the only way to do something (CLAUDE.md §1). Saved in one go.
+ */
+function ArrangeMenu({ catalog, back }: { catalog: CostCatalog; back: BackTo }) {
+  const [order, setOrder] = useState(() =>
+    [...catalog.products.values()]
+      .filter((product) => !isRemoved(product))
+      .sort((a, b) => a.sort_order - b.sort_order),
+  );
+  const [problems, setProblems] = useState<string[]>([]);
+  const [note, setNote] = useState<string | null>(null);
+  const form = useDirty({ ids: order.map((product) => product.id) });
+
+  function bySales() {
+    const today = bangkokDate(nowIso());
+    loadUnitsByProduct(presetRange('LAST_30', today))
+      .then((units) => {
+        if ([...units.values()].every((count) => count === 0)) {
+          setNote('ยังไม่มียอดขายใน 30 วันที่ผ่านมา');
+          return;
+        }
+        setOrder((current) => orderBySales(current, units));
+        setNote('เรียงตามที่ขายได้ 30 วันล่าสุดแล้ว — ตรวจดูแล้วกดบันทึก');
+      })
+      .catch((cause: unknown) => setProblems(problemsOf(cause)));
+  }
+
+  function save(): Promise<boolean> {
+    return saveProductOrder(order.map((product) => product.id)).then(
+      () => {
+        setProblems([]);
+        form.markSaved();
+        return true;
+      },
+      (cause: unknown) => {
+        setProblems(problemsOf(cause));
+        return false;
+      },
+    );
+  }
+
+  return (
+    <Editor
+      title="ลำดับบนหน้าขาย"
+      problems={problems}
+      onSave={save}
+      back={back}
+      dirty={form.dirty}
+      justSaved={form.justSaved}
+    >
+      <p className="text-ink-soft mt-2 text-lg font-bold">
+        บนสุดอยู่ซ้ายบนของหน้าขาย · ขวดอยู่แถวล่างเสมอ
+      </p>
+      <Button variant="secondary" onClick={bySales} className="mt-3 w-full">
+        เรียงตามขายดี 30 วัน
+      </Button>
+      {note ? (
+        <p role="status" className="bg-paper-sunk mt-2 rounded-xl px-4 py-2 text-lg font-bold">
+          {note}
+        </p>
+      ) : null}
+      <ol aria-label="ลำดับ" className="mt-3">
+        {order.map((product, index) => (
+          <li key={product.id} className="border-line flex items-center gap-2 border-b py-2">
+            <span className="w-8 shrink-0 text-xl font-bold tabular-nums">{index + 1}</span>
+            <span
+              className={`min-w-0 flex-1 text-xl font-bold ${product.is_active ? '' : 'text-ink-soft line-through'}`}
+            >
+              {product.name_short_th}
+            </span>
+            <Button
+              variant="secondary"
+              aria-label={`เลื่อน${product.name_short_th}ขึ้น`}
+              disabled={index === 0}
+              onClick={() => setOrder((current) => moveEntry(current, index, -1))}
+            >
+              ▲
+            </Button>
+            <Button
+              variant="secondary"
+              aria-label={`เลื่อน${product.name_short_th}ลง`}
+              disabled={index === order.length - 1}
+              onClick={() => setOrder((current) => moveEntry(current, index, 1))}
+            >
+              ▼
+            </Button>
+          </li>
+        ))}
+      </ol>
+    </Editor>
   );
 }

@@ -71,9 +71,10 @@ describe('the leftovers', () => {
     const user = userEvent.setup();
     const dialog = await toCloseDay(user);
 
-    // 420 g of fresh pear at ฿0.07 a gram.
+    // 420 g of fresh pear at ฿0.07 a gram. Found, not got: the cost appears
+    // once the owner-PIN check has loaded (no PIN here, so costs show).
     expect(
-      decisionFor(dialog, 'กอง B สาลี่สด').getByRole('button', { name: 'ทิ้ง ฿29.40' }),
+      await decisionFor(dialog, 'กอง B สาลี่สด').findByRole('button', { name: 'ทิ้ง ฿29.40' }),
     ).toHaveAttribute('aria-pressed', 'true');
     expect(
       decisionFor(dialog, 'เยลลี่เก๊กฮวย').getByRole('button', { name: /ทิ้ง/ }),

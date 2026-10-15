@@ -1,5 +1,6 @@
 import type { RuduPosDB } from './database.ts';
 import { db as defaultDb } from './database.ts';
+import type { Bom } from './types.ts';
 import {
   BOM_ROWS,
   COMPONENTS,
@@ -177,8 +178,38 @@ async function upgradeCatalog(db: RuduPosDB, from: number): Promise<void> {
       await applyRecipeUpdate(db);
     }
 
+    if (from < 11) {
+      // v11 marks removed rows instead of deleting them. Recipe lines deleted
+      // before that never reached the cloud as gone, so view-only phones may
+      // still count them; mark the ones whose ids are known as removed now.
+      await markDeletedRecipeLines(db);
+    }
+
     await markSeeded(db);
   });
+}
+
+/**
+ * Recipe lines from the seeds that are no longer on this phone were deleted —
+ * by the v10 recipe update, or from settings — before deleting became marking
+ * (see Removable in types.ts). Seeded lines have ids made from their variant
+ * and component, so each one can be written back as removed: sync then tells
+ * the cloud and every view-only phone, which may still be counting it.
+ *
+ * A line the owner added by hand and then deleted had a random id and cannot
+ * be named here; a view-only phone paired again from scratch drops it.
+ */
+export async function markDeletedRecipeLines(
+  db: RuduPosDB,
+  at: string = new Date().toISOString(),
+): Promise<number> {
+  const present = new Set(await db.bom.toCollection().primaryKeys());
+  const gone = new Map<string, Bom>();
+  for (const row of [...V9.BOM_ROWS, ...BOM_ROWS]) {
+    if (!present.has(row.id)) gone.set(row.id, { ...row, removed_at: at, synced_at: null });
+  }
+  if (gone.size > 0) await db.bom.bulkAdd([...gone.values()]);
+  return gone.size;
 }
 
 /** The v6 setting keys, and the component each one was about. */

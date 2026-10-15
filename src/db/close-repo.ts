@@ -20,6 +20,7 @@ import {
 } from '../domain/close-day.ts';
 import { daySummary, type DaySummary } from '../domain/reporting.ts';
 import { waitingOrders } from '../domain/queue.ts';
+import { sessionMovements } from './drawer-repo.ts';
 import { bangkokDate } from '../lib/datetime.ts';
 import type { Satang } from '../lib/money.ts';
 import { nowIso } from '../lib/id.ts';
@@ -33,12 +34,16 @@ export async function sessionSales(session: CashSession, db: RuduPosDB): Promise
   return salesInSession(sales, session);
 }
 
-/** What should be in the drawer right now. */
+/** What should be in the drawer right now: float, cash sales, pay-ins less pay-outs. */
 export async function loadExpectedCash(
   session: CashSession,
   db: RuduPosDB = defaultDb,
 ): Promise<Satang> {
-  return expectedCash(session, await sessionSales(session, db));
+  const [sales, movements] = await Promise.all([
+    sessionSales(session, db),
+    sessionMovements(session.id, db),
+  ]);
+  return expectedCash(session, sales, movements);
 }
 
 export interface CloseDay {
@@ -61,7 +66,14 @@ export async function closeDay(
 ): Promise<CashSession> {
   return db.transaction(
     'rw',
-    [db.cash_session, db.sale, db.component_batch, db.stock_movement, db.waste_event],
+    [
+      db.cash_session,
+      db.cash_movement,
+      db.sale,
+      db.component_batch,
+      db.stock_movement,
+      db.waste_event,
+    ],
     async () => {
       const session = await db.cash_session.get(close.sessionId);
       if (!session) throw new Error(`session ${close.sessionId} not found`);
@@ -84,7 +96,7 @@ export async function closeDay(
         await db.sale.update(sale.id, { handed_over_at: now });
       }
 
-      const expected = expectedCash(session, sales);
+      const expected = expectedCash(session, sales, await sessionMovements(session.id, db));
       const closed: CashSession = {
         ...session,
         closed_at: now,
@@ -108,11 +120,12 @@ export async function loadDaySummary(
   const session = await db.cash_session.get(sessionId);
   if (!session) return null;
 
-  const [catalog, settings, sales, waste] = await Promise.all([
+  const [catalog, settings, sales, waste, movements] = await Promise.all([
     loadCostCatalog(db),
     loadSettings(db),
     sessionSales(session, db),
     db.waste_event.where('cash_session_id').equals(sessionId).toArray(),
+    sessionMovements(sessionId, db),
   ]);
 
   const saleIds = new Set(sales.map((sale) => sale.id));
@@ -134,6 +147,7 @@ export async function loadDaySummary(
     discounts,
     waste,
     batches,
+    movements,
     fixedCostPerDay: settings.fixedCostPerDay,
     breakevenCups: settings.breakevenCups,
   });

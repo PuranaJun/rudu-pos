@@ -10,7 +10,7 @@
  * to open day), or until the app has been away for over a minute — the phone
  * left unlocked in a pocket is the phone handed back to the staff.
  */
-import { useOwnerPin } from '../db/hooks.ts';
+import { useOwnerPin, useSettings } from '../db/hooks.ts';
 import { useNav, type Route } from './nav-store.ts';
 
 /** Screens that are the owner's entirely, by the name the PIN pad opens them with. */
@@ -36,6 +36,23 @@ export function useOwnerLock(): OwnerLock {
   const pin = useOwnerPin();
   const unlocked = useNav((state) => state.ownerUnlocked);
   return { pin, pinSet: typeof pin === 'string', open: pin === null || unlocked };
+}
+
+/**
+ * Whether this screen may show what the drawer should hold — expected cash,
+ * cash sales, and the variance worked out from them.
+ *
+ * With the owner's blind count on (Settings → ร้าน) and a PIN set, staff count
+ * the drawer without knowing the answer, so the count is what is there and
+ * not what was expected; the owner sees the variance unlocked, or from the
+ * view-only phone. With no PIN there is nobody to hide it from. Hidden while
+ * the settings load, so the figure never flashes up first.
+ */
+export function useExpectedCashShown(): boolean {
+  const lock = useOwnerLock();
+  const settings = useSettings();
+  if (settings === undefined) return false;
+  return !settings.blindCashCount || lock.open;
 }
 
 const AWAY_MS = 60_000;

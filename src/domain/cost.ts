@@ -52,6 +52,9 @@ export interface CostCatalog {
 export function buildCostCatalog(rows: CatalogRows): CostCatalog {
   const bomByVariant = new Map<string, Bom[]>();
   for (const row of rows.bom) {
+    // A recipe line taken out is kept as a mark so the cloud hears of it
+    // (see Removable in db/types.ts); it is no longer part of any recipe.
+    if (row.removed_at) continue;
     const list = bomByVariant.get(row.variant_id);
     if (list) list.push(row);
     else bomByVariant.set(row.variant_id, [row]);

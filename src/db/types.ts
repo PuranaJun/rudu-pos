@@ -55,7 +55,7 @@ export type DiscountReason =
   | 'STAFF_DRINK'
   | 'COMP_GOODWILL';
 
-export type PromotionKind = 'AMOUNT_OFF' | 'PERCENT_OFF' | 'BUY_X_GET_Y';
+export type PromotionKind = 'AMOUNT_OFF' | 'PERCENT_OFF' | 'FIXED_PRICE' | 'BUY_X_GET_Y';
 /** AUTO runs on its schedule; MANUAL is switched on at open day, for that day only. */
 export type PromotionActivation = 'AUTO' | 'MANUAL';
 
@@ -71,7 +71,19 @@ interface Synced {
   sync_rev?: number;
 }
 
-export interface Product extends Synced {
+/**
+ * A catalog row the owner can remove. Removed is a mark, never a delete: a
+ * deleted row would stay in the cloud and on every view-only phone, since sync
+ * only ever sends rows that exist (CLAUDE.md §8), and the sales, batches and
+ * waste already recorded still need its name. A removed row is off everywhere
+ * and listed nowhere but "ลบแล้ว", where it can be brought back.
+ */
+interface Removable {
+  /** When it was removed. Absent or null: it is not. */
+  removed_at?: string | null;
+}
+
+export interface Product extends Synced, Removable {
   id: string;
   /** Marketing copy. Printed A3 menu board only — never a POS button. */
   name_full_th: string;
@@ -83,6 +95,12 @@ export interface Product extends Synced {
   advisory_th: string | null;
   is_active: boolean;
   sort_order: number;
+  /**
+   * The business date the operator marked it หมดวันนี้ — out for the rest of
+   * the day for a reason stock cannot see (the garnish ran out). Only that
+   * date: the next day it sells again without anyone resetting it.
+   */
+  sold_out_on?: string | null;
 }
 
 export interface Variant extends Synced {
@@ -100,7 +118,7 @@ export interface Variant extends Synced {
   sort_order: number;
 }
 
-export interface Component extends Synced {
+export interface Component extends Synced, Removable {
   id: string;
   name_th: string;
   unit: Unit;
@@ -149,7 +167,7 @@ export interface Component extends Synced {
   sort_order: number;
 }
 
-export interface Bom extends Synced {
+export interface Bom extends Synced, Removable {
   id: string;
   /** Variant level, never product level. Hot pear differs from iced pear. */
   variant_id: string;
@@ -157,7 +175,7 @@ export interface Bom extends Synced {
   qty_per_cup: number;
 }
 
-export interface PackagingItem extends Synced {
+export interface PackagingItem extends Synced, Removable {
   id: string;
   name_th: string;
   unit_cost: Satang;
@@ -325,6 +343,11 @@ export interface Sale extends Synced {
   handed_over_at: string | null;
   is_voided: boolean;
   void_reason: string | null;
+  /**
+   * When it was voided. Absent on voids from before it was recorded. A void
+   * long after the sale is what the owner's void log is there to show.
+   */
+  voided_at?: string | null;
   device_id: string;
 }
 
@@ -378,7 +401,10 @@ export interface Promotion extends Synced {
   id: string;
   name_th: string;
   kind: PromotionKind;
-  /** AMOUNT_OFF: satang off each cup. */
+  /**
+   * AMOUNT_OFF: satang off each cup. FIXED_PRICE: what each cup sells for —
+   * the drink's own price, paid toppings still charged on top.
+   */
   amount: Satang;
   /** PERCENT_OFF: 1–100. */
   percent: number;
@@ -400,6 +426,8 @@ export interface Promotion extends Synced {
   hours_to: string | null;
   /** False: cups on this promotion do not count towards a PROMO_TWO_CUP pair. */
   stacks_with_two_cup: boolean;
+  /** Only for these order types. Absent or empty: dine-in and takeaway alike. */
+  order_types?: OrderType[];
   is_active: boolean;
   sort_order: number;
 }
@@ -457,6 +485,31 @@ export interface CashSession extends Synced {
   counted_cash: Satang | null;
   variance: Satang | null;
   note: string | null;
+}
+
+/** Why cash went into or out of the drawer other than through a sale. */
+export type CashMovementReason = 'ICE' | 'SUPPLIES' | 'CHANGE' | 'OWNER' | 'OTHER';
+
+/**
+ * Cash put into the drawer or taken out of it that is not a sale: the bag of
+ * ice paid from the till, more change brought from home, the owner taking
+ * money out. Without a row, every one of these is variance at close.
+ *
+ * Money only: what the cash bought is costed where it is used (ice is in each
+ * cup's packaging), so a pay-out is never an expense twice.
+ */
+export interface CashMovement extends Synced {
+  id: string;
+  cash_session_id: string;
+  created_at: string;
+  direction: 'IN' | 'OUT';
+  /** Satang, always positive; `direction` says which way. */
+  amount: Satang;
+  reason: CashMovementReason;
+  note: string | null;
+  operator_id: string;
+  /** Set when it was a mistake: cancelled, never deleted (CLAUDE.md §10). */
+  voided_at: string | null;
 }
 
 export type SettingValue = string | number | boolean | number[] | string[] | null;

@@ -12,6 +12,7 @@
 import { bangkokDate } from '../lib/datetime.ts';
 import type { Satang } from '../lib/money.ts';
 import type {
+  CashMovement,
   CashSession,
   ComponentBatch,
   DiscountReason,
@@ -24,6 +25,7 @@ import type {
 } from '../db/types.ts';
 import type { CostCatalog } from './cost.ts';
 import { salesInSession } from './close-day.ts';
+import { liveMovements, movementTotals, reasonTh } from './drawer.ts';
 
 export interface DayTotals {
   /** Cups and bottles rung, voids excluded. Free cups count. */
@@ -160,10 +162,25 @@ export interface DaySummary {
   /** Null while the session is open and the drawer has not been counted. */
   cash: {
     openingFloat: Satang;
+    /** Cash put into the drawer that was not a sale (domain/drawer.ts). */
+    paidIn: Satang;
+    /** Cash taken out of the drawer that was not a sale. */
+    paidOut: Satang;
     expected: Satang;
     counted: Satang;
     variance: Satang;
   } | null;
+  /** Every pay-in and pay-out that stands, oldest first. */
+  drawerMovements: DrawerMovementLine[];
+}
+
+export interface DrawerMovementLine {
+  id: string;
+  at: string;
+  direction: 'IN' | 'OUT';
+  amount: Satang;
+  label: string;
+  note: string | null;
 }
 
 export interface DaySummaryInput {
@@ -175,6 +192,8 @@ export interface DaySummaryInput {
   discounts: readonly SaleLineDiscount[];
   waste: readonly WasteEvent[];
   batches: readonly ComponentBatch[];
+  /** The session's pay-ins and pay-outs; cancelled ones are left out here. */
+  movements?: readonly CashMovement[];
   fixedCostPerDay: Satang;
   breakevenCups: number;
 }
@@ -218,6 +237,8 @@ export function daySummary(input: DaySummaryInput): DaySummary {
   waste.sort((a, b) => b.cost - a.cost);
 
   const wasteCost = waste.reduce((total, line) => total + line.cost, 0);
+  const movements = input.movements ?? [];
+  const { paidIn, paidOut } = movementTotals(session, movements);
 
   return {
     businessDate: bangkokDate(session.opened_at),
@@ -240,11 +261,21 @@ export function daySummary(input: DaySummaryInput): DaySummary {
       session.counted_cash !== null && session.expected_cash !== null
         ? {
             openingFloat: session.opening_float,
+            paidIn,
+            paidOut,
             expected: session.expected_cash,
             counted: session.counted_cash,
             variance: session.variance ?? session.counted_cash - session.expected_cash,
           }
         : null,
+    drawerMovements: liveMovements(session, movements).map((movement) => ({
+      id: movement.id,
+      at: movement.created_at,
+      direction: movement.direction,
+      amount: movement.amount,
+      label: reasonTh(movement.reason, movement.direction),
+      note: movement.note,
+    })),
   };
 }
 

@@ -84,7 +84,11 @@ afterEach(async () => {
 });
 
 async function bomFor(variantId: string): Promise<Record<string, number>> {
-  const rows = await db.bom.where('variant_id').equals(variantId).toArray();
+  // Lines taken out of a recipe stay as removed marks for the cloud; they are
+  // not part of the recipe.
+  const rows = (await db.bom.where('variant_id').equals(variantId).toArray()).filter(
+    (row) => !row.removed_at,
+  );
   return Object.fromEntries(rows.map((row) => [row.component_id, row.qty_per_cup]));
 }
 

@@ -19,6 +19,7 @@ import {
 import { bangkokDate } from '../lib/datetime.ts';
 import { loadCostCatalog } from './catalog.ts';
 import { periodReport, type PeriodRange, type PeriodReport } from '../domain/period-report.ts';
+import { unitsByProduct } from '../domain/menu-order.ts';
 import type { Satang } from '../lib/money.ts';
 
 /**
@@ -63,6 +64,24 @@ export async function loadClosedDays(db: RuduPosDB = defaultDb): Promise<ClosedD
   return closedDays(sessions, sales, lines, waste);
 }
 
+/** Cups sold per product over the range, voided sales left out — for ordering the menu. */
+export async function loadUnitsByProduct(
+  range: PeriodRange,
+  db: RuduPosDB = defaultDb,
+): Promise<Map<string, number>> {
+  const sales = await db.sale
+    .where('business_date')
+    .between(range.from, range.to, true, true)
+    .toArray();
+  const lines = await db.sale_line
+    .where('sale_id')
+    .anyOf(sales.map((sale) => sale.id))
+    .toArray();
+  const variants = new Map((await db.variant.toArray()).map((v) => [v.id, v.product_id]));
+  const live = new Set(sales.filter((sale) => !sale.is_voided).map((sale) => sale.id));
+  return unitsByProduct(lines, live, (variantId) => variants.get(variantId));
+}
+
 /** A week's or a month's numbers, by business date. */
 export async function loadPeriodReport(
   range: PeriodRange,
@@ -77,17 +96,19 @@ export async function loadPeriodReport(
     .anyOf(sales.map((sale) => sale.id))
     .toArray();
   const lineIds = lines.map((line) => line.id);
-  const [catalog, mods, discounts, movements, waste, sessions] = await Promise.all([
+  const [catalog, mods, discounts, movements, waste, sessions, adjustments] = await Promise.all([
     loadCostCatalog(db),
     db.sale_line_mod.where('sale_line_id').anyOf(lineIds).toArray(),
     db.sale_line_discount.where('sale_line_id').anyOf(lineIds).toArray(),
     db.stock_movement.where('sale_line_id').anyOf(lineIds).toArray(),
     db.waste_event.toArray(),
     db.cash_session.toArray(),
+    db.stock_movement.where('reason').equals('ADJUSTMENT').toArray(),
   ]);
   const batchIds = new Set([
     ...movements.map((movement) => movement.component_batch_id),
     ...waste.map((event) => event.component_batch_id),
+    ...adjustments.map((movement) => movement.component_batch_id),
   ]);
   const batches = await db.component_batch
     .where('id')
@@ -104,5 +125,6 @@ export async function loadPeriodReport(
     waste,
     batches,
     sessions,
+    adjustments,
   });
 }

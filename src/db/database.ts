@@ -3,6 +3,7 @@ import type {
   Bom,
   CartLine,
   CartLineMod,
+  CashMovement,
   CashSession,
   Component,
   ComponentBatch,
@@ -30,9 +31,12 @@ import { legacySalePatches } from '../domain/queue.ts';
 export const DB_NAME = 'RuduPosDB';
 
 /**
- * Every table that goes to the cloud, with its indexes as of version 7. The
- * open cart never does: it belongs to the phone it is on, and is gone at the
- * next payment anyway.
+ * Every table that went to the cloud when sync arrived, with its indexes as of
+ * version 7. The open cart never does: it belongs to the phone it is on, and
+ * is gone at the next payment anyway.
+ *
+ * Frozen: version 8 is built from it, and a past version must never change
+ * shape. A table added later goes in its own version and in ADDED_SYNCED.
  */
 const SYNCED_SCHEMA = {
   product: 'id, sort_order',
@@ -61,8 +65,17 @@ const SYNCED_SCHEMA = {
   setting: 'key',
 } as const;
 
-export type SyncedTable = keyof typeof SYNCED_SCHEMA;
-export const SYNCED_TABLES = Object.keys(SYNCED_SCHEMA) as SyncedTable[];
+/** Synced tables added after version 8, each declared in its own version below. */
+const ADDED_SYNCED = {
+  // Version 9: cash paid into or out of the drawer.
+  cash_movement: 'id, cash_session_id, created_at, sync_dirty',
+} as const;
+
+export type SyncedTable = keyof typeof SYNCED_SCHEMA | keyof typeof ADDED_SYNCED;
+export const SYNCED_TABLES = [
+  ...Object.keys(SYNCED_SCHEMA),
+  ...Object.keys(ADDED_SYNCED),
+] as SyncedTable[];
 
 // Writes that came from the cloud are already in the cloud: they must not be
 // marked as changes to send back. Set only around applying a pull.
@@ -143,6 +156,7 @@ export class RuduPosDB extends Dexie {
   sale_line_mod!: Table<SaleLineMod, string>;
   sale_line_discount!: Table<SaleLineDiscount, string>;
   cash_session!: Table<CashSession, string>;
+  cash_movement!: Table<CashMovement, string>;
 
   // The open cart. Persisted per line, cleared at payment.
   cart_line!: Table<CartLine, string>;
@@ -228,10 +242,13 @@ export class RuduPosDB extends Dexie {
         ),
       )
       .upgrade(async (tx) => {
-        for (const table of SYNCED_TABLES) {
+        for (const table of Object.keys(SYNCED_SCHEMA)) {
           await tx.table(table).toCollection().modify({ sync_dirty: 1, sync_rev: 1 });
         }
       });
+
+    // Cash in and out of the drawer that is not a sale.
+    this.version(9).stores({ cash_movement: ADDED_SYNCED.cash_movement });
 
     for (const name of SYNCED_TABLES) trackChanges(this.table(name));
   }

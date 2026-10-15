@@ -92,6 +92,12 @@ export interface PeriodInput {
   movements: readonly StockMovement[];
   /** Every waste event; the range is applied here. */
   waste: readonly WasteEvent[];
+  /**
+   * Count corrections — ADJUSTMENT movements from open day and close day,
+   * any date; the range is applied here. Optional: a report built without
+   * them simply has no count gap.
+   */
+  adjustments?: readonly StockMovement[];
   batches: readonly ComponentBatch[];
   sessions: readonly CashSession[];
 }
@@ -118,6 +124,48 @@ export interface PeriodReport {
   attach: { modifierId: string; name: string; attached: number; eligible: number }[];
   /** Thrown away, of what left the shelf (sold + thrown away). Worst first. */
   waste: { componentId: string; name: string; unit: Unit; wasted: number; used: number }[];
+  /** Counted against what the recipes say is left — see CountGap. Costliest first. */
+  countGap: CountGap[];
+  /** Every voided bill in the range, oldest first: the owner's void log. */
+  voids: VoidEntry[];
+  /** Voids per operator, most money first. */
+  voidsByOperator: { operator: string; count: number; amount: Satang }[];
+}
+
+/**
+ * A voided bill, as the owner reads it from home. A void cannot be deleted
+ * (CLAUDE.md §10), so the log is complete; a void long after its sale, or
+ * one person voiding far more than another, is the question to ask.
+ */
+export interface VoidEntry {
+  saleId: string;
+  businessDate: string;
+  orderNo: number;
+  rungAt: string;
+  /** Null for voids from before the time was kept. */
+  voidedAt: string | null;
+  amount: Satang;
+  method: PaymentMethod;
+  reason: string;
+  operator: string;
+}
+
+/**
+ * One component's count gap: what open-day and close-day counts found, less
+ * what the recipes said should be there. Negative is missing — poured over
+ * the recipe, spilt, or a cup made and never rung. Positive is more than
+ * expected — poured under the recipe, or a batch bigger than recorded.
+ */
+export interface CountGap {
+  componentId: string;
+  name: string;
+  unit: Unit;
+  /** Sum of the corrections: negative is short. */
+  gap: number;
+  /** What sales took by the recipe over the same days, to size the gap against. */
+  used: number;
+  /** The gap at the component's cost today, in satang: a size, not a ledger figure. */
+  cost: Satang;
 }
 
 export function periodReport(input: PeriodInput): PeriodReport {
@@ -229,6 +277,53 @@ export function periodReport(input: PeriodInput): PeriodReport {
     const componentId = componentOf.get(movement.component_batch_id);
     if (componentId) used.set(componentId, (used.get(componentId) ?? 0) - movement.qty_delta);
   }
+  // Count gap: corrections the counts made, against what sales used.
+  const gaps = new Map<string, number>();
+  for (const movement of input.adjustments ?? []) {
+    if (movement.reason !== 'ADJUSTMENT') continue;
+    if (!inRange(bangkokDate(movement.created_at))) continue;
+    const componentId = componentOf.get(movement.component_batch_id);
+    if (componentId) gaps.set(componentId, (gaps.get(componentId) ?? 0) + movement.qty_delta);
+  }
+  const countGap = [...gaps]
+    .filter(([, gap]) => gap !== 0)
+    .map(([componentId, gap]): CountGap => {
+      const component = catalog.components.get(componentId);
+      return {
+        componentId,
+        name: component?.name_th ?? componentId,
+        unit: component?.unit ?? 'G',
+        gap,
+        used: used.get(componentId) ?? 0,
+        cost: Math.round(gap * (component?.cost_per_unit ?? 0) * 100),
+      };
+    })
+    .sort((a, b) => Math.abs(b.cost) - Math.abs(a.cost) || Math.abs(b.gap) - Math.abs(a.gap));
+
+  // The void log.
+  const voids: VoidEntry[] = input.sales
+    .filter((sale) => sale.is_voided && inRange(sale.business_date))
+    .sort((a, b) => a.created_at.localeCompare(b.created_at))
+    .map((sale) => ({
+      saleId: sale.id,
+      businessDate: sale.business_date,
+      orderNo: sale.order_no,
+      rungAt: sale.created_at,
+      voidedAt: sale.voided_at ?? null,
+      amount: sale.total_net,
+      method: sale.payment_method,
+      reason: sale.void_reason ?? '',
+      operator: sale.operator_id,
+    }));
+  const voidsByOperator = new Map<string, { count: number; amount: Satang }>();
+  for (const entry of voids) {
+    const current = voidsByOperator.get(entry.operator) ?? { count: 0, amount: 0 };
+    voidsByOperator.set(entry.operator, {
+      count: current.count + 1,
+      amount: current.amount + entry.amount,
+    });
+  }
+
   const waste = [...new Set([...wasted.keys(), ...used.keys()])]
     .map((componentId) => {
       const component = catalog.components.get(componentId);
@@ -269,6 +364,11 @@ export function periodReport(input: PeriodInput): PeriodReport {
     payments,
     attach,
     waste,
+    countGap,
+    voids,
+    voidsByOperator: [...voidsByOperator]
+      .map(([operator, entry]) => ({ operator, ...entry }))
+      .sort((a, b) => b.amount - a.amount || b.count - a.count),
   };
 }
 
