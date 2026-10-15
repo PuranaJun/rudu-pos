@@ -33,7 +33,11 @@ import {
   checkProduct,
   checkVariant,
 } from '../domain/catalog-rules.ts';
-import { componentRemovalBlockers, packagingItemRemovalBlockers } from '../domain/removal.ts';
+import {
+  componentRemovalBlockers,
+  packagingItemRemovalBlockers,
+  productRestoreBlockers,
+} from '../domain/removal.ts';
 import { loadCostCatalog } from './catalog.ts';
 import type { Satang } from '../lib/money.ts';
 import { newId, nowIso } from '../lib/id.ts';
@@ -209,6 +213,7 @@ export async function removeProduct(
 
 /** Back from ลบแล้ว, switched off: the owner looks it over before selling it again. */
 export async function restoreProduct(id: string, db: RuduPosDB = defaultDb): Promise<void> {
+  refuse(productRestoreBlockers(await loadCostCatalog(db), id));
   await db.product.update(id, { removed_at: null, is_active: false });
 }
 

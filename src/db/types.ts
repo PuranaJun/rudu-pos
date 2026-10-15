@@ -367,6 +367,12 @@ export interface SaleLine extends Synced {
    */
   discount_reason: DiscountReason | null;
   unit_cost: Satang;
+  /**
+   * Rung although it showed sold out — past the stock, or a drink taken off
+   * หมดวันนี้ — and confirmed by the operator. Warn, allow, record (§2.1.6).
+   * Absent on lines from before it was kept.
+   */
+  sold_out_override?: boolean;
 }
 
 /**

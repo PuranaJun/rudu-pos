@@ -128,11 +128,11 @@ describe('with a PIN set, on the shop phone', () => {
 
     await waitFor(() =>
       expect(hub.getByRole('button', { name: 'ตั้งค่า' })).toHaveAccessibleDescription(
-        'เครื่องดื่ม · ราคา · สูตร · ต้องใช้รหัส',
+        /^เครื่องดื่ม\s·\sราคา\s·\sสูตร\s·\sต้องใช้รหัส$/,
       ),
     );
     expect(hub.getByRole('button', { name: 'บิลวันนี้' })).toHaveAccessibleDescription(
-      'ดูบิล · ยกเลิกบิล',
+      /^ดูบิล\s·\sยกเลิกบิล$/,
     );
   });
 

@@ -10,7 +10,11 @@ export function parseNumber(text: string): number | null {
   return Number(cleaned);
 }
 
-/** A number back into a field; blank for null. */
+/**
+ * A number back into a field or onto a list; blank for null. Rounded to 10
+ * significant digits first, so float noise from arithmetic on a cost
+ * (0.026000000000000002) reads as the 0.026 it is.
+ */
 export function numberText(value: number | null): string {
-  return value === null ? '' : String(value);
+  return value === null ? '' : String(Number(value.toPrecision(10)));
 }

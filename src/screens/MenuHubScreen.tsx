@@ -144,9 +144,10 @@ function Tile({
       <span id={`${id}-detail`} className="text-ink-soft mt-1 text-lg">
         {detail.map((phrase, index) => (
           // The separator stays outside the unbreakable part: the line may
-          // wrap at " · ", and only there.
+          // wrap after " · ", and only there — the space before the dot is a
+          // no-break space, so no line ever starts with "·".
           <Fragment key={phrase}>
-            {index > 0 ? ' · ' : ''}
+            {index > 0 ? '\u00a0· ' : ''}
             <span className="whitespace-nowrap">{phrase}</span>
           </Fragment>
         ))}

@@ -218,6 +218,25 @@ export interface PrepReminder {
   readyBy: string;
   /** Past the start-by time already. Still worth starting; it just says so. */
   late: boolean;
+  /** Today's start-by moment, as an ISO instant. */
+  deadline: string;
+}
+
+/** How long before its start-by time a reminder reaches the sell screen. */
+export const SELL_SCREEN_PREP_LEAD_HOURS = 3;
+
+/**
+ * The reminders worth a place on the sell screen: from a few hours before the
+ * start-by time until a batch is started. All day, the banner took a sale's
+ * worth of room for something that cannot be done before evening; open day
+ * and production still list every one.
+ */
+export function remindersDueSoon(
+  reminders: readonly PrepReminder[],
+  now: string,
+  leadHours: number = SELL_SCREEN_PREP_LEAD_HOURS,
+): PrepReminder[] {
+  return reminders.filter((reminder) => now >= addHours(reminder.deadline, -leadHours));
 }
 
 /**
@@ -240,7 +259,14 @@ export function prepReminders(
   const reminders: PrepReminder[] = [];
 
   const components = [...catalog.components.values()]
-    .filter((component) => component.is_batch_tracked && isClockTime(component.prep_start_by))
+    // A component switched off or removed is not made any more: nothing to remind.
+    .filter(
+      (component) =>
+        component.is_batch_tracked &&
+        component.is_active &&
+        !component.removed_at &&
+        isClockTime(component.prep_start_by),
+    )
     .sort((a, b) => a.sort_order - b.sort_order);
 
   for (const component of components) {
@@ -260,7 +286,7 @@ export function prepReminders(
         batchRemaining(batch.id, snapshot.movements) > 0,
     );
 
-    if (!covered) reminders.push({ component, startBy, readyBy, late: now > deadline });
+    if (!covered) reminders.push({ component, startBy, readyBy, late: now > deadline, deadline });
   }
 
   return reminders;
@@ -274,4 +300,17 @@ function expiryFrom(component: Component, from: string): string {
 
 function isClockTime(value: string | null): boolean {
   return value !== null && /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
+}
+
+/**
+ * A recipe note as staff may read it: the parts about cost left out. Notes
+ * are " · "-separated parts, and the owner's cost remarks start with ต้นทุน —
+ * behind the owner's PIN like every other cost (CLAUDE.md §6.7). The note in
+ * the database is untouched; settings show it whole.
+ */
+export function noteWithoutCosts(note: string): string {
+  return note
+    .split(' · ')
+    .filter((part) => !part.trim().startsWith('ต้นทุน'))
+    .join(' · ');
 }

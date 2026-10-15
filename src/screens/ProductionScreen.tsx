@@ -9,6 +9,7 @@ import { nowIso } from '../lib/id.ts';
 import {
   batchList,
   clocksFor,
+  noteWithoutCosts,
   prepReminders,
   sourceOptions,
   sourceQtyFor,
@@ -18,6 +19,7 @@ import type { CostCatalog } from '../domain/cost.ts';
 import type { StockSnapshot } from '../domain/stock.ts';
 import { useCostCatalog, useStockSnapshot } from '../db/hooks.ts';
 import { blanchBatch, recordProduction } from '../db/stock-repo.ts';
+import { useOwnerLock } from '../nav/owner-lock.ts';
 import type { BatchState, Component } from '../db/types.ts';
 
 const STATE_TH: Record<BatchState, string> = {
@@ -211,15 +213,22 @@ function NewBatchForm({
   const chosen = options.find((option) => option.batch.id === pickedSource) ?? options[0] ?? null;
 
   const clocks = madeAt ? clocksFor(component, madeAt) : null;
+  // Cost remarks in the note are the owner's (§6.7).
+  const costsOpen = useOwnerLock().open;
+  const note = component.recipe_note_th
+    ? costsOpen
+      ? component.recipe_note_th
+      : noteWithoutCosts(component.recipe_note_th)
+    : '';
   const canRecord = qtyValid && madeAt !== null && (!source || chosen !== null);
 
   return (
     <>
       <ScreenBody>
-        {component.recipe_note_th ? (
+        {note ? (
           // A reminder, not a form field: the recipe is edited in settings.
           <p className="bg-paper-sunk mt-3 rounded-xl px-4 py-3 text-lg leading-relaxed font-bold">
-            {component.recipe_note_th}
+            {note}
           </p>
         ) : null}
 

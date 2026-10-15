@@ -68,6 +68,23 @@ export function componentRemovalBlockers(catalog: CostCatalog, componentId: stri
   return problems;
 }
 
+/**
+ * Why a removed drink cannot come back yet. Empty: it can. A recipe that needs
+ * a component since removed would leave the drink sold out for good, with the
+ * component missing from production to make more.
+ */
+export function productRestoreBlockers(catalog: CostCatalog, productId: string): string[] {
+  const gone = new Set<string>();
+  for (const variant of catalog.variants.values()) {
+    if (variant.product_id !== productId) continue;
+    for (const row of catalog.bomByVariant.get(variant.id) ?? []) {
+      const component = catalog.components.get(row.component_id);
+      if (component && isRemoved(component)) gone.add(component.name_th);
+    }
+  }
+  return gone.size > 0 ? [`สูตรใช้ส่วนประกอบที่ลบแล้ว: ${listed(gone)} — เอากลับมาก่อน`] : [];
+}
+
 /** Why a packaging item cannot be removed yet. Empty: it can. */
 export function packagingItemRemovalBlockers(
   catalog: CostCatalog,

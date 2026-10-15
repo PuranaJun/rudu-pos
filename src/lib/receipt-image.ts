@@ -49,7 +49,9 @@ export function receiptRows(receipt: Receipt, voidReason: string | null = null):
     rows.push({
       kind: 'pair',
       left: `${line.name} × ${line.qty}`,
-      right: formatTHB(line.net),
+      // Full price on the line, its discounts under it: line − discounts =
+      // what was paid, adding up the same way as รวม − ส่วนลด = สุทธิ.
+      right: formatTHB(line.unitPrice * line.qty),
       size: 28,
       bold: true,
     });

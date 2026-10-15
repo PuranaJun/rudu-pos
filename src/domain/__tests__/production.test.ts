@@ -8,7 +8,9 @@ import {
   batchList,
   blanched,
   planBatch,
+  noteWithoutCosts,
   prepReminders,
+  remindersDueSoon,
   sourceOptions,
   sourceQtyFor,
 } from '../production.ts';
@@ -277,5 +279,47 @@ describe('prep reminders', () => {
 
     const reminders = prepReminders(catalog, snapshot(), EVENING);
     expect(reminders.map((reminder) => reminder.startBy)).toEqual(['22:30']);
+  });
+});
+
+describe('prep reminders on the sell screen', () => {
+  // 15:00 and 17:00 Bangkok.
+  const AFTERNOON = '2026-09-22T08:00:00.000Z';
+  const FIVE_PM = '2026-09-22T10:00:00.000Z';
+
+  it('come up three hours before the start-by time, and stay once late', () => {
+    expect(remindersDueSoon(prepReminders(catalog, snapshot(), AFTERNOON), AFTERNOON)).toEqual([]);
+    expect(
+      remindersDueSoon(prepReminders(catalog, snapshot(), FIVE_PM), FIVE_PM).map(
+        (reminder) => reminder.component.id,
+      ),
+    ).toEqual(['COMP_TEA_WHITE']); // 19:00 is within 3 h; red's 21:00 is not yet
+    expect(
+      remindersDueSoon(prepReminders(catalog, snapshot(), EVENING), EVENING).map(
+        (reminder) => reminder.component.id,
+      ),
+    ).toEqual(['COMP_TEA_RED', 'COMP_TEA_WHITE']); // white is late and still asked for
+  });
+
+  it('never come from a component switched off or removed', () => {
+    const components = new Map(catalog.components);
+    components.set('COMP_TEA_RED', {
+      ...component('COMP_TEA_RED'),
+      removed_at: EVENING,
+      is_active: false,
+    });
+    components.set('COMP_TEA_WHITE', { ...component('COMP_TEA_WHITE'), is_active: false });
+    expect(prepReminders({ ...catalog, components }, snapshot(), EVENING)).toEqual([]);
+  });
+});
+
+describe('noteWithoutCosts', () => {
+  it('drops the parts about cost and keeps the recipe', () => {
+    expect(
+      noteWithoutCosts(
+        'น้ำตาล 1 kg + น้ำ 1.38 L · ต้นทุนจากไฟล์ต้นทุน: 3 ปั๊ม 0.78 บาท · เก็บตู้เย็น',
+      ),
+    ).toBe('น้ำตาล 1 kg + น้ำ 1.38 L · เก็บตู้เย็น');
+    expect(noteWithoutCosts('ใบชา 50 g · ต้นทุนคิดเฉพาะใบชา ไม่รวมน้ำดื่ม')).toBe('ใบชา 50 g');
   });
 });

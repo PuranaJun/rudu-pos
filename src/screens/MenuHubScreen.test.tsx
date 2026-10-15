@@ -66,7 +66,8 @@ describe('from the sell screen', () => {
     const hub = await openHub(user);
 
     expect(within(hub).getByRole('button', { name: 'บิลวันนี้' })).toHaveAccessibleDescription(
-      'ดูบิล · ยกเลิกบิล',
+      // The space before each dot is a no-break space, so a line never starts with "·".
+      /^ดูบิล\s·\sยกเลิกบิล$/,
     );
   });
 });

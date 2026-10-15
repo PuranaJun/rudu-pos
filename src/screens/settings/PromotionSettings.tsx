@@ -126,7 +126,14 @@ function PromotionEditor({
     });
 
   const [name, setName] = useState(promotion.name_th);
-  const [kind, setKind] = useState<PromotionKind>(promotion.kind);
+  const [kind, setKindRaw] = useState<PromotionKind>(promotion.kind);
+  // A set price is a price, not a discount: switching to it never carries
+  // over the ฿10-off default, which would sell every drink at ฿10. It starts
+  // empty and must be typed.
+  const setKind = (next: PromotionKind) => {
+    if (next === 'FIXED_PRICE' && kind !== 'FIXED_PRICE') setAmount('');
+    setKindRaw(next);
+  };
   const [amount, setAmount] = useState(bahtInput(promotion.amount));
   const [percent, setPercent] = useState(String(promotion.percent));
   const [buy, setBuy] = useState(String(promotion.buy_qty));
@@ -231,7 +238,7 @@ function PromotionEditor({
           .map((phrase, index) => (
             // Each phrase whole on a line: Thai has no spaces to break at.
             <span key={phrase}>
-              {index > 0 ? ' · ' : null}
+              {index > 0 ? '\u00a0· ' : null}
               <span className="whitespace-nowrap">{phrase}</span>
             </span>
           ))}

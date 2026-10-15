@@ -17,7 +17,7 @@ import { discountLabel } from '../domain/promotions.ts';
 import { breakeven, EMPTY_DAY_TOTALS } from '../domain/reporting.ts';
 import { availableCups } from '../domain/stock.ts';
 import { soldOutToday } from '../domain/sold-out.ts';
-import { prepReminders } from '../domain/production.ts';
+import { prepReminders, remindersDueSoon } from '../domain/production.ts';
 import { ORDER_TYPE_TH } from '../domain/queue.ts';
 import { packagingWarnings } from '../domain/packaging.ts';
 import { nowIso } from '../lib/id.ts';
@@ -110,7 +110,8 @@ export default function SellScreen({ session }: { session: CashSession }) {
 
   // Drawn with the screen, which redraws on every tap and every write — close
   // enough for a reminder about tonight, and nothing has to tick for it.
-  const reminders = prepReminders(catalog, stock, nowIso());
+  const now = nowIso();
+  const reminders = remindersDueSoon(prepReminders(catalog, stock, now), now);
 
   // Live, the waste is not known yet; at close it comes off (CLAUDE.md §7).
   const even = breakeven(today, settings.fixedCostPerDay, settings.breakevenCups);
@@ -186,6 +187,9 @@ export default function SellScreen({ session }: { session: CashSession }) {
       deviceId: deviceId ?? 'unknown',
       brandingLineTh: settings!.brandingLineTh,
       businessDate,
+      // What the total on screen was priced with: a toggle that moved since
+      // is caught, not recorded (a promotion can be dine-in or takeaway only).
+      pricedOrderType: settings!.orderType,
     })
       .then((result) => {
         setError(null);
@@ -249,7 +253,7 @@ export default function SellScreen({ session }: { session: CashSession }) {
       </header>
 
       {/* Tomorrow's tea. Only there when something needs starting. */}
-      <PrepBanner reminders={reminders} onTap={() => open('PRODUCTION')} />
+      <PrepBanner reminders={reminders} onTap={() => open('PRODUCTION')} compact />
       {/* Cups or lids running out: said, never in the way (§6.6). */}
       <PackagingBanner
         warnings={packaging ? packagingWarnings(packaging) : []}
@@ -288,11 +292,15 @@ export default function SellScreen({ session }: { session: CashSession }) {
           cart and pay alongside the menu instead of under it — same flow, bigger
           buttons, nothing added. */}
       <div className="tablet:flex-row flex min-h-0 flex-1 flex-col">
-        {/* The menu. */}
+        {/* The menu. On a phone it is what gives way: whatever the banners and
+            the queue take above, the cart's order type and the pay buttons
+            below keep their full height, and the menu scrolls in what is left
+            — never less than a row of drinks (CLAUDE.md §1: primary actions in
+            reach, always). */}
         <div
           aria-label="เมนู"
-          className={`tablet:min-h-0 tablet:max-h-none tablet:flex-1 tablet:overflow-y-auto tablet:gap-4 tablet:p-4 flex shrink-0 flex-col gap-2 p-2 ${
-            compact ? 'max-h-[46dvh] overflow-y-auto overscroll-contain' : ''
+          className={`tablet:min-h-0 tablet:max-h-none tablet:flex-1 tablet:gap-4 tablet:p-4 flex min-h-[6rem] shrink flex-col gap-2 overflow-y-auto overscroll-contain p-2 ${
+            compact ? 'max-h-[46dvh]' : ''
           }`}
         >
           {/* Wraps: a third drink takes the next row rather than squeezing the
@@ -335,7 +343,8 @@ export default function SellScreen({ session }: { session: CashSession }) {
           })}
         </div>
 
-        <div className="tablet:w-[40%] tablet:max-w-md tablet:flex-none tablet:border-l border-line flex min-h-0 flex-1 flex-col">
+        {/* Never shrinks below its order-type chips and footer on a phone. */}
+        <div className="tablet:w-[40%] tablet:max-w-md tablet:flex-none tablet:border-l tablet:min-h-0 border-line flex flex-1 flex-col">
           {/* Stays where it was left, sale after sale: the standard sale never
               touches it (CLAUDE.md §6.1). */}
           <div role="group" aria-label="ทานที่ไหน" className="flex gap-2 px-4 pt-2">
@@ -352,7 +361,14 @@ export default function SellScreen({ session }: { session: CashSession }) {
           </div>
 
           {/* The cart. */}
-          <main className="min-h-0 flex-1 overflow-y-auto px-4">
+          {/* At least one line in view once there is one: its stepper and
+              options are how a second cup is rung (§6.1). */}
+          <main
+            // Size containment: the cart's lines never count towards how tall
+            // this column has to be. It takes what is left and scrolls, and
+            // asks for no more than one line's height from the menu above.
+            className={`flex-1 overflow-y-auto px-4 [contain:size] ${cart.length > 0 ? 'min-h-[5.5rem]' : 'min-h-0'}`}
+          >
             {cart.length === 0 ? (
               <p className="text-ink-soft py-6 text-center text-lg font-bold">ยังไม่มีรายการ</p>
             ) : (
@@ -397,9 +413,14 @@ export default function SellScreen({ session }: { session: CashSession }) {
               >
                 <p className="text-xl font-bold">
                   <span aria-hidden="true">⚠ </span>
-                  {pendingSoldOut.name_short_th} หมดแล้ว
+                  {pendingSoldOut.name_short_th}{' '}
+                  {soldOutToday(pendingSoldOut, businessDate) ? 'ปิดไว้วันนี้' : 'หมดแล้ว'}
                 </p>
-                <p className="text-lg font-bold">เลยจำนวนที่มี — ขายต่อ?</p>
+                <p className="text-lg font-bold">
+                  {soldOutToday(pendingSoldOut, businessDate)
+                    ? 'ปิดไว้ในหมดวันนี้ — ขายต่อ?'
+                    : 'เลยจำนวนที่มี — ขายต่อ?'}
+                </p>
                 <div className="mt-2 flex gap-2">
                   <Button
                     variant="secondary"
@@ -415,70 +436,84 @@ export default function SellScreen({ session }: { session: CashSession }) {
               </div>
             ) : null}
 
-            {done ? (
-              <div role="status" className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                {/* Said out loud to the customer: as big as the change. */}
-                <p className="border-ink rounded-xl border-2 px-2 text-4xl leading-tight font-bold tabular-nums">
-                  คิว {done.receipt.orderNo}
-                </p>
-                {done.receipt.cashChange ? (
-                  // Read at arm's length with the customer watching: the
-                  // largest type on the screen.
-                  <p className="text-5xl leading-none font-bold tabular-nums">
-                    ทอน {formatTHB(done.receipt.cashChange)}
-                  </p>
-                ) : (
-                  <p className="text-xl font-bold">
-                    <span aria-hidden="true">✓ </span>ขายแล้ว {formatTHB(done.receipt.totalNet)}
-                  </p>
-                )}
-                {done.shortfalls > 0 ? (
-                  <p className="bg-today rounded-lg px-2 text-lg font-bold">
-                    สต็อกติดลบ {done.shortfalls} รายการ
+            {/* While the operator decides on a sold-out drink, the prompt has
+                the footer to itself: nothing is paid until it is answered, and
+                on a phone the prompt and the pay buttons together do not fit. */}
+            {pendingSoldOut ? null : (
+              <>
+                {done ? (
+                  <div
+                    role="status"
+                    className="mb-2 flex flex-wrap items-center justify-between gap-2"
+                  >
+                    {/* Said out loud to the customer: as big as the change. */}
+                    <p className="border-ink rounded-xl border-2 px-2 text-4xl leading-tight font-bold tabular-nums">
+                      คิว {done.receipt.orderNo}
+                    </p>
+                    {done.receipt.cashChange ? (
+                      // Read at arm's length with the customer watching: the
+                      // largest type on the screen.
+                      <p className="text-5xl leading-none font-bold tabular-nums">
+                        ทอน {formatTHB(done.receipt.cashChange)}
+                      </p>
+                    ) : (
+                      <p className="text-xl font-bold">
+                        <span aria-hidden="true">✓ </span>ขายแล้ว {formatTHB(done.receipt.totalNet)}
+                      </p>
+                    )}
+                    {done.shortfalls > 0 ? (
+                      <p className="bg-today rounded-lg px-2 text-lg font-bold">
+                        สต็อกติดลบ {done.shortfalls} รายการ
+                      </p>
+                    ) : null}
+                    <Button variant="secondary" onClick={() => setShowReceipt(true)}>
+                      ดูใบเสร็จ
+                    </Button>
+                  </div>
+                ) : null}
+
+                {error ? (
+                  // Never styled like "ขายแล้ว": a sale that did not save must not
+                  // be mistaken for one that did.
+                  <p
+                    role="alert"
+                    className={`mb-2 rounded-xl px-3 py-2 text-lg font-bold ${
+                      error.kind === 'danger'
+                        ? 'bg-expired text-white'
+                        : 'bg-today border-ink border-2'
+                    }`}
+                  >
+                    {error.message}
                   </p>
                 ) : null}
-                <Button variant="secondary" onClick={() => setShowReceipt(true)}>
-                  ดูใบเสร็จ
-                </Button>
-              </div>
-            ) : null}
 
-            {error ? (
-              // Never styled like "ขายแล้ว": a sale that did not save must not
-              // be mistaken for one that did.
-              <p
-                role="alert"
-                className={`mb-2 rounded-xl px-3 py-2 text-lg font-bold ${
-                  error.kind === 'danger' ? 'bg-expired text-white' : 'bg-today border-ink border-2'
-                }`}
-              >
-                {error.message}
-              </p>
-            ) : null}
+                {priced.totalDiscount > 0 ? (
+                  <div className="mb-1 flex flex-wrap justify-end gap-x-3 text-lg font-bold">
+                    {priced.byReason.map((discount) => (
+                      <span key={`${discount.reason}:${discount.promotionId ?? ''}`}>
+                        {discountLabel(discount)} −{formatTHB(discount.amount)}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
 
-            {priced.totalDiscount > 0 ? (
-              <div className="mb-1 flex flex-wrap justify-end gap-x-3 text-lg font-bold">
-                {priced.byReason.map((discount) => (
-                  <span key={`${discount.reason}:${discount.promotionId ?? ''}`}>
-                    {discountLabel(discount)} −{formatTHB(discount.amount)}
+                {/* What is due: the biggest number that is always on screen. */}
+                <p className="mb-2 flex items-baseline justify-between">
+                  <span className="text-xl font-bold">ยอด</span>
+                  <span className="text-4xl font-bold tabular-nums">
+                    {formatTHB(priced.totalNet)}
                   </span>
-                ))}
-              </div>
-            ) : null}
+                </p>
 
-            {/* What is due: the biggest number that is always on screen. */}
-            <p className="mb-2 flex items-baseline justify-between">
-              <span className="text-xl font-bold">ยอด</span>
-              <span className="text-4xl font-bold tabular-nums">{formatTHB(priced.totalNet)}</span>
-            </p>
-
-            <PayButtons
-              due={priced.totalNet}
-              quickTender={settings.quickTender}
-              disabled={cart.length === 0 || busy}
-              onCash={(received) => confirmPayment('CASH', received)}
-              onQr={() => setShowQr(true)}
-            />
+                <PayButtons
+                  due={priced.totalNet}
+                  quickTender={settings.quickTender}
+                  disabled={cart.length === 0 || busy}
+                  onCash={(received) => confirmPayment('CASH', received)}
+                  onQr={() => setShowQr(true)}
+                />
+              </>
+            )}
           </footer>
         </div>
       </div>

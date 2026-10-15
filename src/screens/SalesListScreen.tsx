@@ -45,7 +45,8 @@ export default function SalesListScreen({ session, back }: { session: CashSessio
   function confirmVoid(saleId: string, reason: string) {
     setVoiding(null);
     setError(null);
-    voidSale(saleId, reason).catch((cause: unknown) =>
+    const asWaste = settings?.voidWasteReasons.includes(reason) ?? false;
+    voidSale(saleId, reason, undefined, undefined, asWaste).catch((cause: unknown) =>
       setError(`ยกเลิกบิลไม่สำเร็จ: ${String(cause)}`),
     );
   }
@@ -116,7 +117,9 @@ export default function SalesListScreen({ session, back }: { session: CashSessio
                 {voiding === sale.id ? (
                   <div className="border-expired mt-2 rounded-xl border-2 p-3">
                     <p className="text-xl font-bold">ยกเลิกบิลนี้เพราะอะไร?</p>
-                    <p className="text-lg font-bold">แตะเหตุผล — ของจะคืนเข้าสต็อก</p>
+                    <p className="text-lg font-bold">
+                      แตะเหตุผล — ของคืนเข้าสต็อก ยกเว้นเหตุผลที่บอกว่าเป็นของเสีย
+                    </p>
                     <div className="mt-2 flex flex-wrap gap-2">
                       <Button variant="secondary" size="sm" onClick={() => setVoiding(null)}>
                         ไม่ยกเลิกบิล
@@ -129,6 +132,7 @@ export default function SalesListScreen({ session, back }: { session: CashSessio
                           onClick={() => confirmVoid(sale.id, reason)}
                         >
                           {reason}
+                          {settings?.voidWasteReasons.includes(reason) ? ' · ของเสีย' : ''}
                         </Button>
                       ))}
                     </div>

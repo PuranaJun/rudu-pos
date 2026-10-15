@@ -102,6 +102,14 @@ export interface PaymentDetails {
    * toggle a moment before paying may not have reached yet.
    */
   orderType?: OrderType;
+  /**
+   * The order type the screen priced the cart with. A promotion can be kept
+   * to dine-in or takeaway (CLAUDE.md §4), so a toggle tapped just before
+   * paying must not leave a sale labelled one way and priced the other: when
+   * they differ the sale is refused as a moved cart, and the next tap rings
+   * the redrawn price.
+   */
+  pricedOrderType?: OrderType;
 }
 
 /**
@@ -194,6 +202,7 @@ export async function completeSale(
               ? (pricedLine.discounts[0]!.reason as DiscountReason)
               : null,
           unit_cost: unitCost,
+          sold_out_override: item.line.sold_out_override,
           synced_at: null,
         };
         lines.push(line);
@@ -263,6 +272,9 @@ export async function completeSale(
         await db.sale.where('business_date').equals(businessDate).toArray(),
       );
       const orderType = payment.orderType ?? (await loadSettings(db)).orderType;
+      if (payment.pricedOrderType !== undefined && payment.pricedOrderType !== orderType) {
+        throw new CartChangedError();
+      }
 
       const received = payment.cashReceived;
       const sale: Sale = {

@@ -100,7 +100,7 @@ export default function ComponentSettings({
               detail={
                 component.cost_per_unit === null
                   ? 'ยังไม่ตั้งต้นทุน'
-                  : `฿${component.cost_per_unit}/${unitLabel(component.unit)}`
+                  : `฿${numberText(component.cost_per_unit)}/${unitLabel(component.unit)}`
               }
               muted={!component.is_active}
               onOpen={() => setView({ kind: 'EDIT', id: component.id })}
@@ -111,6 +111,7 @@ export default function ComponentSettings({
         <RemovedList
           rows={removed.map((component) => ({ id: component.id, name: component.name_th }))}
           onRestore={(id) => restoreComponent(id)}
+          restoredNote="ยังปิดอยู่ — เปิด “ยังใช้อยู่” ในหน้าส่วนประกอบ"
         />
       </section>
     </ListPage>

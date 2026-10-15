@@ -33,7 +33,10 @@ import {
   rotateKey,
   sendChanges,
   startAsShop,
+  SYNC_KNOWN_TABLES,
 } from './sync-client.ts';
+import { openSession } from '../db/session-repo.ts';
+import { recordCashMovement } from '../db/drawer-repo.ts';
 
 let env: Env;
 let shop: RuduPosDB;
@@ -266,5 +269,34 @@ describe('a new shop phone', () => {
     const key = await shopKey();
     await ring(viewer);
     expect(await joinWithKey(key, 'SHOP', viewer, net())).toBe('has-sales');
+  });
+});
+
+describe('a table new to the build', () => {
+  it('is fetched in full once the phone updates, though an older build skipped it', async () => {
+    await shopKey();
+    const session = await openSession(
+      { operatorId: 'น้อง', openingFloat: 150_000, rainyDay: false },
+      shop,
+    );
+    const ice = await recordCashMovement(
+      session,
+      { direction: 'OUT', amount: 4_000, reason: 'ICE', note: '' },
+      shop,
+    );
+    await sendChanges(shop, net());
+    await joinWithKey(await viewKey(), 'VIEWER', viewer, net());
+    expect(await viewer.cash_movement.get(ice.id)).toBeDefined();
+
+    // As an older build left it: the row skipped, the cursor past it, and no
+    // record of which tables it knew.
+    await viewer.cash_movement.clear();
+    await viewer.setting.delete(SYNC_KNOWN_TABLES);
+
+    await fetchChanges(viewer, net());
+    expect((await viewer.cash_movement.get(ice.id))?.amount).toBe(4_000);
+
+    // Once caught up, the next fetch takes only what is new.
+    expect(await fetchChanges(viewer, net())).toBe(0);
   });
 });

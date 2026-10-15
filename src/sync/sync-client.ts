@@ -38,6 +38,13 @@ export const SYNC_CURSOR = 'sync_cursor';
 export const SYNC_LAST_SENT = 'sync_last_sent_at';
 export const SYNC_LAST_FETCHED = 'sync_last_fetched_at';
 export const SYNC_ERROR = 'sync_error';
+/**
+ * The synced tables this phone knew when it last fetched. A row for a table
+ * an older build did not know is skipped — but the cursor moves past it all
+ * the same, so after the update it would never come again. When the build
+ * knows a table the list does not, the cursor starts over once.
+ */
+export const SYNC_KNOWN_TABLES = 'sync_known_tables';
 
 /** Settings that belong to this phone, never to the shop: never sent, never taken. */
 export const LOCAL_SETTINGS: readonly string[] = [
@@ -54,6 +61,7 @@ export const LOCAL_SETTINGS: readonly string[] = [
   SYNC_LAST_SENT,
   SYNC_LAST_FETCHED,
   SYNC_ERROR,
+  SYNC_KNOWN_TABLES,
 ];
 
 /** Rows per request: well under the server's 500, and the free plan's limits. */
@@ -259,6 +267,15 @@ export function fetchChanges(
         tbl: string;
         id: string;
       } | null;
+      // A table new to this build may have rows the cursor already went past
+      // under an older one: take everything again, once. Rows are written by
+      // id, so taking one twice changes nothing.
+      const known = await setting(db, SYNC_KNOWN_TABLES);
+      const knownList = Array.isArray(known) ? known.map(String) : [];
+      if (SYNCED_TABLES.some((table) => !knownList.includes(table))) {
+        cursor = null;
+        await remember(db, { [SYNC_KNOWN_TABLES]: [...SYNCED_TABLES], [SYNC_CURSOR]: null });
+      }
       cursor ??= { seq: 0, tbl: '', id: '' };
       let taken = 0;
       for (let page = 0; page < 10_000; page++) {

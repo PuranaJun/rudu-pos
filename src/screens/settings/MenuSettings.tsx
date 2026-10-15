@@ -157,6 +157,7 @@ export default function MenuSettings({ catalog, exit }: { catalog: CostCatalog; 
         <RemovedList
           rows={removed.map((product) => ({ id: product.id, name: product.name_short_th }))}
           onRestore={(id) => restoreProduct(id)}
+          restoredNote="ยังปิดขายอยู่ — เปิด “ขายอยู่” ในหน้าเครื่องดื่ม"
         />
       </section>
     </ListPage>

@@ -11,8 +11,13 @@ interface Props {
   onQr: () => void;
 }
 
-/** The notes row always has this many places, used or not. */
-const NOTE_SLOTS = 4;
+/**
+ * The notes have this many places, used or not: two rows of three, enough for
+ * every quick-tender amount (CLAUDE.md §4: 40 · 50 · 59 · 100 · 500 · 1000).
+ * With four, a ฿39 bill offered 40–100 and nothing for the ฿500 or ฿1,000
+ * note a customer actually hands over.
+ */
+const NOTE_SLOTS = 6;
 
 /**
  * Payment, one tap (CLAUDE.md §6.1: "Tap drink → Tap CASH → Done").
@@ -24,8 +29,8 @@ const NOTE_SLOTS = 4;
  * net whatever note came in.
  *
  * Nothing moves between sales. พอดี and QR hold the top row, always in the
- * same place, so the thumb learns them; the notes fill a fixed row of four
- * under them. Only notes that cover the bill are offered, so a ฿50 cannot be
+ * same place, so the thumb learns them; the notes fill fixed places under
+ * them. Only notes that cover the bill are offered, so a ฿50 cannot be
  * taken for a ฿59 pear — the places they leave stay empty rather than let
  * the rest slide over. QR still asks for the operator's confirmation,
  * because the system never claims to have seen a transfer (CLAUDE.md §4).
@@ -58,7 +63,7 @@ export default function PayButtons({ due, quickTender, disabled, onCash, onQr }:
         </button>
       </div>
 
-      <div className="grid grid-cols-4 gap-2">
+      <div className="grid grid-cols-3 gap-2">
         {notes.map((amount) => (
           <button
             key={amount}

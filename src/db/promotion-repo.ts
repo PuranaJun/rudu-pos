@@ -27,6 +27,12 @@ export function promotionProblems(promotion: Promotion): string[] {
   ) {
     wrong.push('ขายแก้วละกี่บาท ต้องมากกว่า 0');
   }
+  if (
+    (promotion.kind === 'AMOUNT_OFF' || promotion.kind === 'FIXED_PRICE') &&
+    promotion.amount % 100 !== 0
+  ) {
+    wrong.push('จำนวนเงินต้องเป็นบาทเต็ม ไม่มีสตางค์');
+  }
   if (promotion.kind === 'PERCENT_OFF' && !(promotion.percent > 0 && promotion.percent <= 100)) {
     wrong.push('ลดกี่ % ต้องอยู่ระหว่าง 1–100');
   }

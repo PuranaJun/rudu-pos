@@ -119,13 +119,39 @@ export function RemoveButton({
 export function RemovedList({
   rows,
   onRestore,
+  restoredNote,
 }: {
   rows: readonly { id: string; name: string }[];
   onRestore: (id: string) => Promise<void>;
+  /** Said once one is back, when it comes back switched off: where to switch it on. */
+  restoredNote?: string;
 }) {
   const [open, setOpen] = useState(false);
-  const ref = useReveal<HTMLElement>(open);
-  if (rows.length === 0) return null;
+  const [message, setMessage] = useState<{ text: string; bad: boolean } | null>(null);
+  const ref = useReveal<HTMLElement>(open || message !== null);
+
+  function restore(row: { id: string; name: string }) {
+    setMessage(null);
+    onRestore(row.id).then(
+      () =>
+        setMessage({
+          text: `เอา${row.name}กลับมาแล้ว${restoredNote ? ` · ${restoredNote}` : ''}`,
+          bad: false,
+        }),
+      (cause: unknown) => setMessage({ text: problemsOf(cause).join(' · '), bad: true }),
+    );
+  }
+
+  const notice = message ? (
+    <p
+      role={message.bad ? 'alert' : 'status'}
+      className={`mt-2 rounded-xl px-4 py-2 text-lg font-bold ${message.bad ? 'bg-expired text-white' : 'bg-paper-sunk'}`}
+    >
+      {message.text}
+    </p>
+  ) : null;
+
+  if (rows.length === 0) return notice;
 
   return (
     <section ref={ref} aria-label="ลบแล้ว" className="mt-6">
@@ -149,7 +175,7 @@ export function RemovedList({
                 variant="secondary"
                 size="sm"
                 aria-label={`เอา${row.name}กลับมา`}
-                onClick={() => void onRestore(row.id)}
+                onClick={() => restore(row)}
               >
                 เอากลับมา
               </Button>
@@ -157,6 +183,7 @@ export function RemovedList({
           ))}
         </ul>
       ) : null}
+      {notice}
     </section>
   );
 }

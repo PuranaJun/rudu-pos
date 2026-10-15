@@ -40,6 +40,7 @@ export default function ShopSettings({
   const [stamps, setStamps] = useState(String(settings.loyaltyStampsRequired));
   const [operators, setOperators] = useState(settings.operators.join('\n'));
   const [voidReasons, setVoidReasons] = useState(settings.voidReasons.join('\n'));
+  const [wasteReasons, setWasteReasons] = useState(settings.voidWasteReasons.join('\n'));
   const [branding, setBranding] = useState(settings.brandingLineTh);
   const [promptPayId, setPromptPayId] = useState(settings.promptPayId ?? '');
   const [threshold, setThreshold] = useState(bahtInput(settings.annualRevenueThreshold));
@@ -61,6 +62,7 @@ export default function ShopSettings({
     stamps,
     operators,
     voidReasons,
+    wasteReasons,
     branding,
     promptPayId,
     threshold,
@@ -104,6 +106,12 @@ export default function ShopSettings({
       wrong.push('เริ่มเตือนเมื่อถึง ต้องอยู่ระหว่าง 1–100%');
     if (lines(operators).length === 0) wrong.push('ต้องมีคนขายอย่างน้อยหนึ่งคน');
     if (lines(voidReasons).length === 0) wrong.push('ต้องมีเหตุผลยกเลิกอย่างน้อยหนึ่งข้อ');
+    const unknownWaste = lines(wasteReasons).filter(
+      (reason) => !lines(voidReasons).includes(reason),
+    );
+    if (unknownWaste.length > 0) {
+      wrong.push(`เหตุผลที่นับเป็นของเสียต้องอยู่ในเหตุผลยกเลิกบิล: ${unknownWaste.join(', ')}`);
+    }
     // Empty is allowed: the printed QR is used instead.
     const promptPay = promptPayId.trim() === '' ? null : parsePromptPayId(promptPayId);
     if (promptPayId.trim() !== '' && promptPay === null) {
@@ -125,6 +133,7 @@ export default function ShopSettings({
       loyalty_stamps_required: stampCount!,
       operators: lines(operators),
       void_reasons: lines(voidReasons),
+      void_waste_reasons: lines(wasteReasons),
       branding_line_th: branding.trim(),
       promptpay_id: promptPay?.digits ?? null,
       annual_revenue_warn_ratio: percent! / 100,
@@ -188,7 +197,7 @@ export default function ShopSettings({
         label="ปุ่มรับเงิน"
         value={tender}
         onChange={setTender}
-        hint="เป็นบาท คั่นด้วยลูกน้ำ เช่น 40, 50, 59, 100, 500, 1000 — ตอนขายขึ้น 4 ใบแรกที่มากกว่ายอด"
+        hint="เป็นบาท คั่นด้วยลูกน้ำ เช่น 40, 50, 59, 100, 500, 1000 — ตอนขายขึ้น 6 ใบแรกที่มากกว่ายอด"
       />
       <NumberField
         label="ค่าใช้จ่ายคงที่ต่อวัน"
@@ -229,6 +238,13 @@ export default function ShopSettings({
         onChange={setVoidReasons}
         multiline
         hint="บรรทัดละข้อ"
+      />
+      <TextField
+        label="เหตุผลที่นับเป็นของเสีย"
+        value={wasteReasons}
+        onChange={setWasteReasons}
+        multiline
+        hint="ยกเลิกบิลด้วยเหตุผลนี้ = ทำไปแล้วแต่เสีย (เช่น ทำหก) ของไม่คืนสต็อก ไปอยู่ในของเสีย · บรรทัดละข้อ"
       />
       <TextField label="ข้อความบนใบเสร็จ" value={branding} onChange={setBranding} />
 

@@ -48,7 +48,8 @@ export async function addDrink(
     const candidates = await db.cart_line.where('variant_id').equals(variantId).toArray();
     const modded = new Set((await db.cart_line_mod.toArray()).map((mod) => mod.cart_line_id));
     const plain = candidates
-      .filter((line) => !modded.has(line.id))
+      // Never into a given-away line: a free cup must not make the next one free.
+      .filter((line) => !modded.has(line.id) && line.manual_discount_reason === null)
       .sort((a, b) => a.added_at.localeCompare(b.added_at))
       .pop();
 
@@ -169,12 +170,42 @@ export async function toggleModifier(
  * line without saying why, because a discount with no reason makes shrinkage
  * and generosity look identical in the day's report (CLAUDE.md §4).
  */
+/**
+ * Give one cup away — a stamp card's free drink, a staff drink, goodwill — or
+ * (null) charge for it again.
+ *
+ * One cup, never the whole line: on a line of three, the free drink is split
+ * off as its own line of one, with the same options, and the other two are
+ * still paid for. A whole line going to ฿0 at one tap is money lost without
+ * anyone noticing.
+ */
 export async function setLineDiscountReason(
   lineId: string,
   reason: DiscountReason | null,
   db: RuduPosDB = defaultDb,
 ): Promise<void> {
-  await db.cart_line.update(lineId, { manual_discount_reason: reason });
+  await db.transaction('rw', [db.cart_line, db.cart_line_mod], async () => {
+    const line = await db.cart_line.get(lineId);
+    if (!line) return;
+    if (reason === null || line.qty <= 1) {
+      await db.cart_line.update(lineId, { manual_discount_reason: reason });
+      return;
+    }
+    const free: CartLine = {
+      ...line,
+      id: newId(),
+      qty: 1,
+      manual_discount_reason: reason,
+      added_at: nowIso(),
+      synced_at: null,
+    };
+    await db.cart_line.update(lineId, { qty: line.qty - 1 });
+    await db.cart_line.add(free);
+    const mods = await db.cart_line_mod.where('cart_line_id').equals(lineId).toArray();
+    await db.cart_line_mod.bulkAdd(
+      mods.map((mod) => ({ ...mod, id: newId(), cart_line_id: free.id, synced_at: null })),
+    );
+  });
 }
 
 /**

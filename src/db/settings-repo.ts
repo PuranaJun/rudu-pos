@@ -31,6 +31,11 @@ export interface PosSettings extends PromotionSettings {
   operators: string[];
   /** One-tap choices when voiding. A void always carries one. */
   voidReasons: string[];
+  /**
+   * The void reasons that mean the drink was made and lost (ทำหก): voided as
+   * waste, not back into stock.
+   */
+  voidWasteReasons: string[];
   /** The VAT registration threshold, in satang. Watched, never calculated against. */
   annualRevenueThreshold: Satang;
   /** How far towards the threshold the warning starts, 0–1. */
@@ -60,6 +65,7 @@ const FALLBACK: PosSettings = {
   promptPayId: null,
   operators: [],
   voidReasons: ['ยกเลิก'],
+  voidWasteReasons: ['ทำหก'],
   annualRevenueThreshold: 180_000_000,
   annualRevenueWarnRatio: 0.75,
   orderType: 'TAKEAWAY',
@@ -108,6 +114,10 @@ export async function loadSettings(db: RuduPosDB = defaultDb): Promise<PosSettin
     voidReasons: (() => {
       const value = values.get('void_reasons');
       return Array.isArray(value) && value.length > 0 ? value.map(String) : FALLBACK.voidReasons;
+    })(),
+    voidWasteReasons: (() => {
+      const value = values.get('void_waste_reasons');
+      return Array.isArray(value) ? value.map(String) : FALLBACK.voidWasteReasons;
     })(),
     annualRevenueThreshold: num('annual_revenue_warn_threshold', FALLBACK.annualRevenueThreshold),
     annualRevenueWarnRatio: num('annual_revenue_warn_ratio', FALLBACK.annualRevenueWarnRatio),

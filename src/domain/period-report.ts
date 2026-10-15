@@ -278,10 +278,20 @@ export function periodReport(input: PeriodInput): PeriodReport {
     if (componentId) used.set(componentId, (used.get(componentId) ?? 0) - movement.qty_delta);
   }
   // Count gap: corrections the counts made, against what sales used.
+  // Open day counts at the session's opening, close day at its closing: both
+  // fall within the session they belong to.
+  const countDate = (at: string): string => {
+    const session = input.sessions.find(
+      (entry) => entry.opened_at <= at && (entry.closed_at === null || at <= entry.closed_at),
+    );
+    return session ? bangkokDate(session.opened_at) : bangkokDate(at);
+  };
   const gaps = new Map<string, number>();
   for (const movement of input.adjustments ?? []) {
     if (movement.reason !== 'ADJUSTMENT') continue;
-    if (!inRange(bangkokDate(movement.created_at))) continue;
+    // The trading day the count belonged to, not the clock date: a close
+    // counted at 00:30 is still yesterday's close (CLAUDE.md §8).
+    if (!inRange(countDate(movement.created_at))) continue;
     const componentId = componentOf.get(movement.component_batch_id);
     if (componentId) gaps.set(componentId, (gaps.get(componentId) ?? 0) + movement.qty_delta);
   }

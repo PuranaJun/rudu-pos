@@ -8,7 +8,7 @@
  */
 import type { RuduPosDB } from './database.ts';
 import { db as defaultDb } from './database.ts';
-import type { Component, ComponentBatch, StockMovement } from './types.ts';
+import type { Component, ComponentBatch, StockMovement, WasteEvent } from './types.ts';
 import type { RecipeCatalog } from '../domain/recipe.ts';
 import { adjustmentMovement } from '../domain/open-day.ts';
 import { blanched, planBatch, sourceQtyFor, type BatchInput } from '../domain/production.ts';
@@ -23,8 +23,10 @@ import {
   type SaleLineDeduction,
   type StockSnapshot,
 } from '../domain/stock.ts';
-import { nowIso } from '../lib/id.ts';
+import { newId, nowIso } from '../lib/id.ts';
 import { reversePackaging } from '../domain/packaging.ts';
+import { wasteCost } from '../domain/close-day.ts';
+import { bangkokDate } from '../lib/datetime.ts';
 
 /**
  * Batches and their ledger as they stand at `now`. Read once, then ask the
@@ -73,10 +75,26 @@ export async function voidSale(
   reason: string,
   db: RuduPosDB = defaultDb,
   now: string = nowIso(),
+  /**
+   * The drink was made and lost — spilled. The sale and its money are undone
+   * all the same, but what went into the cup is waste, not stock: it is
+   * recorded as SPILLAGE, and the cup and lid stay used (see the void
+   * reasons that count as waste, in settings).
+   */
+  asWaste: boolean = false,
 ): Promise<StockMovement[]> {
   return db.transaction(
     'rw',
-    [db.sale, db.sale_line, db.stock_movement, db.packaging_movement],
+    [
+      db.sale,
+      db.sale_line,
+      db.stock_movement,
+      db.packaging_movement,
+      db.component,
+      db.component_batch,
+      db.waste_event,
+      db.cash_session,
+    ],
     async () => {
       const sale = await db.sale.get(saleId);
       if (!sale) throw new Error(`sale ${saleId} not found`);
@@ -89,15 +107,70 @@ export async function voidSale(
       const reversals = reverseForSale(lineIds, movements, now);
 
       await db.stock_movement.bulkAdd(reversals);
-      // The cups and lids go back on the shelf too.
-      await db.packaging_movement.bulkAdd(
-        reversePackaging(lineIds, await db.packaging_movement.toArray(), now),
-      );
+      if (asWaste) {
+        await recordSpill(db, sale.business_date, reversals, now);
+      } else {
+        // The cups and lids go back on the shelf too.
+        await db.packaging_movement.bulkAdd(
+          reversePackaging(lineIds, await db.packaging_movement.toArray(), now),
+        );
+      }
       await db.sale.update(saleId, { is_voided: true, void_reason: reason, voided_at: now });
 
       return reversals;
     },
   );
+}
+
+/**
+ * A spilled drink's components, taken back out as waste: for each batch the
+ * void put stock back into, the same amount goes out again as WASTE, with a
+ * SPILLAGE waste event in the day it happened. The ledger ends where the sale
+ * left it; the sale's usage becomes waste in the reports.
+ */
+async function recordSpill(
+  db: RuduPosDB,
+  businessDate: string,
+  reversals: readonly StockMovement[],
+  now: string,
+): Promise<void> {
+  const session = (await db.cash_session.toArray())
+    .filter((entry) => bangkokDate(entry.opened_at) === businessDate)
+    .sort((a, b) => b.opened_at.localeCompare(a.opened_at))[0];
+  const byBatch = new Map<string, number>();
+  for (const reversal of reversals) {
+    byBatch.set(
+      reversal.component_batch_id,
+      (byBatch.get(reversal.component_batch_id) ?? 0) + reversal.qty_delta,
+    );
+  }
+  for (const [batchId, qty] of byBatch) {
+    if (qty <= 0) continue;
+    const batch = await db.component_batch.get(batchId);
+    const component = batch ? await db.component.get(batch.component_id) : undefined;
+    await db.stock_movement.add({
+      id: newId(),
+      sale_line_id: null,
+      component_batch_id: batchId,
+      qty_delta: -qty,
+      reason: 'WASTE',
+      reverses_movement_id: null,
+      created_at: now,
+      synced_at: null,
+    });
+    const event: WasteEvent = {
+      id: newId(),
+      component_batch_id: batchId,
+      qty_discarded: qty,
+      reason: 'SPILLAGE',
+      recorded_at: now,
+      note: 'ทำหก (ยกเลิกบิล)',
+      cash_session_id: session?.id ?? null,
+      cost: component ? wasteCost(component, qty) : 0,
+      synced_at: null,
+    };
+    await db.waste_event.add(event);
+  }
 }
 
 /**

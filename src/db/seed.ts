@@ -183,6 +183,8 @@ async function upgradeCatalog(db: RuduPosDB, from: number): Promise<void> {
       // before that never reached the cloud as gone, so view-only phones may
       // still count them; mark the ones whose ids are known as removed now.
       await markDeletedRecipeLines(db);
+      // ...and adds which void reasons count as waste (ทำหก).
+      await addMissingSettings(db);
     }
 
     await markSeeded(db);

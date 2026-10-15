@@ -203,7 +203,7 @@ export default function DrawerScreen({ session, back }: { session: CashSession; 
 function Phrases({ parts }: { parts: readonly string[] }) {
   return parts.map((part, index) => (
     <span key={part}>
-      {index > 0 ? ' · ' : null}
+      {index > 0 ? '\u00a0· ' : null}
       <span className="whitespace-nowrap">{part}</span>
     </span>
   ));

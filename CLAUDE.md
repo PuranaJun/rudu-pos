@@ -132,7 +132,7 @@ Tap drink → [temp / modifier sheet only if applicable] → Tap CASH or QR → 
 - Second identical drink = **quantity stepper**, not a repeat of the flow.
 - `PROMO_TWO_CUP` applies automatically when the cart qualifies.
 - On payment, deduct every BOM component **in one transaction**.
-- **Order type** (`TAKEAWAY` | `DINE_IN`) is a one-tap toggle on the cart that **remembers the last choice**. It is never a prompt and never a step in the flow. The standard sale stays at 2 taps. Dine-in is served in the **same cup** as takeaway, so the order type is a label only: same price, same packaging, same cost.
+- **Order type** (`TAKEAWAY` | `DINE_IN`) is a one-tap toggle on the cart that **remembers the last choice**. It is never a prompt and never a step in the flow. The standard sale stays at 2 taps. Dine-in is served in the **same cup** as takeaway: same packaging, same cost, and the same price — except where one of the owner's promotions is kept to dine-in or takeaway (§4). A sale is priced and labelled with the same order type: a toggle tapped after the price was drawn is refused as a moved cart, and the next tap rings it.
 - **Order number** is assigned automatically at payment, in the same transaction. It is sequential per business date and starts at 1 each day. Show it **large** on the done screen and on the receipt. The operator never types or picks it.
 
 ### 6.1a Queue

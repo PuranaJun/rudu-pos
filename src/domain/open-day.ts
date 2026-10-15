@@ -145,7 +145,10 @@ export function jellyToCut(
  * The drinks that need them will read sold out all day.
  */
 export function missingComponents(catalog: CostCatalog, snapshot: StockSnapshot): Component[] {
+  // One switched off or removed is not missing: nothing sells from it any more.
+  // (Its leftover batches still show on the shelf, to be used or thrown out.)
   return trackedComponents(catalog).filter((component) => {
+    if (!component.is_active || component.removed_at) return false;
     let sellable = 0;
     let slab = 0;
     for (const batch of snapshot.batches) {

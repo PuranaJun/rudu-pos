@@ -65,7 +65,11 @@ export default function ReceiptSheet({ receipt, back, voidReason = null }: Props
                 <span className="text-xl font-bold">
                   {line.name} × {line.qty}
                 </span>
-                <span className="text-xl font-bold tabular-nums">{formatTHB(line.net)}</span>
+                {/* Full price, discounts under it: line − discounts = paid,
+                    the same sum as รวม − ส่วนลด = สุทธิ below. */}
+                <span className="text-xl font-bold tabular-nums">
+                  {formatTHB(line.unitPrice * line.qty)}
+                </span>
               </div>
               {line.modifiers.length > 0 ? (
                 <p className="text-ink-soft text-base font-bold">{line.modifiers.join(' · ')}</p>

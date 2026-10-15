@@ -14,6 +14,9 @@ export function checkProduct(product: Product): string[] {
   if (product.name_full_th.trim() === '') problems.push('ต้องมีชื่อเต็ม');
   if (!Number.isInteger(product.base_price) || product.base_price < 0) {
     problems.push('ราคาต้องเป็นตัวเลขไม่ติดลบ');
+  } else if (product.base_price % 100 !== 0) {
+    // A price is whole baht (CLAUDE.md §3): ฿39.50 cannot be paid from the till.
+    problems.push('ราคาต้องเป็นบาทเต็ม ไม่มีสตางค์');
   }
   return problems;
 }
@@ -23,6 +26,8 @@ export function checkVariant(variant: Variant): string[] {
   if (variant.name_th.trim() === '') problems.push('ต้องมีชื่อ');
   if (variant.price_override !== null && variant.price_override < 0) {
     problems.push('ราคาต้องไม่ติดลบ');
+  } else if (variant.price_override !== null && variant.price_override % 100 !== 0) {
+    problems.push('ราคาต้องเป็นบาทเต็ม ไม่มีสตางค์');
   }
   if (variant.packaging_set_id === '') problems.push('ต้องเลือกบรรจุภัณฑ์');
   return problems;

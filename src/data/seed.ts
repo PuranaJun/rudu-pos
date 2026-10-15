@@ -1161,4 +1161,11 @@ export const SETTINGS: Setting[] = [
     value: ['ลูกค้าเปลี่ยนใจ', 'กดผิด', 'ทำหก', 'ชำระเงินผิดวิธี'],
     synced_at: null,
   },
+  {
+    // Voided with one of these, the drink was made and lost: its components
+    // are waste (SPILLAGE), not stock put back.
+    key: 'void_waste_reasons',
+    value: ['ทำหก'],
+    synced_at: null,
+  },
 ];
