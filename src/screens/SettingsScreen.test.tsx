@@ -13,7 +13,7 @@ import { ensureDeviceId } from '../db/device.ts';
 import { recordProduction } from '../db/stock-repo.ts';
 import { loadSettings } from '../db/settings-repo.ts';
 import type { CashSession } from '../db/types.ts';
-import { enabledButton, BACK } from '../test/helpers.ts';
+import { enabledButton, putInBasket, BACK } from '../test/helpers.ts';
 
 const SESSION: CashSession = {
   id: 'SESSION_SETTINGS',
@@ -103,6 +103,7 @@ describe('a third drink, through settings alone', () => {
 
     // 5. Rung, it is priced and costed from the rows just typed in.
     await user.click(button);
+    await putInBasket(user);
     await user.click(await enabledButton('พอดี'));
 
     await waitFor(async () => {
@@ -244,12 +245,11 @@ describe('a promotion, through settings alone', () => {
     expect(await screen.findByText(/ลด ฿5 · มะขามแดง · ทุกวัน/)).toBeInTheDocument();
     cleanup();
 
-    // At the till: one tap on the drink, and the promotion is already on the total.
+    // At the till: the drink in the basket, and the promotion is already on the total.
     await db.setting.put({ key: 'promo_two_cup_enabled', value: false, synced_at: null });
     render(<SellScreen session={SESSION} />);
-    await user.click(await screen.findByRole('button', { name: /มะขามแดง/ }));
-    const ok = screen.queryByRole('button', { name: 'ขายต่อ' });
-    if (ok) await user.click(ok);
+    await user.click(await screen.findByRole('button', { name: /^มะขามแดง/ }));
+    await putInBasket(user);
     expect(await screen.findByText('มะขามลด 5 −฿5')).toBeInTheDocument();
 
     await db.promotion.clear();

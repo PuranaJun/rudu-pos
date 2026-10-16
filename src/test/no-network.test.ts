@@ -43,10 +43,12 @@ const SYNC_MODULE = join('src', 'sync', 'sync-client.ts');
 const SELL_PATH = [
   'src/screens/SellScreen.tsx',
   'src/components/DrinkButton.tsx',
+  'src/components/DrinkPage.tsx',
   'src/components/CartLineRow.tsx',
   'src/components/PayButtons.tsx',
   'src/components/PromptPayPanel.tsx',
   'src/db/cart-repo.ts',
+  'src/domain/cup.ts',
   'src/db/sale-repo.ts',
   'src/db/stock-repo.ts',
 ];

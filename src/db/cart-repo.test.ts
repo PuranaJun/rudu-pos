@@ -5,10 +5,12 @@ import {
   addDrink,
   clearCart,
   loadCart,
+  putCups,
   removeLine,
   setVariant,
   stepQty,
   toggleModifier,
+  type CupInput,
 } from './cart-repo.ts';
 
 let db: RuduPosDB;
@@ -160,5 +162,114 @@ describe('crash safety', () => {
 
     expect(await loadCart(db)).toHaveLength(0);
     expect(await db.cart_line_mod.count()).toBe(0);
+  });
+});
+
+describe('cups from the drink page', () => {
+  const cup = (over: Partial<CupInput> = {}): CupInput => ({
+    variantId: 'VAR_TAMARIND_ICED',
+    modifierIds: [],
+    qty: 1,
+    freeReason: null,
+    soldOutOverride: false,
+    ...over,
+  });
+
+  it('puts the cups in as one line, with their choices', async () => {
+    await putCups(cup({ qty: 2, modifierIds: ['MOD_SALTED_PLUM', 'PREP_LESS_SWEET'] }), null, db);
+
+    const cart = await loadCart(db);
+    expect(cart).toHaveLength(1);
+    expect(cart[0]?.line).toMatchObject({ qty: 2, manual_discount_reason: null });
+    expect([...cart[0]!.modifierIds].sort()).toEqual(['MOD_SALTED_PLUM', 'PREP_LESS_SWEET']);
+  });
+
+  it('joins the same cup already in the basket, in any order of its choices', async () => {
+    await putCups(cup({ modifierIds: ['MOD_SALTED_PLUM', 'PREP_LESS_SWEET'] }), null, db);
+    await putCups(cup({ modifierIds: ['PREP_LESS_SWEET', 'MOD_SALTED_PLUM'] }), null, db);
+
+    const cart = await loadCart(db);
+    expect(cart).toHaveLength(1);
+    expect(cart[0]?.line.qty).toBe(2);
+  });
+
+  it('keeps a cup made another way on a line of its own', async () => {
+    await putCups(cup({ modifierIds: ['PREP_LESS_SWEET'] }), null, db);
+    await putCups(cup(), null, db);
+    await putCups(cup({ variantId: 'VAR_PEAR_ICED', modifierIds: ['PREP_LESS_SWEET'] }), null, db);
+
+    const cart = await loadCart(db);
+    expect(cart.map((item) => [item.line.variant_id, item.modifierIds])).toEqual([
+      ['VAR_TAMARIND_ICED', ['PREP_LESS_SWEET']],
+      ['VAR_TAMARIND_ICED', []],
+      ['VAR_PEAR_ICED', ['PREP_LESS_SWEET']],
+    ]);
+  });
+
+  it('gives one cup of several away, as a line of one beside the paid ones', async () => {
+    await putCups(cup({ qty: 3, freeReason: 'LOYALTY_REDEEM' }), null, db);
+
+    const cart = await loadCart(db);
+    expect(
+      cart.map((item) => [item.line.qty, item.line.manual_discount_reason ?? null]).sort(),
+    ).toEqual([
+      [1, 'LOYALTY_REDEEM'],
+      [2, null],
+    ]);
+  });
+
+  it('never joins a free cup to anything', async () => {
+    await putCups(cup({ freeReason: 'STAFF_DRINK' }), null, db);
+    await putCups(cup({ freeReason: 'STAFF_DRINK' }), null, db);
+    await putCups(cup(), null, db);
+
+    const cart = await loadCart(db);
+    expect(cart.map((item) => item.line.qty)).toEqual([1, 1, 1]);
+  });
+
+  it('records the override, and keeps it on the line it joins', async () => {
+    await putCups(cup(), null, db);
+    await putCups(cup({ soldOutOverride: true }), null, db);
+
+    expect((await loadCart(db))[0]?.line).toMatchObject({ qty: 2, sold_out_override: true });
+  });
+
+  it('changes a line in place, keeping its place in the basket', async () => {
+    await putCups(cup(), null, db);
+    await putCups(cup({ variantId: 'VAR_PEAR_ICED' }), null, db);
+    const [first] = await loadCart(db);
+
+    await putCups(cup({ qty: 2, modifierIds: ['PREP_LESS_SWEET'] }), first!.line.id, db);
+
+    const cart = await loadCart(db);
+    expect(cart.map((item) => [item.line.id, item.line.qty, item.modifierIds])).toEqual([
+      [first!.line.id, 2, ['PREP_LESS_SWEET']],
+      [cart[1]!.line.id, 1, []],
+    ]);
+    expect(await db.cart_line_mod.count()).toBe(1);
+  });
+
+  it('joins a changed line to one it now matches', async () => {
+    await putCups(cup({ modifierIds: ['PREP_LESS_SWEET'] }), null, db);
+    await putCups(cup(), null, db);
+    const [lessSweet] = await loadCart(db);
+
+    await putCups(cup(), lessSweet!.line.id, db);
+
+    const cart = await loadCart(db);
+    expect(cart).toHaveLength(1);
+    expect(cart[0]?.line.qty).toBe(2);
+    expect(await db.cart_line_mod.count()).toBe(0);
+  });
+
+  it('will not step a free cup up into a second one', async () => {
+    await putCups(cup({ freeReason: 'LOYALTY_REDEEM' }), null, db);
+    const [free] = await loadCart(db);
+
+    await stepQty(free!.line.id, 1, db);
+    expect((await loadCart(db))[0]?.line.qty).toBe(1);
+
+    await stepQty(free!.line.id, -1, db);
+    expect(await loadCart(db)).toHaveLength(0);
   });
 });

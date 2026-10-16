@@ -20,13 +20,13 @@ interface Props {
 const NOTE_SLOTS = 6;
 
 /**
- * Payment, one tap (CLAUDE.md §6.1: "Tap drink → Tap CASH → Done").
+ * Payment, one tap (CLAUDE.md §6.1: "… ใส่ตะกร้า → Tap CASH → Done").
  *
  * Cash is not a button that opens a pad: the quick-tender amounts are the
  * cash buttons. พอดี is exact money; a note completes the sale and the change
- * appears in the largest type on the screen. Either way a plain tamarind paid
- * in cash is two taps, and the drawer comes out the same — a sale adds its
- * net whatever note came in.
+ * appears in the largest type on the screen. Either way a plain cup paid in
+ * cash is three taps — drink, ใส่ตะกร้า, note — and the drawer comes out the
+ * same: a sale adds its net whatever note came in.
  *
  * Nothing moves between sales. พอดี and QR hold the top row, always in the
  * same place, so the thumb learns them; the notes fill fixed places under

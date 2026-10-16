@@ -57,7 +57,7 @@ describe('from the sell screen', () => {
     await user.click(within(opened).getByRole('button', { name: 'กลับไปขาย' }));
 
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-    expect(screen.getByRole('button', { name: 'พอดี' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'ตะกร้า', hidden: true })).toBeInTheDocument();
   });
 
   it('says what each tile holds, without changing what the tile is called', async () => {

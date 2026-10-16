@@ -186,7 +186,7 @@ describe('after the close', () => {
 
     expect(screen.queryByRole('dialog', { name: 'ปิดร้าน' })).not.toBeInTheDocument();
     // Straight back to selling, not to the menu it was opened from.
-    expect(await screen.findByRole('button', { name: 'พอดี' })).toBeInTheDocument();
+    expect(await screen.findByRole('region', { name: 'ตะกร้า', hidden: true })).toBeInTheDocument();
     expect(await db.waste_event.count()).toBe(0);
     expect(await loadOpenSession(db)).not.toBeNull();
   });

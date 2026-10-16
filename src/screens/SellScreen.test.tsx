@@ -16,7 +16,7 @@ import { ensureDeviceId } from '../db/device.ts';
 import { clearCart, loadCart } from '../db/cart-repo.ts';
 import { productionMovement } from '../domain/stock.ts';
 import type { CashSession, ComponentBatch } from '../db/types.ts';
-import { enabledButton } from '../test/helpers.ts';
+import { addCup, enabledButton, openDrink, putInBasket } from '../test/helpers.ts';
 
 /** The day these tests trade in. The sell screen is only ever shown inside one. */
 const SESSION: CashSession = {
@@ -77,7 +77,7 @@ beforeEach(async () => {
 });
 
 async function tamarindButton() {
-  return screen.findByRole('button', { name: /มะขามแดง/ });
+  return screen.findByRole('button', { name: /^มะขามแดง/ });
 }
 
 /** The sell screen with whatever the เมนู opens over it, as the app has it. */
@@ -120,23 +120,48 @@ describe('the menu', () => {
 });
 
 describe('ringing a sale', () => {
-  it('adds a cup on one tap, with no confirmation', async () => {
+  it('opens the drink page set to the usual cup, and ใส่ตะกร้า puts it in the basket', async () => {
     const user = userEvent.setup();
     render(<SellScreen session={SESSION} />);
 
-    await user.click(await tamarindButton());
+    const page = await openDrink(user, /^มะขามแดง/);
+    expect(page).toHaveAccessibleName('มะขามแดง');
+    // The usual cup, chosen already: normal sweetness, one of it.
+    expect(within(page).getByRole('button', { name: 'หวานปกติ' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    // Nothing is in the basket until the operator says so.
+    expect(await loadCart(db)).toHaveLength(0);
+
+    await putInBasket(user);
 
     await waitFor(async () => expect(await loadCart(db)).toHaveLength(1));
-    expect(await screen.findByLabelText('เพิ่มจำนวน')).toBeInTheDocument();
+    const [item] = await loadCart(db);
+    expect(item).toMatchObject({ line: { variant_id: 'VAR_TAMARIND_ICED', qty: 1 } });
+    expect(item!.modifierIds).toEqual([]);
+    expect(await screen.findByRole('button', { name: /^แก้ มะขามแดง/ })).toBeInTheDocument();
   });
 
-  it('increments on a second tap rather than adding a row', async () => {
+  it('leaves without adding anything on ยกเลิก', async () => {
     const user = userEvent.setup();
     render(<SellScreen session={SESSION} />);
 
-    const tamarind = await tamarindButton();
-    await user.click(tamarind);
-    await user.click(tamarind);
+    const page = await openDrink(user, /^มะขามแดง/);
+    await user.click(within(page).getByRole('button', { name: /บ๊วยเค็ม/ }));
+    await user.click(within(page).getByRole('button', { name: 'ยกเลิก' }));
+
+    expect(page).not.toBeInTheDocument();
+    expect(await loadCart(db)).toHaveLength(0);
+    expect(screen.queryByRole('button', { name: 'พอดี' })).not.toBeInTheDocument();
+  });
+
+  it('puts a second identical cup on the same line', async () => {
+    const user = userEvent.setup();
+    render(<SellScreen session={SESSION} />);
+
+    await addCup(user, /^มะขามแดง/);
+    await addCup(user, /^มะขามแดง/);
 
     await waitFor(async () => {
       const cart = await loadCart(db);
@@ -145,27 +170,64 @@ describe('ringing a sale', () => {
     });
   });
 
-  it('steps a line down and removes it at zero', async () => {
+  it('puts several cups in at once from the stepper on the page', async () => {
     const user = userEvent.setup();
     render(<SellScreen session={SESSION} />);
 
-    await user.click(await tamarindButton());
+    const page = await openDrink(user, /^มะขามแดง/);
+    await user.click(within(page).getByRole('button', { name: 'เพิ่มจำนวน' }));
+    await user.click(within(page).getByRole('button', { name: 'เพิ่มจำนวน' }));
+    expect(within(page).getByRole('button', { name: 'ใส่ตะกร้า ฿120' })).toBeInTheDocument();
+    await putInBasket(user);
+
+    await waitFor(async () => expect((await loadCart(db))[0]?.line.qty).toBe(3));
+  });
+
+  it('makes two cups of one drink two ways, as two lines of one bill', async () => {
+    const user = userEvent.setup();
+    render(<SellScreen session={SESSION} />);
+
+    const first = await openDrink(user, /^มะขามแดง/);
+    await user.click(within(first).getByRole('button', { name: 'หวานน้อย' }));
+    await putInBasket(user);
+    await addCup(user, /^มะขามแดง/);
+
+    await waitFor(async () => expect(await loadCart(db)).toHaveLength(2));
+    const cart = await loadCart(db);
+    expect(cart.map((item) => [item.line.qty, item.modifierIds])).toEqual([
+      [1, ['PREP_LESS_SWEET']],
+      [1, []],
+    ]);
+    // Said on the line, so the cup is made the way it was asked for.
+    expect(screen.getByRole('button', { name: 'แก้ มะขามแดง (หวานน้อย)' })).toBeInTheDocument();
+    // One bill: the pair still earns its discount.
+    expect(await screen.findByText('฿70')).toBeInTheDocument();
+  });
+
+  it('steps a line down from the basket and removes it at zero', async () => {
+    const user = userEvent.setup();
+    render(<SellScreen session={SESSION} />);
+
+    await addCup(user, /^มะขามแดง/);
     await user.click(await screen.findByLabelText('ลดจำนวน'));
 
     await waitFor(async () => expect(await loadCart(db)).toHaveLength(0));
-    expect(await screen.findByText('ยังไม่มีรายการ')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'พอดี' })).not.toBeInTheDocument(),
+    );
   });
 
-  it('rings pear as ICED and switches to HOT in one tap on the line', async () => {
+  it('opens pear as ICED, and HOT is one more tap on its page', async () => {
     const user = userEvent.setup();
     render(<SellScreen session={SESSION} />);
 
-    await user.click(await screen.findByRole('button', { name: /สาลี่ขาว/ }));
-    await waitFor(async () => {
-      expect((await loadCart(db))[0]?.line.variant_id).toBe('VAR_PEAR_ICED');
-    });
-
-    await user.click(await screen.findByRole('button', { name: 'ร้อน' }));
+    const page = await openDrink(user, /^สาลี่ขาว/);
+    expect(within(page).getByRole('button', { name: 'เย็น' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await user.click(within(page).getByRole('button', { name: 'ร้อน' }));
+    await putInBasket(user);
 
     await waitFor(async () => {
       expect((await loadCart(db))[0]?.line.variant_id).toBe('VAR_PEAR_HOT');
@@ -173,64 +235,163 @@ describe('ringing a sale', () => {
   });
 });
 
-describe('modifiers on the line', () => {
+describe('changing a line in the basket', () => {
+  it('opens its page as it was, and saves it as one line', async () => {
+    const user = userEvent.setup();
+    render(<SellScreen session={SESSION} />);
+
+    await addCup(user, /^มะขามแดง/);
+    await addCup(user, /^มะขามแดง/);
+    await user.click(await screen.findByRole('button', { name: /^แก้ มะขามแดง/ }));
+
+    const page = (await screen.findByRole('button', { name: /^บันทึก/ })).closest<HTMLElement>(
+      '[role="dialog"]',
+    )!;
+    // Both cups, as they are.
+    expect(within(page).getByText('2')).toBeInTheDocument();
+    await user.click(within(page).getByRole('button', { name: 'หวานน้อย' }));
+    await user.click(within(page).getByRole('button', { name: 'บันทึก ฿80' }));
+
+    await waitFor(async () =>
+      expect((await loadCart(db)).map((item) => [item.line.qty, item.modifierIds])).toEqual([
+        [2, ['PREP_LESS_SWEET']],
+      ]),
+    );
+  });
+
+  it('joins a line that is now the same cup as another', async () => {
+    const user = userEvent.setup();
+    render(<SellScreen session={SESSION} />);
+
+    const page = await openDrink(user, /^มะขามแดง/);
+    await user.click(within(page).getByRole('button', { name: 'หวานน้อย' }));
+    await putInBasket(user);
+    await addCup(user, /^มะขามแดง/);
+    await waitFor(async () => expect(await loadCart(db)).toHaveLength(2));
+
+    await user.click(screen.getByRole('button', { name: 'แก้ มะขามแดง (หวานน้อย)' }));
+    await user.click(await screen.findByRole('button', { name: 'หวานปกติ' }));
+    await putInBasket(user);
+
+    await waitFor(async () =>
+      expect((await loadCart(db)).map((item) => item.line.qty)).toEqual([2]),
+    );
+  });
+
+  it('takes the line out from its page', async () => {
+    const user = userEvent.setup();
+    render(<SellScreen session={SESSION} />);
+
+    await addCup(user, /^มะขามแดง/);
+    await user.click(await screen.findByRole('button', { name: /^แก้ มะขามแดง/ }));
+    await user.click(await screen.findByRole('button', { name: 'เอาออกจากบิล' }));
+
+    await waitFor(async () => expect(await loadCart(db)).toHaveLength(0));
+  });
+});
+
+describe('choices on the drink page', () => {
   it('hides peach gum on hot pear, where it is already in the recipe', async () => {
     const user = userEvent.setup();
     render(<SellScreen session={SESSION} />);
 
-    await user.click(await screen.findByRole('button', { name: /สาลี่ขาว/ }));
-    await user.click(await screen.findByLabelText('เพิ่มท็อปปิ้ง'));
-    expect(await screen.findByRole('button', { name: /เพิ่มวุ้นยางท้อ/ })).toBeInTheDocument();
+    const page = await openDrink(user, /^สาลี่ขาว/);
+    expect(within(page).getByRole('button', { name: /เพิ่มวุ้นยางท้อ/ })).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'ร้อน' }));
+    await user.click(within(page).getByRole('button', { name: 'ร้อน' }));
 
-    await waitFor(() => {
-      expect(screen.queryByRole('button', { name: /เพิ่มวุ้นยางท้อ/ })).not.toBeInTheDocument();
-    });
+    expect(within(page).queryByRole('button', { name: /เพิ่มวุ้นยางท้อ/ })).not.toBeInTheDocument();
   });
 
   it('shows the salted plum advisory from the data, not from a string in the code', async () => {
     const user = userEvent.setup();
     render(<SellScreen session={SESSION} />);
 
-    await user.click(await tamarindButton());
-    await user.click(await screen.findByLabelText('เพิ่มท็อปปิ้ง'));
-    await user.click(await screen.findByRole('button', { name: /บ๊วยเค็ม/ }));
+    const page = await openDrink(user, /^มะขามแดง/);
+    await user.click(within(page).getByRole('button', { name: /บ๊วยเค็ม/ }));
 
-    const advisory = await screen.findByRole('alert');
     const seeded = await db.modifier.get('MOD_SALTED_PLUM');
     expect(seeded?.advisory_th).toBeTruthy();
-    expect(advisory).toHaveTextContent(seeded!.advisory_th!);
+    expect(within(page).getByRole('alert')).toHaveTextContent(seeded!.advisory_th!);
+
+    // And again on the basket line, for when the cup is handed over.
+    await putInBasket(user);
+    expect(await screen.findByRole('alert')).toHaveTextContent(seeded!.advisory_th!);
+  });
+
+  it('prices the cup with its toppings, times the cups', async () => {
+    const user = userEvent.setup();
+    render(<SellScreen session={SESSION} />);
+
+    const page = await openDrink(user, /^มะขามแดง/);
+    await user.click(within(page).getByRole('button', { name: /บ๊วยเค็ม/ }));
+    await user.click(within(page).getByRole('button', { name: 'เพิ่มจำนวน' }));
+
+    expect(within(page).getByRole('button', { name: 'ใส่ตะกร้า ฿90' })).toBeInTheDocument();
   });
 });
 
 describe('sold out', () => {
-  it('greys the drink but still takes the tap, and records the override', async () => {
+  it('greys the drink but still opens it, and records the override', async () => {
     const user = userEvent.setup();
     // Empty the jelly: every tamarind component but that one is still there.
     await db.component_batch.update('B_COMP_JELLY_CHRYS', { state: 'DISCARDED' });
+    try {
+      render(<SellScreen session={SESSION} />);
 
-    render(<SellScreen session={SESSION} />);
+      const tamarind = await screen.findByRole('button', { name: /^มะขามแดง/ });
+      await waitFor(() => expect(tamarind).toHaveTextContent('หมด'));
+      // Said, not only shown: a screen reader hears it too.
+      expect(tamarind).toHaveAccessibleName('มะขามแดง ฿40 — หมด');
 
-    const tamarind = await screen.findByRole('button', { name: /มะขามแดง/ });
-    await waitFor(() => expect(tamarind).toHaveTextContent('หมด'));
-    // Said, not only shown: a screen reader hears it too.
-    expect(tamarind).toHaveAccessibleName('มะขามแดง ฿40 — หมด');
+      const page = await openDrink(user, /^มะขามแดง/);
+      expect(within(page).getByRole('alert')).toHaveTextContent('หมดแล้ว');
+      // Selling it anyway is a button that says so, never a quiet ใส่ตะกร้า.
+      expect(within(page).queryByRole('button', { name: /^ใส่ตะกร้า/ })).not.toBeInTheDocument();
+      expect(await loadCart(db)).toHaveLength(0);
 
-    await user.click(tamarind);
-    expect(await screen.findByText('เลยจำนวนที่มี — ขายต่อ?')).toBeInTheDocument();
-    // Nothing was added until the operator said so.
-    expect(await loadCart(db)).toHaveLength(0);
+      await user.click(within(page).getByRole('button', { name: 'ขายต่อ ฿40' }));
 
-    await user.click(screen.getByRole('button', { name: 'ขายต่อ' }));
+      await waitFor(async () => {
+        const cart = await loadCart(db);
+        expect(cart).toHaveLength(1);
+        expect(cart[0]?.line.sold_out_override).toBe(true);
+      });
+    } finally {
+      await db.component_batch.update('B_COMP_JELLY_CHRYS', { state: 'CUT' });
+    }
+  });
 
-    await waitFor(async () => {
-      const cart = await loadCart(db);
-      expect(cart).toHaveLength(1);
-      expect(cart[0]?.line.sold_out_override).toBe(true);
+  it('says so when more cups are asked for than are left', async () => {
+    const user = userEvent.setup();
+    // 1000 g of jelly less 940 g: 60 g, at 30 g a cup, is 2 cups.
+    await db.stock_movement.put({
+      id: 'ALMOST_OUT',
+      sale_line_id: null,
+      component_batch_id: 'B_COMP_JELLY_CHRYS',
+      qty_delta: -940,
+      reason: 'ADJUSTMENT',
+      reverses_movement_id: null,
+      created_at: '2026-09-22T01:00:00.000Z',
+      synced_at: null,
     });
+    try {
+      render(<SellScreen session={SESSION} />);
+      const page = await openDrink(user, /^มะขามแดง/);
+      expect(within(page).queryByRole('alert')).not.toBeInTheDocument();
 
-    await db.component_batch.update('B_COMP_JELLY_CHRYS', { state: 'CUT' });
+      for (let tap = 0; tap < 2; tap += 1) {
+        await user.click(within(page).getByRole('button', { name: 'เพิ่มจำนวน' }));
+      }
+      expect(within(page).getByRole('alert')).toHaveTextContent('เหลือ 2 แก้ว แต่สั่ง 3');
+      await user.click(within(page).getByRole('button', { name: 'ขายต่อ ฿120' }));
+
+      await waitFor(async () =>
+        expect((await loadCart(db))[0]?.line).toMatchObject({ qty: 3, sold_out_override: true }),
+      );
+    } finally {
+      await db.stock_movement.delete('ALMOST_OUT');
+    }
   });
 });
 
@@ -263,6 +424,14 @@ describe('running low', () => {
     await waitFor(() => expect(tamarind).toHaveTextContent('เหลือ 33 แก้ว'));
     expect(within(tamarind).getByText(/เหลือ 33 แก้ว/)).not.toHaveClass('bg-today');
   });
+
+  it('names what limits the drink on its page, for the variant chosen', async () => {
+    const user = userEvent.setup();
+    render(<SellScreen session={SESSION} />);
+
+    const page = await openDrink(user, /^มะขามแดง/);
+    expect(page).toHaveTextContent('เหลือ 33 แก้ว — จำกัดโดยเยลลี่เก๊กฮวย');
+  });
 });
 
 describe('the two-cup discount', () => {
@@ -270,9 +439,8 @@ describe('the two-cup discount', () => {
     const user = userEvent.setup();
     render(<SellScreen session={SESSION} />);
 
-    const tamarind = await tamarindButton();
-    await user.click(tamarind);
-    await user.click(tamarind);
+    await addCup(user, /^มะขามแดง/);
+    await addCup(user, /^มะขามแดง/);
 
     // 80 less 10 for the pair.
     expect(await screen.findByText('฿70')).toBeInTheDocument();
@@ -283,8 +451,8 @@ describe('the two-cup discount', () => {
     const user = userEvent.setup();
     render(<SellScreen session={SESSION} />);
 
-    await user.click(await tamarindButton());
-    await user.click(await screen.findByRole('button', { name: /ขวดมะขาม 1L/ }));
+    await addCup(user, /^มะขามแดง/);
+    await addCup(user, /^ขวดมะขาม 1L/);
 
     expect(await screen.findByText('฿139')).toBeInTheDocument();
     expect(screen.queryByText(/ส่วนลด 2 แก้ว/)).not.toBeInTheDocument();
@@ -292,21 +460,23 @@ describe('the two-cup discount', () => {
 });
 
 describe('giving a cup away', () => {
-  it('requires a reason, and offers no way to zero a line without one', async () => {
+  it('requires a reason, and offers no way to zero a cup without one', async () => {
     const user = userEvent.setup();
     render(<SellScreen session={SESSION} />);
 
-    await user.click(await tamarindButton());
-    await user.click(await screen.findByRole('button', { name: 'ฟรี' }));
+    const page = await openDrink(user, /^มะขามแดง/);
+    const free = within(page).getByRole('group', { name: 'แก้วฟรี' });
 
     // Only the operator's own reasons are offered. The two promotions apply
     // themselves, and offering them by hand would let a forgotten one look
     // like a deliberate one.
-    expect(screen.getByRole('button', { name: 'แลกแสตมป์' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'พนักงาน' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'ส่วนลด 2 แก้ว' })).not.toBeInTheDocument();
+    expect(within(free).getByRole('button', { name: 'แลกแสตมป์' })).toBeInTheDocument();
+    expect(within(free).getByRole('button', { name: 'พนักงาน' })).toBeInTheDocument();
+    expect(within(free).queryByRole('button', { name: 'ส่วนลด 2 แก้ว' })).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'แลกแสตมป์' }));
+    await user.click(within(free).getByRole('button', { name: 'แลกแสตมป์' }));
+    expect(within(page).getByRole('button', { name: 'ใส่ตะกร้า ฿0' })).toBeInTheDocument();
+    await putInBasket(user);
 
     await waitFor(async () => {
       expect((await loadCart(db))[0]?.line.manual_discount_reason).toBe('LOYALTY_REDEEM');
@@ -314,13 +484,35 @@ describe('giving a cup away', () => {
     expect(await screen.findByText(/ฟรี — แลกแสตมป์/)).toBeInTheDocument();
   });
 
+  it('gives one cup of several away, never the whole line', async () => {
+    const user = userEvent.setup();
+    render(<SellScreen session={SESSION} />);
+
+    const page = await openDrink(user, /^มะขามแดง/);
+    await user.click(within(page).getByRole('button', { name: 'เพิ่มจำนวน' }));
+    await user.click(within(page).getByRole('button', { name: 'แลกแสตมป์' }));
+    // Two cups, one of them paid for.
+    expect(within(page).getByRole('button', { name: 'ใส่ตะกร้า ฿40' })).toBeInTheDocument();
+    await putInBasket(user);
+
+    await waitFor(async () => expect(await loadCart(db)).toHaveLength(2));
+    const cart = await loadCart(db);
+    expect(cart.map((item) => [item.line.qty, item.line.manual_discount_reason]).sort()).toEqual([
+      [1, null],
+      [1, 'LOYALTY_REDEEM'],
+    ]);
+    // The free line cannot be stepped up into a second free cup.
+    const freeRow = screen.getByRole('button', { name: /ฟรี — แลกแสตมป์/ }).closest('li')!;
+    expect(within(freeRow).getByRole('button', { name: 'เพิ่มจำนวน' })).toBeDisabled();
+  });
+
   it('rings a loyalty cup at zero but still deducts its components', async () => {
     const user = userEvent.setup();
     render(<SellScreen session={SESSION} />);
 
-    await user.click(await tamarindButton());
-    await user.click(await screen.findByRole('button', { name: 'ฟรี' }));
-    await user.click(screen.getByRole('button', { name: 'แลกแสตมป์' }));
+    const page = await openDrink(user, /^มะขามแดง/);
+    await user.click(within(page).getByRole('button', { name: 'แลกแสตมป์' }));
+    await putInBasket(user);
     await waitFor(async () => {
       expect((await loadCart(db))[0]?.line.manual_discount_reason).toBe('LOYALTY_REDEEM');
     });
@@ -344,7 +536,7 @@ describe('paying cash', () => {
     const user = userEvent.setup();
     render(<SellScreen session={SESSION} />);
 
-    await user.click(await tamarindButton());
+    await addCup(user, /^มะขามแดง/);
     await user.click(await enabledButton('พอดี'));
 
     await waitFor(async () => expect(await db.sale.count()).toBe(1));
@@ -361,7 +553,7 @@ describe('paying cash', () => {
     const user = userEvent.setup();
     render(<SellScreen session={SESSION} />);
 
-    await user.click(await tamarindButton());
+    await addCup(user, /^มะขามแดง/);
     await user.click(await enabledButton('฿100'));
 
     await waitFor(async () => expect(await db.sale.count()).toBe(1));
@@ -374,7 +566,8 @@ describe('paying cash', () => {
     expect(change).toHaveClass('text-5xl');
 
     // It stays until the next customer's first tap, not on a timer.
-    await user.click(await tamarindButton());
+    await openDrink(user, /^มะขามแดง/);
+    await user.click(screen.getByRole('button', { name: 'ยกเลิก' }));
     await waitFor(() => expect(screen.queryByText('ทอน ฿60')).not.toBeInTheDocument());
   });
 
@@ -382,7 +575,7 @@ describe('paying cash', () => {
     const user = userEvent.setup();
     render(<SellScreen session={SESSION} />);
 
-    await user.click(await screen.findByRole('button', { name: /สาลี่ขาว/ }));
+    await addCup(user, /^สาลี่ขาว/);
     await enabledButton('พอดี');
 
     // 59 THB due: a ฿40 or a ฿50 cannot pay it, so neither is there to be tapped.
@@ -396,9 +589,8 @@ describe('paying cash', () => {
     const user = userEvent.setup();
     render(<SellScreen session={SESSION} />);
 
-    const tamarind = await tamarindButton();
-    await user.click(tamarind);
-    await user.click(tamarind);
+    await addCup(user, /^มะขามแดง/);
+    await addCup(user, /^มะขามแดง/);
     // Paid against the total on the screen, as the operator does.
     expect(await screen.findByText('฿70')).toBeInTheDocument();
     await user.click(await enabledButton('พอดี'));
@@ -422,14 +614,11 @@ describe('the pay buttons', () => {
         .slice(0, 2)
         .map((button) => button.textContent);
 
-    await screen.findByRole('group', { name: 'รับเงิน' });
-    expect(order()).toEqual(['พอดี', 'QR']);
-
-    await user.click(await tamarindButton());
+    await addCup(user, /^มะขามแดง/);
     await waitFor(() => expect(screen.getByRole('button', { name: '฿50' })).toBeInTheDocument());
     expect(order()).toEqual(['พอดี', 'QR']);
 
-    await user.click(await screen.findByRole('button', { name: /สาลี่ขาว/ }));
+    await addCup(user, /^สาลี่ขาว/);
     // ฿89: the ฿50 and ฿59 notes no longer cover it, and nothing slides over.
     await waitFor(() =>
       expect(screen.queryByRole('button', { name: '฿50' })).not.toBeInTheDocument(),
@@ -443,7 +632,7 @@ describe('paying by PromptPay', () => {
     const user = userEvent.setup();
     render(<SellScreen session={SESSION} />);
 
-    await user.click(await tamarindButton());
+    await addCup(user, /^มะขามแดง/);
     await user.click(await enabledButton('QR'));
 
     expect(await screen.findByText(/ระบบไม่ได้ตรวจสอบการโอน/)).toBeInTheDocument();
@@ -464,7 +653,7 @@ describe('the receipt', () => {
     const user = userEvent.setup();
     render(<SellScreen session={SESSION} />);
 
-    await user.click(await tamarindButton());
+    await addCup(user, /^มะขามแดง/);
     await user.click(await enabledButton('พอดี'));
 
     await waitFor(async () => expect(await db.sale.count()).toBe(1));
@@ -481,11 +670,12 @@ describe('the receipt', () => {
   });
 });
 
-describe('an empty cart', () => {
-  it('cannot be paid for', async () => {
+describe('an empty basket', () => {
+  it('has no pay buttons to press', async () => {
     render(<SellScreen session={SESSION} />);
-    expect(await screen.findByRole('button', { name: 'พอดี' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'QR' })).toBeDisabled();
+    await tamarindButton();
+    expect(screen.queryByRole('button', { name: 'พอดี' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'QR' })).not.toBeInTheDocument();
   });
 });
 
@@ -494,14 +684,26 @@ describe('crash safety', () => {
   async function reload() {
     cleanup();
     render(<SellScreen session={SESSION} />);
-    await screen.findByRole('button', { name: /มะขามแดง/ });
+    await screen.findByRole('button', { name: /^มะขามแดง/ });
   }
 
-  it('survives a reload with an empty cart', async () => {
+  it('survives a reload with an empty basket', async () => {
     render(<SellScreen session={SESSION} />);
     await reload();
 
-    expect(screen.getByText('ยังไม่มีรายการ')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'พอดี' })).not.toBeInTheDocument();
+    expect(await loadCart(db)).toHaveLength(0);
+  });
+
+  it('keeps nothing of a cup still on its page: it was never put in the basket', async () => {
+    const user = userEvent.setup();
+    render(<SellScreen session={SESSION} />);
+
+    const page = await openDrink(user, /^มะขามแดง/);
+    await user.click(within(page).getByRole('button', { name: /บ๊วยเค็ม/ }));
+
+    await reload();
+
     expect(await loadCart(db)).toHaveLength(0);
   });
 
@@ -509,8 +711,8 @@ describe('crash safety', () => {
     const user = userEvent.setup();
     render(<SellScreen session={SESSION} />);
 
-    await user.click(await tamarindButton());
-    await user.click(await tamarindButton());
+    await addCup(user, /^มะขามแดง/);
+    await addCup(user, /^มะขามแดง/);
     await waitFor(async () => expect((await loadCart(db))[0]?.line.qty).toBe(2));
 
     await reload();
@@ -523,9 +725,9 @@ describe('crash safety', () => {
     const user = userEvent.setup();
     render(<SellScreen session={SESSION} />);
 
-    await user.click(await tamarindButton());
-    await user.click(await screen.findByLabelText('เพิ่มท็อปปิ้ง'));
-    await user.click(await screen.findByRole('button', { name: /บ๊วยเค็ม/ }));
+    const page = await openDrink(user, /^มะขามแดง/);
+    await user.click(within(page).getByRole('button', { name: /บ๊วยเค็ม/ }));
+    await putInBasket(user);
     await waitFor(async () => {
       expect((await loadCart(db))[0]?.modifierIds).toEqual(['MOD_SALTED_PLUM']);
     });
@@ -533,7 +735,7 @@ describe('crash safety', () => {
     await reload();
 
     // The modifier is still on the line, and so is its spoken advisory.
-    expect(await screen.findByText(/บ๊วยเค็ม/)).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /บ๊วยเค็ม/ })).toBeInTheDocument();
     expect(await screen.findByRole('alert')).toHaveTextContent('ระวังสำลัก');
     expect((await loadCart(db))[0]?.modifierIds).toEqual(['MOD_SALTED_PLUM']);
   });
@@ -542,9 +744,9 @@ describe('crash safety', () => {
     const user = userEvent.setup();
     render(<SellScreen session={SESSION} />);
 
-    await user.click(await tamarindButton());
-    await user.click(await screen.findByRole('button', { name: 'ฟรี' }));
-    await user.click(screen.getByRole('button', { name: 'แลกแสตมป์' }));
+    const page = await openDrink(user, /^มะขามแดง/);
+    await user.click(within(page).getByRole('button', { name: 'แลกแสตมป์' }));
+    await putInBasket(user);
     await waitFor(async () => {
       expect((await loadCart(db))[0]?.line.manual_discount_reason).toBe('LOYALTY_REDEEM');
     });
@@ -558,7 +760,7 @@ describe('crash safety', () => {
     const user = userEvent.setup();
     render(<SellScreen session={SESSION} />);
 
-    await user.click(await tamarindButton());
+    await addCup(user, /^มะขามแดง/);
     await user.click(await enabledButton('QR'));
     expect(await screen.findByRole('button', { name: 'ลูกค้าจ่ายแล้ว' })).toBeInTheDocument();
 
@@ -566,7 +768,7 @@ describe('crash safety', () => {
 
     // Back on the sell screen with the cart intact: a payment the phone died
     // in the middle of is not something to carry forward unconfirmed.
-    expect(screen.getByRole('button', { name: 'พอดี' })).toBeEnabled();
+    expect(await enabledButton('พอดี')).toBeEnabled();
     expect(screen.queryByRole('button', { name: 'ลูกค้าจ่ายแล้ว' })).not.toBeInTheDocument();
     expect(await loadCart(db)).toHaveLength(1);
     expect(await db.sale.count()).toBe(0);
@@ -576,13 +778,14 @@ describe('crash safety', () => {
     const user = userEvent.setup();
     render(<SellScreen session={SESSION} />);
 
-    await user.click(await tamarindButton());
+    await addCup(user, /^มะขามแดง/);
     await user.click(await enabledButton('พอดี'));
     await waitFor(async () => expect(await db.sale.count()).toBe(1));
 
     await reload();
 
-    expect(screen.getByText('ยังไม่มีรายการ')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'พอดี' })).not.toBeInTheDocument();
+    expect(await loadCart(db)).toHaveLength(0);
   });
 });
 
@@ -591,7 +794,7 @@ describe('the day’s sales', () => {
     const user = userEvent.setup();
     renderSell();
 
-    await user.click(await tamarindButton());
+    await addCup(user, /^มะขามแดง/);
     await user.click(await enabledButton('พอดี'));
     await waitFor(async () => expect(await db.sale.count()).toBe(1));
 
@@ -608,7 +811,7 @@ describe('the day’s sales', () => {
     // What the tamarind button says before anything is sold.
     const before = (await tamarindButton()).textContent ?? '';
 
-    await user.click(await tamarindButton());
+    await addCup(user, /^มะขามแดง/);
     await user.click(await enabledButton('พอดี'));
     await waitFor(async () => expect(await db.sale.count()).toBe(1));
 
@@ -645,11 +848,12 @@ describe('a receipt asked for later', () => {
     const user = userEvent.setup();
     renderSell();
 
-    await user.click(await tamarindButton());
+    await addCup(user, /^มะขามแดง/);
     await user.click(await enabledButton('พอดี'));
     await waitFor(async () => expect(await db.sale.count()).toBe(1));
     // The next customer: the sell screen's own receipt button is gone.
-    await user.click(await tamarindButton());
+    await openDrink(user, /^มะขามแดง/);
+    await user.click(screen.getByRole('button', { name: 'ยกเลิก' }));
     expect(screen.queryByRole('button', { name: 'ดูใบเสร็จ' })).not.toBeInTheDocument();
 
     const list = await openBills(user);
@@ -672,7 +876,7 @@ describe('today, live', () => {
 
   async function pay(method: 'เงินสด' | 'QR') {
     const user = userEvent.setup();
-    await user.click(await tamarindButton());
+    await addCup(user, /^มะขามแดง/);
     if (method === 'เงินสด') {
       await user.click(await enabledButton('พอดี'));
     } else {
@@ -745,15 +949,18 @@ describe('order number, order type and the queue', () => {
     const user = userEvent.setup();
     renderSell();
 
+    await addCup(user, /^มะขามแดง/);
     await user.click(await screen.findByRole('button', { name: 'ทานที่ร้าน' }));
     await waitFor(async () => expect((await db.setting.get('order_type'))?.value).toBe('DINE_IN'));
-
-    // Still two taps: the toggle was set before the sale, not during it.
-    await user.click(await tamarindButton());
     await user.click(await enabledButton('พอดี'));
     expect(await screen.findByText('คิว 1')).toBeInTheDocument();
 
-    await user.click(await tamarindButton());
+    // The next bill is dine-in too, with nothing touched: still three taps.
+    await addCup(user, /^มะขามแดง/);
+    expect(await screen.findByRole('button', { name: /ทานที่ร้าน/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
     await user.click(await enabledButton('พอดี'));
     expect(await screen.findByText('คิว 2')).toBeInTheDocument();
 
@@ -762,17 +969,13 @@ describe('order number, order type and the queue', () => {
       [1, 'DINE_IN'],
       [2, 'DINE_IN'],
     ]);
-    expect(screen.getByRole('button', { name: /ทานที่ร้าน/ })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
   });
 
   it('shows waiting orders in a strip, and one tap says it went out', async () => {
     const user = userEvent.setup();
     renderSell();
 
-    await user.click(await tamarindButton());
+    await addCup(user, /^มะขามแดง/);
     await user.click(await enabledButton('พอดี'));
     const strip = await screen.findByRole('region', { name: 'คิวรอ' });
 
@@ -789,7 +992,7 @@ describe('order number, order type and the queue', () => {
     const user = userEvent.setup();
     renderSell();
 
-    await user.click(await tamarindButton());
+    await addCup(user, /^มะขามแดง/);
     await user.click(await enabledButton('พอดี'));
     await user.click(await screen.findByRole('button', { name: 'ส่งคิว 1 แล้ว' }));
 

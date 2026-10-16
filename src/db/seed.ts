@@ -4,6 +4,7 @@ import type { Bom } from './types.ts';
 import {
   BOM_ROWS,
   COMPONENTS,
+  EXTRA_SWEET_MODIFIERS,
   MODIFIERS,
   PACKAGING_ITEMS,
   PACKAGING_SETS,
@@ -185,6 +186,14 @@ async function upgradeCatalog(db: RuduPosDB, from: number): Promise<void> {
       await markDeletedRecipeLines(db);
       // ...and adds which void reasons count as waste (ทำหก).
       await addMissingSettings(db);
+    }
+
+    if (from < 12) {
+      // v12 adds หวานมาก, asked for by the owner on 16 Oct 2026. New rows
+      // only: one the owner has already made or changed is left alone.
+      for (const seeded of EXTRA_SWEET_MODIFIERS) {
+        if (!(await db.modifier.get(seeded.id))) await db.modifier.add(seeded);
+      }
     }
 
     await markSeeded(db);

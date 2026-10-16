@@ -3,7 +3,7 @@
  * screen and can still be sold through the override; the next day it is back.
  */
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import SoldOutScreen from './SoldOutScreen.tsx';
 import SellScreen from './SellScreen.tsx';
@@ -13,7 +13,7 @@ import { ensureDeviceId } from '../db/device.ts';
 import { openSession, sessionBusinessDate } from '../db/session-repo.ts';
 import { soldOutToday } from '../domain/sold-out.ts';
 import type { CashSession } from '../db/types.ts';
-import { BACK } from '../test/helpers.ts';
+import { BACK, openDrink } from '../test/helpers.ts';
 
 let session: CashSession;
 
@@ -45,8 +45,14 @@ describe('หมดวันนี้', () => {
     render(<SellScreen session={session} />);
     const pear = await screen.findByRole('button', { name: /^สาลี่ขาว .* — หมด$/ });
     expect(pear).toHaveTextContent('ปิดไว้วันนี้');
-    await user.click(pear);
-    expect(await screen.findByRole('alertdialog', { name: 'เลยจำนวนที่มี' })).toBeInTheDocument();
+    // Its page opens like any drink's, says why, and sells it only as an override.
+    const page = await openDrink(user, /^สาลี่ขาว/);
+    expect(within(page).getByRole('alert')).toHaveTextContent('ปิดไว้ในหมดวันนี้');
+    await user.click(within(page).getByRole('button', { name: /^ขายต่อ/ }));
+    await waitFor(async () =>
+      expect((await db.cart_line.toArray())[0]).toMatchObject({ sold_out_override: true }),
+    );
+    await db.cart_line.clear();
   });
 
   it('puts it back with one more tap', async () => {

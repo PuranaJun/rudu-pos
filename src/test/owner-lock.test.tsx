@@ -28,7 +28,7 @@ import {
 import { LOCAL_SETTINGS } from '../sync/sync-client.ts';
 import { useNav } from '../nav/nav-store.ts';
 import { lockWhenAway } from '../nav/owner-lock.ts';
-import { BACK, enabledButton } from './helpers.ts';
+import { BACK, enabledButton, putInBasket } from './helpers.ts';
 import type { BatchState, ComponentBatch } from '../db/types.ts';
 
 const PIN = '2580';
@@ -110,11 +110,12 @@ describe('the PIN itself', () => {
 describe('with a PIN set, on the shop phone', () => {
   beforeEach(aDayWithAPin);
 
-  it('never asks while selling: plain tamarind, cash, is still two taps', async () => {
+  it('never asks while selling: plain tamarind, cash, is still three taps', async () => {
     const user = userEvent.setup();
     render(<App />);
 
     await user.click(await screen.findByRole('button', { name: /^มะขามแดง/ }));
+    await putInBasket(user);
     await user.click(await enabledButton('พอดี'));
 
     await waitFor(async () => expect(await db.sale.count()).toBe(1));

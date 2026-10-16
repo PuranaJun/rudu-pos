@@ -33,7 +33,7 @@ import type {
 } from '../db/types.ts';
 
 /** Bump to force a reseed of a database that was seeded by an older build. */
-export const SEED_VERSION = 11;
+export const SEED_VERSION = 12;
 export const SEED_VERSION_KEY = 'seed_version';
 
 const unsynced = { synced_at: null } as const;
@@ -986,11 +986,31 @@ const sweetness = (
   ...more,
 });
 
+const EXTRA = 'หวานมาก';
 const LESS = 'หวานน้อย';
 const MUCH_LESS = 'หวานน้อยมาก';
 const NO_SUGAR = 'ไม่เติมน้ำตาล';
 
+/**
+ * หวานมาก is not in the master file. The owner asked for it on 16 Oct 2026:
+ * one pump of syrup over normal, on every drink sweetened with the central
+ * syrup — not the longan (its sweetness is the concentrate) and not the
+ * jelly cup. Added to a phone already seeded by the version-12 upgrade.
+ */
+export const EXTRA_SWEET_MODIFIERS: Modifier[] = [
+  sweetness('PREP_EXTRA_SWEET', EXTRA, 'SWEETENER', 4 * PUMP, ICED_DRINKS_3_PUMPS, 0),
+  sweetness(
+    'PREP_EXTRA_SWEET_3_PUMPS',
+    EXTRA,
+    'SWEETENER',
+    3 * PUMP,
+    ['VAR_PEAR_ICED', 'VAR_LYCHEE_ICED'],
+    0,
+  ),
+];
+
 export const MODIFIERS: Modifier[] = [
+  ...EXTRA_SWEET_MODIFIERS,
   sweetness('PREP_LESS_SWEET', LESS, 'SWEETENER', 2 * PUMP, ICED_DRINKS_3_PUMPS, 1),
   sweetness(
     'PREP_LESS_SWEET_1_PUMP',

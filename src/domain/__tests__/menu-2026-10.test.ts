@@ -149,6 +149,30 @@ describe('sweetness', () => {
     }
   });
 
+  // Not in the master file: the owner asked for it on 16 Oct 2026.
+  it.each(VARIANTS.map((variant) => variant.id))(
+    'pours หวานมาก on %s one pump over normal, wherever the sweetness is syrup',
+    (variantId) => {
+      const normal = cup(variantId).COMP_SYRUP;
+      const extra = modifiersFor(catalog, variantId, 'PREP').find(
+        (mod) => mod.name_th === 'หวานมาก',
+      );
+      if (normal === undefined) {
+        // The longan is sweetened by its concentrate; the jelly cup is fixed.
+        expect(extra).toBeUndefined();
+        return;
+      }
+      expect(cup(variantId, [extra!.id]).COMP_SYRUP).toBe(normal + 10);
+    },
+  );
+
+  it('takes 3 pumps out of หวานมาก for Yakult, as of any sweetness', () => {
+    expect(cup('VAR_CALAMANSI_ICED', ['PREP_EXTRA_SWEET', 'MOD_YAKULT'])).toMatchObject({
+      COMP_SYRUP: 10,
+      COMP_YAKULT: 1,
+    });
+  });
+
   it('trades M2 concentrate for white tea on the bottom pour', () => {
     expect(cup('VAR_LONGAN_ICED', [sweetness('VAR_LONGAN_ICED', LESS)])).toMatchObject({
       COMP_LONGAN_CONC: 30,

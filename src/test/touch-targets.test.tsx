@@ -24,7 +24,7 @@ import { db } from '../db/database.ts';
 import { seedLegacyCatalog } from '../db/legacy-catalog.ts';
 import { ensureDeviceId } from '../db/device.ts';
 import type { CashSession } from '../db/types.ts';
-import { BACK } from './helpers.ts';
+import { ADD_BUTTON, BACK, openDrink, putInBasket } from './helpers.ts';
 
 /** 48px or more tall. `min-h-[7.5rem]` is the drink button. */
 const TALL = /(^|\s)(min-h-touch|min-h-touch-lg|size-touch|size-touch-lg|min-h-\[7\.5rem\])(\s|$)/;
@@ -77,27 +77,38 @@ function problems(root: HTMLElement = document.body) {
 const NONE = { undersized: [], smallText: [], faintEdge: [] };
 
 describe('touch targets', () => {
-  it('on the sell screen, with every cart control open', async () => {
+  it('on the sell screen and a drink page, with every choice showing', async () => {
     const user = userEvent.setup();
     render(<SellScreen session={SESSION} />);
 
-    // Pear has the most controls: temperature, toppings, giving it away.
-    await user.click(await screen.findByRole('button', { name: /สาลี่ขาว/ }));
-    const confirm = screen.queryByRole('button', { name: 'ขายต่อ' });
-    if (confirm) await user.click(confirm);
-    await user.click(await screen.findByLabelText('เพิ่มท็อปปิ้ง'));
-    await user.click(screen.getByRole('button', { name: 'ฟรี' }));
+    // Pear's page has the most: temperature, sweetness, a topping, giving it away.
+    const page = await openDrink(user, /^สาลี่ขาว/);
+    expect(problems(page)).toEqual(NONE);
 
-    expect(problems()).toEqual(NONE);
-
-    // The standard sale: drink, quantity, temperature, then pay.
+    // Choosing a cup: every choice is a full-size row.
     for (const name of [
-      /สาลี่ขาว/,
-      /มะขามแดง/,
+      'เย็น',
+      'ร้อน',
+      'หวานปกติ',
+      'หวานน้อย',
+      'เพิ่มจำนวน',
+      'ยกเลิก',
+      ADD_BUTTON,
+    ]) {
+      const button = within(page).getByRole('button', { name });
+      expect(button.className, String(name)).toMatch(LARGE);
+    }
+    await putInBasket(user);
+
+    // The basket line and the pay buttons.
+    await screen.findByRole('button', { name: 'พอดี' });
+    expect(problems()).toEqual(NONE);
+    for (const name of [
+      /^สาลี่ขาว/,
+      /^มะขามแดง/,
+      /^แก้ สาลี่ขาว/,
       'เพิ่มจำนวน',
       'ลดจำนวน',
-      'ร้อน',
-      'เย็น',
       'พอดี',
       '฿100',
       'QR',

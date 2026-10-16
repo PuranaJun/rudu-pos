@@ -17,7 +17,7 @@ Currency THB · locale th-TH · timezone Asia/Bangkok (UTC+07:00) · UI strings 
 
 **If ringing up a sale is slower than not ringing it up, the operator stops using this within a week and the data is worthless.**
 
-A standard single-drink cash sale must complete in **under 5 seconds and 3 taps**. Any feature that adds a tap to that path is rejected — no exceptions, no "just this once".
+A standard single-drink cash sale must complete in **under 5 seconds and 3 taps**: drink → ใส่ตะกร้า → the note. Any feature that adds a tap to that path is rejected — no exceptions, no "just this once". (It was 2 taps until 16 Oct 2026, when the owner chose a page per drink, like the delivery apps, at the cost of one tap — §6.1.)
 
 When a design choice trades completeness against speed, **speed wins**.
 
@@ -61,6 +61,8 @@ available_cups(variant) = floor( min over components in BOM of
 Show it **per drink on the sell screen**, and **name the limiting component** when it binds:
 
 > `สาลี่ขาว เหลือ 8 แก้ว — จำกัดโดยกอง B`
+
+On the long menu's button the component is named once the drink is low or out (≤5 cups), so fifteen buttons fit a phone; the drink's own page always names it, for the variant chosen.
 
 This is more useful than the day's revenue: it decides whether to push a drink or slow it down.
 
@@ -124,15 +126,18 @@ Cutting a slab is an **explicit action that records grams cut**, so the uncut re
 ### 6.1 Sell — the only workflow that must be fast
 
 ```
-Tap drink → [temp / modifier sheet only if applicable] → Tap CASH or QR → Done
+Tap drink → its page (the usual cup already chosen) → ใส่ตะกร้า → [more drinks] → Tap CASH or QR → Done
 ```
 
-- Plain tamarind, cash = **2 taps**. Most common sale, must be the fastest.
-- Pear defaults to **ICED**; HOT is one extra tap. Temperature is a **variant selection, not a second menu button**.
-- Second identical drink = **quantity stepper**, not a repeat of the flow.
+- **Every drink has its own page** (`DrinkPage`): variant (hot/iced, which tea), sweetness (pick one; normal is preselected and is no modifier), toppings, ways of making it, one cup free — then `ใส่ตะกร้า ฿…`. Nothing is written until then; ยกเลิก leaves without adding. On a phone the basket and the pay buttons appear once something is in the basket; the whole bill is paid at once.
+- Plain cup, cash = **3 taps** (drink · ใส่ตะกร้า · note). Most common sale, must be the fastest.
+- Pear defaults to **ICED**; HOT is one extra tap on its page. Temperature is a **variant selection, not a second menu button**.
+- Second identical drink = **quantity stepper** (on the page, or on the basket line), not a repeat of the flow.
+- **Each cup can be made its own way** in one bill: a cup that differs in any choice is its own basket line (one pear less sweet, the next extra sweet); identical paid cups share a line. Tapping a line opens its page to change it (บันทึก), or take it out.
+- A sold-out drink's page says so in yellow, and its button becomes **ขายต่อ** — the override, recorded. Asking for more cups than are left is the same.
 - `PROMO_TWO_CUP` applies automatically when the cart qualifies.
 - On payment, deduct every BOM component **in one transaction**.
-- **Order type** (`TAKEAWAY` | `DINE_IN`) is a one-tap toggle on the cart that **remembers the last choice**. It is never a prompt and never a step in the flow. The standard sale stays at 2 taps. Dine-in is served in the **same cup** as takeaway: same packaging, same cost, and the same price — except where one of the owner's promotions is kept to dine-in or takeaway (§4). A sale is priced and labelled with the same order type: a toggle tapped after the price was drawn is refused as a moved cart, and the next tap rings it.
+- **Order type** (`TAKEAWAY` | `DINE_IN`) is a one-tap toggle on the cart that **remembers the last choice**. It is never a prompt and never a step in the flow. The standard sale stays at 3 taps. Dine-in is served in the **same cup** as takeaway: same packaging, same cost, and the same price — except where one of the owner's promotions is kept to dine-in or takeaway (§4). A sale is priced and labelled with the same order type: a toggle tapped after the price was drawn is refused as a moved cart, and the next tap rings it.
 - **Order number** is assigned automatically at payment, in the same transaction. It is sequential per business date and starts at 1 each day. Show it **large** on the done screen and on the receipt. The operator never types or picks it.
 
 ### 6.1a Queue

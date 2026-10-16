@@ -1,8 +1,8 @@
 /**
  * The sell path, counted (CLAUDE.md §0, §6.1). Every tap goes through one
  * counter, and each flow must end in the sale it was meant to ring. Plain
- * tamarind paid in cash is two taps — the number the whole app is built
- * around — and this holds it there.
+ * tamarind paid in cash is three taps — the drink, ใส่ตะกร้า on its page, the
+ * note — the number the whole app is built around, and this holds it there.
  */
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
@@ -13,7 +13,7 @@ import { seedLegacyCatalog } from '../db/legacy-catalog.ts';
 import { ensureDeviceId } from '../db/device.ts';
 import { clearCart } from '../db/cart-repo.ts';
 import { productionMovement } from '../domain/stock.ts';
-import { enabledButton } from './helpers.ts';
+import { ADD_BUTTON, enabledButton } from './helpers.ts';
 import type { BatchState, CashSession, ComponentBatch } from '../db/types.ts';
 
 const SESSION: CashSession = {
@@ -97,53 +97,59 @@ async function theSale() {
 }
 
 describe('taps to ring a sale', () => {
-  it('plain tamarind, cash: 2', async () => {
+  /** The page's ใส่ตะกร้า, then wait for the basket to show what it added. */
+  async function add(operator: ReturnType<typeof counter>, lines: number) {
+    await operator.tap(screen.findByRole('button', { name: ADD_BUTTON }));
+    await waitFor(async () => expect(await db.cart_line.count()).toBe(lines));
+  }
+
+  it('plain tamarind, cash: 3', async () => {
     const operator = counter();
     render(<SellScreen session={SESSION} />);
 
     await operator.tap(drink(/^มะขามแดง/));
+    await operator.tap(screen.findByRole('button', { name: ADD_BUTTON }));
     await operator.tap(enabledButton('พอดี'));
 
     const { sale, lines } = await theSale();
-    expect(operator.taps).toBe(2);
+    expect(operator.taps).toBe(3);
     expect(sale).toMatchObject({ payment_method: 'CASH', total_net: 4_000 });
     expect(lines).toMatchObject([{ variant_id: 'VAR_TAMARIND_ICED', qty: 1 }]);
   });
 
-  it('pear hot, cash: 3', async () => {
+  it('pear hot, cash: 4', async () => {
     const operator = counter();
     render(<SellScreen session={SESSION} />);
 
     await operator.tap(drink(/^สาลี่ขาว/));
     await operator.tap(screen.findByRole('button', { name: 'ร้อน' }));
-    await waitFor(async () =>
-      expect((await db.cart_line.toArray())[0]?.variant_id).toBe('VAR_PEAR_HOT'),
-    );
+    await add(operator, 1);
     await operator.tap(enabledButton('พอดี'));
 
     const { sale, lines } = await theSale();
-    expect(operator.taps).toBe(3);
+    expect(operator.taps).toBe(4);
     expect(sale).toMatchObject({ payment_method: 'CASH', total_net: 5_900 });
     expect(lines).toMatchObject([{ variant_id: 'VAR_PEAR_HOT', qty: 1 }]);
   });
 
-  it('2 tamarind + 1 pear, QR: 5', async () => {
+  it('2 tamarind + 1 pear, QR: 7', async () => {
     const operator = counter();
     render(<SellScreen session={SESSION} />);
 
+    // The second identical drink is the stepper on its page (CLAUDE.md §6.1).
     await operator.tap(drink(/^มะขามแดง/));
-    await waitFor(async () => expect(await db.cart_line.count()).toBe(1));
-    // The second identical drink is the same line, one higher (CLAUDE.md §6.1).
-    await operator.tap(drink(/^มะขามแดง/));
-    await waitFor(async () => expect((await db.cart_line.toArray())[0]?.qty).toBe(2));
+    await operator.tap(screen.findByRole('button', { name: 'เพิ่มจำนวน' }));
+    await add(operator, 1);
+    expect((await db.cart_line.toArray())[0]?.qty).toBe(2);
     await operator.tap(drink(/^สาลี่ขาว/));
+    await add(operator, 2);
     // A wait, not a tap: the operator reads the total before taking payment.
     expect(await screen.findByText('฿129')).toBeInTheDocument();
     await operator.tap(enabledButton('QR'));
     await operator.tap(screen.findByRole('button', { name: 'ลูกค้าจ่ายแล้ว' }));
 
     const { sale, lines } = await theSale();
-    expect(operator.taps).toBe(5);
+    expect(operator.taps).toBe(7);
     // 40 + 40 + 59, one pair: −10.
     expect(sale).toMatchObject({ payment_method: 'PROMPTPAY', total_net: 12_900 });
     expect(lines.map((line) => [line.variant_id, line.qty]).sort()).toEqual([
@@ -157,14 +163,33 @@ describe('taps to ring a sale', () => {
     render(<SellScreen session={SESSION} />);
 
     await operator.tap(drink(/^มะขามแดง/));
-    await operator.tap(screen.findByLabelText('เพิ่มท็อปปิ้ง'));
     await operator.tap(screen.findByRole('button', { name: /บ๊วยเค็ม/ }));
-    await waitFor(async () => expect(await db.cart_line_mod.count()).toBe(1));
+    await add(operator, 1);
     await operator.tap(enabledButton('พอดี'));
 
     const { sale, mods } = await theSale();
     expect(operator.taps).toBe(4);
     expect(sale.total_net).toBe(4_500);
     expect(mods).toMatchObject([{ modifier_id: 'MOD_SALTED_PLUM' }]);
+  });
+
+  it('two pears made two ways, one bill, cash: 6', async () => {
+    const operator = counter();
+    render(<SellScreen session={SESSION} />);
+
+    await operator.tap(drink(/^สาลี่ขาว/));
+    await operator.tap(screen.findByRole('button', { name: 'หวานน้อย' }));
+    await add(operator, 1);
+    await operator.tap(drink(/^สาลี่ขาว/));
+    await add(operator, 2);
+    await operator.tap(enabledButton('฿500'));
+
+    const { sale, lines, mods } = await theSale();
+    expect(operator.taps).toBe(6);
+    // Two lines of one: the less-sweet cup is told apart from the plain one.
+    expect(lines.map((line) => line.qty)).toEqual([1, 1]);
+    expect(mods).toMatchObject([{ modifier_id: 'PREP_LESS_SWEET' }]);
+    // 59 + 59, one pair: −10.
+    expect(sale.total_net).toBe(10_800);
   });
 });

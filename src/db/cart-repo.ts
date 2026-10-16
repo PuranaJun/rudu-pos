@@ -75,6 +75,101 @@ export async function addDrink(
   });
 }
 
+/** Cups made on the drink page, as they go in the basket. */
+export interface CupInput {
+  variantId: string;
+  modifierIds: readonly string[];
+  qty: number;
+  /** One of the cups given away, and why (CLAUDE.md §4). */
+  freeReason: DiscountReason | null;
+  /** Rung past หมด, or past what is left: recorded on the line (CLAUDE.md §2.1.6). */
+  soldOutOverride: boolean;
+}
+
+/**
+ * Put cups from the drink page in the basket — or, given `replacesLineId`, in
+ * place of a line the operator opened to change.
+ *
+ * Cups the same as a paid line already there join it: two plain pears are one
+ * line of two. A cup that differs in anything — temperature, sweetness, a
+ * topping — is its own line, which is how one pear goes less sweet and the
+ * next extra sweet in one bill (CLAUDE.md §6.1). A given-away cup is always a
+ * line of one and never joins anything, so a free cup cannot make the next one
+ * free; of several cups with a reason, one is free and the rest are paid.
+ *
+ * A changed line keeps its place in the basket unless it now joins another.
+ */
+export async function putCups(
+  cup: CupInput,
+  replacesLineId: string | null = null,
+  db: RuduPosDB = defaultDb,
+): Promise<void> {
+  await db.transaction('rw', [db.cart_line, db.cart_line_mod], async () => {
+    let place: Pick<CartLine, 'id' | 'added_at'> | null = null;
+    if (replacesLineId) {
+      const old = await db.cart_line.get(replacesLineId);
+      if (old) place = { id: old.id, added_at: old.added_at };
+      await removeLineInTransaction(replacesLineId, db);
+    }
+
+    const paid = cup.qty - (cup.freeReason ? 1 : 0);
+    if (paid > 0) place = await putLine(cup, paid, null, place, db);
+    if (cup.freeReason) await putLine(cup, 1, cup.freeReason, place, db);
+  });
+}
+
+/** One line of `putCups`. Returns the place if it was not used. */
+async function putLine(
+  cup: CupInput,
+  qty: number,
+  reason: DiscountReason | null,
+  place: Pick<CartLine, 'id' | 'added_at'> | null,
+  db: RuduPosDB,
+): Promise<Pick<CartLine, 'id' | 'added_at'> | null> {
+  if (reason === null) {
+    const twin = await findPaidTwin(cup, db);
+    if (twin) {
+      await db.cart_line.update(twin.id, {
+        qty: twin.qty + qty,
+        sold_out_override: twin.sold_out_override || cup.soldOutOverride,
+      });
+      return place;
+    }
+  }
+
+  const line: CartLine = {
+    id: place?.id ?? newId(),
+    variant_id: cup.variantId,
+    qty,
+    sold_out_override: cup.soldOutOverride,
+    manual_discount_reason: reason,
+    added_at: place?.added_at ?? nowIso(),
+    synced_at: null,
+  };
+  await db.cart_line.add(line);
+  await db.cart_line_mod.bulkAdd(
+    [...new Set(cup.modifierIds)].map((modifierId) => ({
+      id: newId(),
+      cart_line_id: line.id,
+      modifier_id: modifierId,
+      synced_at: null,
+    })),
+  );
+  return null;
+}
+
+/** A paid line of exactly this cup, choice for choice. */
+async function findPaidTwin(cup: CupInput, db: RuduPosDB): Promise<CartLine | undefined> {
+  const wanted = new Set(cup.modifierIds);
+  for (const line of await db.cart_line.where('variant_id').equals(cup.variantId).toArray()) {
+    if ((line.manual_discount_reason ?? null) !== null) continue;
+    const mods = await db.cart_line_mod.where('cart_line_id').equals(line.id).toArray();
+    const ids = new Set(mods.map((mod) => mod.modifier_id));
+    if (ids.size === wanted.size && [...ids].every((id) => wanted.has(id))) return line;
+  }
+  return undefined;
+}
+
 /** Step a line up or down. Stepping below one removes it — never a swipe only. */
 export async function stepQty(
   lineId: string,
@@ -84,6 +179,8 @@ export async function stepQty(
   await db.transaction('rw', [db.cart_line, db.cart_line_mod], async () => {
     const line = await db.cart_line.get(lineId);
     if (!line) return;
+    // A given-away cup stays one cup: + is how a second free one would slip in.
+    if (delta > 0 && (line.manual_discount_reason ?? null) !== null) return;
 
     const qty = line.qty + delta;
     if (qty <= 0) {

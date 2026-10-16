@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import DrinkButton from '../components/DrinkButton.tsx';
+import DrinkPage, { type DrinkPageStart } from '../components/DrinkPage.tsx';
 import CartLineRow from '../components/CartLineRow.tsx';
 import PayButtons from '../components/PayButtons.tsx';
 import PromptPayPanel from '../components/PromptPayPanel.tsx';
@@ -32,15 +33,7 @@ import {
   useQueue,
   useSessionTotals,
 } from '../db/hooks.ts';
-import {
-  addDrink,
-  clearCart,
-  setLineDiscountReason,
-  setOrderType,
-  setVariant,
-  stepQty,
-  toggleModifier,
-} from '../db/cart-repo.ts';
+import { clearCart, setOrderType, stepQty } from '../db/cart-repo.ts';
 import { CartChangedError, completeSale, priceCart, type Receipt } from '../db/sale-repo.ts';
 import { sessionBusinessDate } from '../db/session-repo.ts';
 import { markHandedOver } from '../db/queue-repo.ts';
@@ -60,10 +53,16 @@ const QUEUE_STRIP = 3;
 /**
  * The sell screen. The only workflow that has to be fast.
  *
- * Tap a drink and it is in the cart — no confirmation, no modal. Everything
- * writes to IndexedDB as it happens and nothing on the tap path is awaited, so
- * the screen never waits on a disk or a radio while the operator's hands are
- * wet (CLAUDE.md §0, §6.1).
+ * Tap a drink and its page opens, already set to the usual cup; ใส่ตะกร้า
+ * puts it in the basket and comes back here, where the whole bill is paid at
+ * once. A plain cup in cash is three taps: drink, ใส่ตะกร้า, the note
+ * (CLAUDE.md §0, §6.1). The basket writes to IndexedDB as it changes and
+ * nothing on the tap path is awaited, so the screen never waits on a disk or
+ * a radio while the operator's hands are wet.
+ *
+ * On a phone the basket and the pay buttons are only there once something is
+ * in the basket (or a sale has just been rung): between customers the menu has
+ * the screen. They always come back in the same place, at the bottom.
  *
  * Only reachable with a session open. The operator was chosen at open day and
  * is never asked again; every sale lands on the session's business date.
@@ -88,7 +87,9 @@ export default function SellScreen({ session }: { session: CashSession }) {
   const open = useNav((state) => state.open);
   const cashShown = useExpectedCashShown();
 
-  const [pendingSoldOut, setPendingSoldOut] = useState<Product | null>(null);
+  // The drink page, over the menu — which stays mounted under it, so the menu
+  // is still scrolled to where the operator left it on the way back.
+  const [page, setPage] = useState<DrinkPageStart | null>(null);
   // Only PromptPay has a screen of its own: cash completes from the footer.
   const [showQr, setShowQr] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -154,26 +155,13 @@ export default function SellScreen({ session }: { session: CashSession }) {
     };
   }
 
+  // A sold-out drink opens like any other: its page says so and records the
+  // override when it is added anyway (CLAUDE.md §2.1.6).
   function tapProduct(product: Product) {
-    const { cups, variantId } = stockFor(product);
-    if (!variantId) return;
-
+    if (!defaultVariantOf(catalog!, product.id)) return;
     setDone(null);
     setError(null);
-    if (cups <= 0) {
-      setPendingSoldOut(product);
-      return;
-    }
-    void addDrink(variantId);
-  }
-
-  function confirmOverride() {
-    const product = pendingSoldOut;
-    setPendingSoldOut(null);
-    if (!product) return;
-
-    const { variantId } = stockFor(product);
-    if (variantId) void addDrink(variantId, { soldOutOverride: true });
+    setPage({ productId: product.id });
   }
 
   function confirmPayment(method: PaymentMethod, received: number | null) {
@@ -221,302 +209,290 @@ export default function SellScreen({ session }: { session: CashSession }) {
     );
   }
 
+  // Something to show at the bottom: a basket to pay, or the sale just rung.
+  const basketShown = cart.length > 0 || done !== null || error !== null;
+
   return (
-    <div className="safe-x text-ink flex h-full flex-col bg-white">
-      {/* Today, live — information only. The way to everything else is the
+    <>
+      {/* Under the drink page, the screen stays as it was — hidden from the
+          screen reader and the keyboard, so there is one page at a time. */}
+      <div
+        className="safe-x text-ink flex h-full flex-col bg-white"
+        aria-hidden={page ? true : undefined}
+        inert={page !== null}
+      >
+        {/* Today, live — information only. The way to everything else is the
           labelled เมนู button beside it. */}
-      <header className="safe-top border-line flex items-start gap-3 border-b px-4 pb-2">
-        <div role="group" aria-label="ยอดวันนี้" className="min-w-0 flex-1">
-          <p className="flex items-baseline justify-between gap-3">
-            <span className="text-2xl font-bold tabular-nums">
-              {today.units} <span className="text-lg font-bold">แก้ว</span>
-            </span>
-            <span className="text-2xl font-bold tabular-nums">{formatTHB(today.revenue)}</span>
-          </p>
-          <p className="flex flex-wrap items-center justify-between gap-x-2 text-lg font-bold">
-            {/* Under the owner's blind count, staff do not see what it should hold. */}
-            {cashShown ? (
-              <span className="tabular-nums">
-                ลิ้นชัก {drawer === undefined ? '—' : formatTHB(drawer)}
+        <header className="safe-top border-line flex items-start gap-3 border-b px-4 pb-2">
+          <div role="group" aria-label="ยอดวันนี้" className="min-w-0 flex-1">
+            <p className="flex items-baseline justify-between gap-3">
+              <span className="text-2xl font-bold tabular-nums">
+                {today.units} <span className="text-lg font-bold">แก้ว</span>
               </span>
-            ) : (
-              <span />
-            )}
-            <span
-              className={`rounded-lg px-2 tabular-nums ${even.past ? 'bg-brand-2 text-white' : ''}`}
-            >
-              {even.past ? 'ผ่านจุดคุ้มทุน' : `คุ้มทุน ${even.cups}/${even.cupsTarget}`}
-            </span>
-          </p>
-        </div>
-        <MenuButton />
-      </header>
+              <span className="text-2xl font-bold tabular-nums">{formatTHB(today.revenue)}</span>
+            </p>
+            <p className="flex flex-wrap items-center justify-between gap-x-2 text-lg font-bold">
+              {/* Under the owner's blind count, staff do not see what it should hold. */}
+              {cashShown ? (
+                <span className="tabular-nums">
+                  ลิ้นชัก {drawer === undefined ? '—' : formatTHB(drawer)}
+                </span>
+              ) : (
+                <span />
+              )}
+              <span
+                className={`rounded-lg px-2 tabular-nums ${even.past ? 'bg-brand-2 text-white' : ''}`}
+              >
+                {even.past ? 'ผ่านจุดคุ้มทุน' : `คุ้มทุน ${even.cups}/${even.cupsTarget}`}
+              </span>
+            </p>
+          </div>
+          <MenuButton />
+        </header>
 
-      {/* Tomorrow's tea. Only there when something needs starting. */}
-      <PrepBanner reminders={reminders} onTap={() => open('PRODUCTION')} compact />
-      {/* Cups or lids running out: said, never in the way (§6.6). */}
-      <PackagingBanner
-        warnings={packaging ? packagingWarnings(packaging) : []}
-        onTap={() => open('PURCHASING')}
-      />
+        {/* Tomorrow's tea. Only there when something needs starting. */}
+        <PrepBanner reminders={reminders} onTap={() => open('PRODUCTION')} compact />
+        {/* Cups or lids running out: said, never in the way (§6.6). */}
+        <PackagingBanner
+          warnings={packaging ? packagingWarnings(packaging) : []}
+          onTap={() => open('PURCHASING')}
+        />
 
-      {/* Orders paid and still being made. Tapping one says it went out —
+        {/* Orders paid and still being made. Tapping one says it went out —
           never needed for anything, so nothing here asks for it (§6.1a). */}
-      {queue && queue.waiting.length > 0 ? (
-        <section
-          aria-label="คิวรอ"
-          className="border-line flex flex-wrap items-center gap-2 border-b px-4 py-1"
-        >
-          <span className="text-lg font-bold">คิวรอ</span>
-          {queue.waiting.slice(0, QUEUE_STRIP).map((order) => (
-            <Button
-              key={order.saleId}
-              variant="secondary"
-              size="sm"
-              aria-label={`ส่งคิว ${order.orderNo} แล้ว`}
-              onClick={() => void markHandedOver(order.saleId)}
-              className="tabular-nums"
-            >
-              ส่ง {order.orderNo}
-            </Button>
-          ))}
-          {queue.waiting.length > QUEUE_STRIP ? (
-            <span className="text-lg font-bold tabular-nums">
-              +{queue.waiting.length - QUEUE_STRIP}
-            </span>
-          ) : null}
-        </section>
-      ) : null}
+        {queue && queue.waiting.length > 0 ? (
+          <section
+            aria-label="คิวรอ"
+            className="border-line flex flex-wrap items-center gap-2 border-b px-4 py-1"
+          >
+            <span className="text-lg font-bold">คิวรอ</span>
+            {queue.waiting.slice(0, QUEUE_STRIP).map((order) => (
+              <Button
+                key={order.saleId}
+                variant="secondary"
+                size="sm"
+                aria-label={`ส่งคิว ${order.orderNo} แล้ว`}
+                onClick={() => void markHandedOver(order.saleId)}
+                className="tabular-nums"
+              >
+                ส่ง {order.orderNo}
+              </Button>
+            ))}
+            {queue.waiting.length > QUEUE_STRIP ? (
+              <span className="text-lg font-bold tabular-nums">
+                +{queue.waiting.length - QUEUE_STRIP}
+              </span>
+            ) : null}
+          </section>
+        ) : null}
 
-      {/* Phone: menu, cart, pay, top to bottom. Tablet: the same three, with the
-          cart and pay alongside the menu instead of under it — same flow, bigger
-          buttons, nothing added. */}
-      <div className="tablet:flex-row flex min-h-0 flex-1 flex-col">
-        {/* The menu. On a phone it is what gives way: whatever the banners and
-            the queue take above, the cart's order type and the pay buttons
-            below keep their full height, and the menu scrolls in what is left
-            — never less than a row of drinks (CLAUDE.md §1: primary actions in
-            reach, always). */}
-        <div
-          aria-label="เมนู"
-          className={`tablet:min-h-0 tablet:max-h-none tablet:flex-1 tablet:gap-4 tablet:p-4 flex min-h-[6rem] shrink flex-col gap-2 overflow-y-auto overscroll-contain p-2 ${
-            compact ? 'max-h-[46dvh]' : ''
-          }`}
-        >
-          {/* Wraps: a third drink takes the next row rather than squeezing the
-            first two until their names no longer fit (CLAUDE.md §9, §12). */}
-          <div className="tablet:gap-4 flex flex-wrap gap-2">
-            {drinks.map((product, index) => {
+        {/* Phone: menu, then the basket and pay, top to bottom. Tablet: the
+          same, with the basket and pay alongside the menu instead of under it
+          — and always there, so the menu never reflows under a thumb. */}
+        <div className="tablet:flex-row flex min-h-0 flex-1 flex-col">
+          {/* The menu. On a phone it is what gives way: whatever the banners,
+            the queue and the basket take, the pay buttons keep their full
+            height, and the menu scrolls in what is left — never less than a
+            row of drinks (CLAUDE.md §1: primary actions in reach, always). */}
+          <div
+            aria-label="เมนู"
+            className="tablet:min-h-0 tablet:gap-4 tablet:p-4 flex min-h-[5.5rem] flex-1 flex-col gap-2 overflow-y-auto overscroll-contain p-2"
+          >
+            {/* Wraps: a third drink takes the next row rather than squeezing the
+              first two until their names no longer fit (CLAUDE.md §9, §12). */}
+            <div className="tablet:gap-4 flex flex-wrap gap-2">
+              {drinks.map((product, index) => {
+                const info = stockFor(product);
+                return (
+                  <div key={product.id} className="flex min-w-[44%] flex-1 basis-[44%]">
+                    <DrinkButton
+                      product={product}
+                      price={info.price}
+                      cups={info.cups}
+                      limitingComponentName={info.limitingComponentName}
+                      colorVar={MENU_COLORS[index % MENU_COLORS.length]!}
+                      outNote={soldOutToday(product, businessDate) ? 'ปิดไว้วันนี้' : null}
+                      size={compact ? 'compact' : 'large'}
+                      onTap={() => tapProduct(product)}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+
+            {bottles.map((product) => {
               const info = stockFor(product);
               return (
-                <div key={product.id} className="flex min-w-[44%] flex-1 basis-[44%]">
-                  <DrinkButton
-                    product={product}
-                    price={info.price}
-                    cups={info.cups}
-                    limitingComponentName={info.limitingComponentName}
-                    colorVar={MENU_COLORS[index % MENU_COLORS.length]!}
-                    outNote={soldOutToday(product, businessDate) ? 'ปิดไว้วันนี้' : null}
-                    size={compact ? 'compact' : 'large'}
-                    onTap={() => tapProduct(product)}
-                  />
-                </div>
+                <DrinkButton
+                  key={product.id}
+                  product={product}
+                  price={info.price}
+                  cups={info.cups}
+                  limitingComponentName={info.limitingComponentName}
+                  colorVar="--color-bottle"
+                  outNote={soldOutToday(product, businessDate) ? 'ปิดไว้วันนี้' : null}
+                  size="small"
+                  onTap={() => tapProduct(product)}
+                />
               );
             })}
           </div>
 
-          {bottles.map((product) => {
-            const info = stockFor(product);
-            return (
-              <DrinkButton
-                key={product.id}
-                product={product}
-                price={info.price}
-                cups={info.cups}
-                limitingComponentName={info.limitingComponentName}
-                colorVar="--color-bottle"
-                outNote={soldOutToday(product, businessDate) ? 'ปิดไว้วันนี้' : null}
-                size="small"
-                onTap={() => tapProduct(product)}
-              />
-            );
-          })}
-        </div>
-
-        {/* Never shrinks below its order-type chips and footer on a phone. */}
-        <div className="tablet:w-[40%] tablet:max-w-md tablet:flex-none tablet:border-l tablet:min-h-0 border-line flex flex-1 flex-col">
-          {/* Stays where it was left, sale after sale: the standard sale never
-              touches it (CLAUDE.md §6.1). */}
-          <div role="group" aria-label="ทานที่ไหน" className="flex gap-2 px-4 pt-2">
-            {ORDER_TYPES.map((type) => (
-              <ChoiceChip
-                key={type}
-                selected={settings.orderType === type}
-                onClick={() => void setOrderType(type)}
-                className="flex-1"
-              >
-                {ORDER_TYPE_TH[type]}
-              </ChoiceChip>
-            ))}
-          </div>
-
-          {/* The cart. */}
-          {/* At least one line in view once there is one: its stepper and
-              options are how a second cup is rung (§6.1). */}
-          <main
-            // Size containment: the cart's lines never count towards how tall
-            // this column has to be. It takes what is left and scrolls, and
-            // asks for no more than one line's height from the menu above.
-            className={`flex-1 overflow-y-auto px-4 [contain:size] ${cart.length > 0 ? 'min-h-[5.5rem]' : 'min-h-0'}`}
+          {/* The basket and payment. The menu gives way first, then the basket's
+              lines; the order type and the pay buttons never do. */}
+          <section
+            aria-label="ตะกร้า"
+            className={`tablet:flex tablet:w-[40%] tablet:max-w-md tablet:flex-none tablet:flex-col tablet:border-t-0 tablet:border-l border-ink-soft min-h-0 border-t-2 ${
+              basketShown ? 'flex flex-col' : 'hidden'
+            }`}
           >
-            {cart.length === 0 ? (
-              <p className="text-ink-soft py-6 text-center text-lg font-bold">ยังไม่มีรายการ</p>
-            ) : (
+            {cart.length > 0 ? (
               <>
-                <ul>
-                  {cart.map((item) => (
-                    <CartLineRow
-                      key={item.line.id}
-                      catalog={catalog}
-                      item={item}
-                      onStep={(delta) => void stepQty(item.line.id, delta)}
-                      onSetVariant={(variantId, allowed) =>
-                        void setVariant(item.line.id, variantId, allowed)
-                      }
-                      onToggleModifier={(modifierId) =>
-                        void toggleModifier(item.line.id, modifierId)
-                      }
-                      onSetDiscountReason={(reason) =>
-                        void setLineDiscountReason(item.line.id, reason)
-                      }
-                    />
+                {/* Stays where it was left, sale after sale: the standard sale
+                  never touches it (CLAUDE.md §6.1). */}
+                <div role="group" aria-label="ทานที่ไหน" className="flex shrink-0 gap-2 px-4 pt-2">
+                  {ORDER_TYPES.map((type) => (
+                    <ChoiceChip
+                      key={type}
+                      selected={settings.orderType === type}
+                      onClick={() => void setOrderType(type)}
+                      className="flex-1"
+                    >
+                      {ORDER_TYPE_TH[type]}
+                    </ChoiceChip>
                   ))}
-                </ul>
-                {/* At the end of the cart, well away from the pay buttons: a wet
-                    tap meant for พอดี must never empty the cart. */}
-                <div className="flex justify-end py-2">
-                  <Button variant="secondary" size="sm" onClick={() => void clearCart()}>
-                    ล้างตะกร้า
-                  </Button>
                 </div>
-              </>
-            )}
-          </main>
 
-          {/* Payment, in thumb reach. */}
-          <footer className="safe-bottom border-line border-t px-4 pt-2">
-            {pendingSoldOut ? (
-              <div
-                role="alertdialog"
-                aria-label="เลยจำนวนที่มี"
-                className="bg-today border-ink mb-2 rounded-xl border-2 p-3"
-              >
-                <p className="text-xl font-bold">
-                  <span aria-hidden="true">⚠ </span>
-                  {pendingSoldOut.name_short_th}{' '}
-                  {soldOutToday(pendingSoldOut, businessDate) ? 'ปิดไว้วันนี้' : 'หมดแล้ว'}
-                </p>
-                <p className="text-lg font-bold">
-                  {soldOutToday(pendingSoldOut, businessDate)
-                    ? 'ปิดไว้ในหมดวันนี้ — ขายต่อ?'
-                    : 'เลยจำนวนที่มี — ขายต่อ?'}
-                </p>
-                <div className="mt-2 flex gap-2">
-                  <Button
-                    variant="secondary"
-                    onClick={() => setPendingSoldOut(null)}
-                    className="flex-1"
-                  >
-                    ไม่ขาย
-                  </Button>
-                  <Button variant="warning" onClick={confirmOverride} className="flex-1">
-                    ขายต่อ
-                  </Button>
-                </div>
-              </div>
-            ) : null}
-
-            {/* While the operator decides on a sold-out drink, the prompt has
-                the footer to itself: nothing is paid until it is answered, and
-                on a phone the prompt and the pay buttons together do not fit. */}
-            {pendingSoldOut ? null : (
-              <>
-                {done ? (
-                  <div
-                    role="status"
-                    className="mb-2 flex flex-wrap items-center justify-between gap-2"
-                  >
-                    {/* Said out loud to the customer: as big as the change. */}
-                    <p className="border-ink rounded-xl border-2 px-2 text-4xl leading-tight font-bold tabular-nums">
-                      คิว {done.receipt.orderNo}
-                    </p>
-                    {done.receipt.cashChange ? (
-                      // Read at arm's length with the customer watching: the
-                      // largest type on the screen.
-                      <p className="text-5xl leading-none font-bold tabular-nums">
-                        ทอน {formatTHB(done.receipt.cashChange)}
-                      </p>
-                    ) : (
-                      <p className="text-xl font-bold">
-                        <span aria-hidden="true">✓ </span>ขายแล้ว {formatTHB(done.receipt.totalNet)}
-                      </p>
-                    )}
-                    {done.shortfalls > 0 ? (
-                      <p className="bg-today rounded-lg px-2 text-lg font-bold">
-                        สต็อกติดลบ {done.shortfalls} รายการ
-                      </p>
-                    ) : null}
-                    <Button variant="secondary" onClick={() => setShowReceipt(true)}>
-                      ดูใบเสร็จ
+                {/* Every line in view up to about three, then it scrolls; never
+                  less than one. It takes its room before the menu does, so a
+                  line is not cut in half while there is menu to give. On a
+                  tablet it takes the column. */}
+                <div className="tablet:max-h-none tablet:flex-1 max-h-[13.5rem] min-h-[4.5rem] shrink overflow-y-auto overscroll-contain px-4 pt-1">
+                  <ul>
+                    {cart.map((item) => (
+                      <CartLineRow
+                        key={item.line.id}
+                        catalog={catalog}
+                        item={item}
+                        onOpen={() => {
+                          setError(null);
+                          setPage({ item });
+                        }}
+                        onStep={(delta) => void stepQty(item.line.id, delta)}
+                      />
+                    ))}
+                  </ul>
+                  {/* At the end of the basket, well away from the pay buttons: a
+                    wet tap meant for พอดี must never empty it. */}
+                  <div className="flex justify-end py-2">
+                    <Button variant="secondary" size="sm" onClick={() => void clearCart()}>
+                      ล้างตะกร้า
                     </Button>
                   </div>
-                ) : null}
-
-                {error ? (
-                  // Never styled like "ขายแล้ว": a sale that did not save must not
-                  // be mistaken for one that did.
-                  <p
-                    role="alert"
-                    className={`mb-2 rounded-xl px-3 py-2 text-lg font-bold ${
-                      error.kind === 'danger'
-                        ? 'bg-expired text-white'
-                        : 'bg-today border-ink border-2'
-                    }`}
-                  >
-                    {error.message}
-                  </p>
-                ) : null}
-
-                {priced.totalDiscount > 0 ? (
-                  <div className="mb-1 flex flex-wrap justify-end gap-x-3 text-lg font-bold">
-                    {priced.byReason.map((discount) => (
-                      <span key={`${discount.reason}:${discount.promotionId ?? ''}`}>
-                        {discountLabel(discount)} −{formatTHB(discount.amount)}
-                      </span>
-                    ))}
-                  </div>
-                ) : null}
-
-                {/* What is due: the biggest number that is always on screen. */}
-                <p className="mb-2 flex items-baseline justify-between">
-                  <span className="text-xl font-bold">ยอด</span>
-                  <span className="text-4xl font-bold tabular-nums">
-                    {formatTHB(priced.totalNet)}
-                  </span>
-                </p>
-
-                <PayButtons
-                  due={priced.totalNet}
-                  quickTender={settings.quickTender}
-                  disabled={cart.length === 0 || busy}
-                  onCash={(received) => confirmPayment('CASH', received)}
-                  onQr={() => setShowQr(true)}
-                />
+                </div>
               </>
+            ) : (
+              <p className="tablet:block text-ink-soft hidden py-6 text-center text-lg font-bold">
+                ยังไม่มีรายการ
+              </p>
             )}
-          </footer>
+
+            {/* Payment, in thumb reach. */}
+            <footer className="safe-bottom tablet:mt-auto shrink-0 px-4 pt-2">
+              {done ? (
+                <div
+                  role="status"
+                  className="mb-2 flex flex-wrap items-center justify-between gap-2"
+                >
+                  {/* Said out loud to the customer: as big as the change. */}
+                  <p className="border-ink rounded-xl border-2 px-2 text-4xl leading-tight font-bold tabular-nums">
+                    คิว {done.receipt.orderNo}
+                  </p>
+                  {done.receipt.cashChange ? (
+                    // Read at arm's length with the customer watching: the
+                    // largest type on the screen.
+                    <p className="text-5xl leading-none font-bold tabular-nums">
+                      ทอน {formatTHB(done.receipt.cashChange)}
+                    </p>
+                  ) : (
+                    <p className="text-xl font-bold">
+                      <span aria-hidden="true">✓ </span>ขายแล้ว {formatTHB(done.receipt.totalNet)}
+                    </p>
+                  )}
+                  {done.shortfalls > 0 ? (
+                    <p className="bg-today rounded-lg px-2 text-lg font-bold">
+                      สต็อกติดลบ {done.shortfalls} รายการ
+                    </p>
+                  ) : null}
+                  <Button variant="secondary" onClick={() => setShowReceipt(true)}>
+                    ดูใบเสร็จ
+                  </Button>
+                </div>
+              ) : null}
+
+              {error ? (
+                // Never styled like "ขายแล้ว": a sale that did not save must not
+                // be mistaken for one that did.
+                <p
+                  role="alert"
+                  className={`mb-2 rounded-xl px-3 py-2 text-lg font-bold ${
+                    error.kind === 'danger'
+                      ? 'bg-expired text-white'
+                      : 'bg-today border-ink border-2'
+                  }`}
+                >
+                  {error.message}
+                </p>
+              ) : null}
+
+              {cart.length > 0 ? (
+                <>
+                  {priced.totalDiscount > 0 ? (
+                    <div className="mb-1 flex flex-wrap justify-end gap-x-3 text-lg font-bold">
+                      {priced.byReason.map((discount) => (
+                        <span key={`${discount.reason}:${discount.promotionId ?? ''}`}>
+                          {discountLabel(discount)} −{formatTHB(discount.amount)}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+
+                  {/* What is due: the biggest number that is always on screen. */}
+                  <p className="mb-2 flex items-baseline justify-between">
+                    <span className="text-xl font-bold">
+                      ยอด{' '}
+                      <span className="tabular-nums">
+                        · {cart.reduce((cups, item) => cups + item.line.qty, 0)} แก้ว
+                      </span>
+                    </span>
+                    <span className="text-4xl font-bold tabular-nums">
+                      {formatTHB(priced.totalNet)}
+                    </span>
+                  </p>
+
+                  <PayButtons
+                    due={priced.totalNet}
+                    quickTender={settings.quickTender}
+                    disabled={busy}
+                    onCash={(received) => confirmPayment('CASH', received)}
+                    onQr={() => setShowQr(true)}
+                  />
+                </>
+              ) : null}
+            </footer>
+          </section>
         </div>
       </div>
+
+      {page ? (
+        <DrinkPage
+          catalog={catalog}
+          stock={stock}
+          businessDate={businessDate}
+          start={page}
+          onClose={() => setPage(null)}
+        />
+      ) : null}
 
       {showReceipt && done ? (
         <ReceiptSheet
@@ -524,6 +500,6 @@ export default function SellScreen({ session }: { session: CashSession }) {
           back={{ label: 'กลับไปขาย', onClick: () => setShowReceipt(false) }}
         />
       ) : null}
-    </div>
+    </>
   );
 }

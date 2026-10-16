@@ -5,6 +5,7 @@ import { seedLegacyCatalog } from './legacy-catalog.ts';
 import {
   BOM_ROWS,
   COMPONENTS,
+  EXTRA_SWEET_MODIFIERS,
   MODIFIERS,
   PRODUCTS,
   PURCHASE_ITEMS,
@@ -289,5 +290,45 @@ describe('upgrading a database seeded by an older build', () => {
     await rollBackToV1();
     expect(await ensureSeeded(db)).toBe(true);
     expect(await ensureSeeded(db)).toBe(false);
+  });
+});
+
+describe('upgrading a phone already on the menu of Oct 2026 (v11)', () => {
+  /** The shop phone as it was: seeded at v11, before หวานมาก. */
+  async function phoneAtV11() {
+    await ensureSeeded(db);
+    await db.modifier.bulkDelete(EXTRA_SWEET_MODIFIERS.map((modifier) => modifier.id));
+    await db.setting.put({ key: SEED_VERSION_KEY, value: 11, synced_at: null });
+  }
+
+  it('adds หวานมาก, one pump over normal, to the drinks sweetened with syrup', async () => {
+    await phoneAtV11();
+    expect(await ensureSeeded(db)).toBe(true);
+
+    expect(await db.modifier.get('PREP_EXTRA_SWEET')).toMatchObject({
+      name_th: 'หวานมาก',
+      kind: 'PREP',
+      overrides_component_role: 'SWEETENER',
+      qty_per_cup: 40,
+    });
+    expect(await db.modifier.get('PREP_EXTRA_SWEET_3_PUMPS')).toMatchObject({
+      qty_per_cup: 30,
+      applies_to_variant_ids: ['VAR_PEAR_ICED', 'VAR_LYCHEE_ICED'],
+    });
+    // A new row the cloud has not had: the next send takes it to the iPhone.
+    expect((await db.modifier.get('PREP_EXTRA_SWEET'))?.sync_dirty).toBe(1);
+  });
+
+  it('leaves one the owner already made or changed alone', async () => {
+    await phoneAtV11();
+    await db.modifier.put({ ...EXTRA_SWEET_MODIFIERS[0]!, name_th: 'หวานเจี๊ยบ', qty_per_cup: 50 });
+
+    await ensureSeeded(db);
+
+    expect(await db.modifier.get('PREP_EXTRA_SWEET')).toMatchObject({
+      name_th: 'หวานเจี๊ยบ',
+      qty_per_cup: 50,
+    });
+    expect(await db.modifier.get('PREP_EXTRA_SWEET_3_PUMPS')).toBeDefined();
   });
 });

@@ -54,8 +54,20 @@ export default function DrinkButton({
   const soldOut = level === 'OUT';
   const large = size === 'large';
   const compact = size === 'compact';
-  // Compact still stacks name over price: only the type and the padding shrink.
-  const stacked = large || compact;
+
+  if (compact) {
+    return (
+      <CompactDrinkButton
+        product={product}
+        price={price}
+        cups={cups}
+        limitingComponentName={limitingComponentName}
+        colorVar={colorVar}
+        outNote={outNote}
+        onTap={onTap}
+      />
+    );
+  }
 
   return (
     <button
@@ -67,33 +79,25 @@ export default function DrinkButton({
         soldOut
           ? 'bg-paper-sunk border-ink text-ink border-4 border-dashed'
           : 'press-light text-white'
-      } ${
-        large
-          ? 'tablet:min-h-[13rem] tablet:px-6 min-h-[7.5rem] flex-1 py-4'
-          : compact
-            ? 'tablet:min-h-[9rem] tablet:px-5 min-h-touch-lg flex-1 px-3 py-2'
-            : 'min-h-touch-lg py-3'
-      }`}
+      } ${large ? 'tablet:min-h-[13rem] tablet:px-6 min-h-[7.5rem] flex-1 py-4' : 'min-h-touch-lg py-3'}`}
     >
       {/* Large buttons stack the name over the price, so a name never breaks
           in the middle to make room for it (มะขาม / แดง reads as two things). */}
-      <span className={stacked ? 'flex flex-col' : 'flex w-full items-start justify-between gap-2'}>
+      <span className={large ? 'flex flex-col' : 'flex w-full items-start justify-between gap-2'}>
         <span
-          className={`font-bold ${large ? 'tablet:text-5xl text-[1.75rem]' : compact ? 'tablet:text-3xl text-2xl' : 'tablet:text-3xl text-2xl'} leading-tight`}
+          className={`font-bold ${large ? 'tablet:text-5xl text-[1.75rem]' : 'tablet:text-3xl text-2xl'} leading-tight`}
         >
           {product.name_short_th}
         </span>
         <span
-          className={`font-bold ${large ? 'tablet:text-4xl text-2xl' : compact ? 'tablet:text-2xl text-xl' : 'tablet:text-2xl text-xl'} shrink-0 tabular-nums`}
+          className={`font-bold ${large ? 'tablet:text-4xl text-2xl' : 'tablet:text-2xl text-xl'} shrink-0 tabular-nums`}
         >
           {formatTHB(price)}
         </span>
       </span>
 
       {level === 'UNLIMITED' ? null : (
-        <span
-          className={`tablet:text-xl flex flex-col items-start leading-snug font-bold ${compact ? 'mt-1 text-base' : 'mt-2 text-lg'}`}
-        >
+        <span className="tablet:text-xl mt-2 flex flex-col items-start text-lg leading-snug font-bold">
           {level === 'OUT' ? (
             <span className="bg-ink rounded-lg px-2 text-white">หมด</span>
           ) : level === 'LOW' ? (
@@ -102,16 +106,78 @@ export default function DrinkButton({
             <span>เหลือ {cups} แก้ว</span>
           )}
           {level === 'OUT' && outNote ? (
-            <span className={`tablet:text-lg ${compact ? 'text-sm' : 'text-base'}`}>{outNote}</span>
+            <span className="tablet:text-lg text-base">{outNote}</span>
           ) : null}
           {/* What binds, named (CLAUDE.md §2.2): it decides what to make next. */}
           {limitingComponentName ? (
-            <span className={`tablet:text-lg ${compact ? 'text-sm' : 'text-base'}`}>
+            <span className="tablet:text-lg text-base">
               {level === 'OUT' ? `ขาด${limitingComponentName}` : `จำกัดโดย${limitingComponentName}`}
             </span>
           ) : null}
         </span>
       )}
+    </button>
+  );
+}
+
+/**
+ * The long menu's button: the name on one line, the price and the cups left
+ * on the next — two lines, so fifteen drinks fit a phone with little
+ * scrolling. What binds is named only once it matters, when the drink is low
+ * or out; the drink page always names it (CLAUDE.md §2.2). Everything else
+ * is as the large button: same colours, same sold-out look, still tappable.
+ */
+function CompactDrinkButton({
+  product,
+  price,
+  cups,
+  limitingComponentName,
+  colorVar,
+  outNote,
+  onTap,
+}: Omit<Required<Props>, 'size' | 'limitingComponentName' | 'outNote'> & {
+  limitingComponentName: string | null;
+  outNote: string | null;
+}) {
+  const level = stockLevel(cups);
+  const soldOut = level === 'OUT';
+  const note =
+    level === 'OUT'
+      ? (outNote ?? (limitingComponentName ? `ขาด${limitingComponentName}` : null))
+      : level === 'LOW' && limitingComponentName
+        ? `จำกัดโดย${limitingComponentName}`
+        : null;
+
+  return (
+    <button
+      type="button"
+      onClick={onTap}
+      aria-label={`${product.name_short_th} ${formatTHB(price)}${soldOut ? ' — หมด' : ''}`}
+      style={soldOut ? undefined : { backgroundColor: `var(${colorVar})` }}
+      className={`tablet:min-h-[9rem] tablet:px-5 min-h-touch-lg flex w-full flex-1 flex-col justify-center rounded-2xl px-3 py-2 text-left ${
+        soldOut
+          ? 'bg-paper-sunk border-ink text-ink border-4 border-dashed'
+          : 'press-light text-white'
+      }`}
+    >
+      <span className="tablet:text-3xl text-2xl leading-tight font-bold">
+        {product.name_short_th}
+      </span>
+      <span className="flex w-full flex-wrap items-baseline justify-between gap-x-2 font-bold">
+        <span className="tablet:text-2xl text-xl tabular-nums">{formatTHB(price)}</span>
+        {level === 'UNLIMITED' ? null : level === 'OUT' ? (
+          <span className="bg-ink rounded-lg px-2 text-lg text-white">หมด</span>
+        ) : level === 'LOW' ? (
+          <span className="bg-today text-ink rounded-lg px-2 text-lg tabular-nums">
+            เหลือ {cups}
+          </span>
+        ) : (
+          <span className="text-lg tabular-nums">เหลือ {cups}</span>
+        )}
+      </span>
+      {note ? (
+        <span className="tablet:text-lg text-base leading-snug font-bold">{note}</span>
+      ) : null}
     </button>
   );
 }
