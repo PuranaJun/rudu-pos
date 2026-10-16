@@ -1,46 +1,70 @@
 import { useEffect, useRef } from 'react';
 
-/** The history entry a page puts under itself, so the back gesture has something to undo. */
+/** The history entry the open pages share, so the back gesture has something to undo. */
 const MARK = 'rudu-page';
 
 function ours(state: unknown): boolean {
   return typeof state === 'object' && state !== null && (state as { rudu?: unknown }).rudu === MARK;
 }
 
+/** Open pages, bottom first. Only the top one hears the back gesture. */
+const open: { current: () => void }[] = [];
+let listening = false;
+
+/** One entry of ours on top of the history, or none to add if there is one already. */
+function ensureEntry(): void {
+  if (!ours(window.history.state)) window.history.pushState({ rudu: MARK }, '');
+}
+
+function onPop(): void {
+  open[open.length - 1]?.current();
+}
+
 /**
- * Android's back gesture (or button) closes the page this is called from,
- * instead of leaving the app.
+ * Android's back gesture (or button) does what the page's own back button
+ * does, instead of leaving the app.
  *
- * The app has no URLs: a page over the sell screen is React state. Without a
- * history entry of its own, a back gesture on the drink page closes the whole
- * app — the basket survives, but the operator lands on the home screen
- * mid-order. So the page puts one entry under itself while it is open, and a
- * back gesture pops that entry and closes the page.
+ * The app has no URLs: every page over home is React state. Without a history
+ * entry of its own, a back gesture anywhere closes the whole app — the data
+ * survives, but the operator lands on the phone's home screen mid-task. So
+ * while a page is open there is one entry of ours on top of the history, and a
+ * back gesture pops it and goes back from the top page only: a receipt opened
+ * from the day's bills goes back to the bills, not out of both. When a page
+ * closes that way and one is still open beneath it, the entry goes back on
+ * for that one.
  *
- * Closed any other way (ใส่ตะกร้า, ยกเลิก), the entry stays and the next page
- * reuses it rather than adding another, so history never grows past one extra
- * step. Taking it off with history.back() would race the next page's own
- * entry — and React's development double-mount, which opens a page twice. The
- * cost is that one back gesture on the sell screen, after such a close, does
- * nothing: the harmless direction to be wrong in.
+ * Closed by its own button, the page leaves the entry where it is and the next
+ * page reuses it, so history never grows past one extra step. Taking it off
+ * with history.back() would race the next page's own entry — and React's
+ * development double-mount, which opens a page twice. The cost is that one back
+ * gesture at home, after such a close, does nothing: the harmless direction to
+ * be wrong in.
  *
- * A listener, never a timer (CLAUDE.md §1).
+ * `null` registers nothing: a footer with no way back. A listener, never a
+ * timer (CLAUDE.md §1).
  */
-export function useBackGesture(onBack: () => void): void {
+export function useBackGesture(onBack: (() => void) | null | undefined): void {
   const latest = useRef(onBack);
   useEffect(() => {
     latest.current = onBack;
   });
 
+  const active = Boolean(onBack);
   useEffect(() => {
-    if (ours(window.history.state)) {
-      window.history.replaceState({ rudu: MARK }, '');
-    } else {
-      window.history.pushState({ rudu: MARK }, '');
+    if (!active) return;
+    const page = { current: () => latest.current?.() };
+    open.push(page);
+    if (!listening) {
+      window.addEventListener('popstate', onPop);
+      listening = true;
     }
+    ensureEntry();
 
-    const onPop = () => latest.current();
-    window.addEventListener('popstate', onPop);
-    return () => window.removeEventListener('popstate', onPop);
-  }, []);
+    return () => {
+      open.splice(open.indexOf(page), 1);
+      // Closed by a back gesture with a page still open beneath: that one
+      // needs an entry of its own for the next gesture.
+      if (open.length > 0) ensureEntry();
+    };
+  }, [active]);
 }

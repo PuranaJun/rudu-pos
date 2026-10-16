@@ -379,6 +379,7 @@ Both phones:
 The shop phone (Samsung A07, **Chrome on Android** — not Samsung Internet, which is that phone's default):
 
 - Request a **Screen Wake Lock** while a cash session is open.
+- **Android's back gesture is the page's own back button**, never leaving the app: one level at a time, asking first about unsaved changes. `ScreenFooter` and `DrinkPage` do it through `useBackGesture` (`src/nav/back-gesture.ts`); **a new page with its own way back must call it too.**
 - A budget phone: Android may kill the app in the background. Every cart line is already persisted (§1); nothing may depend on in-memory state surviving.
 - **Chrome's share sheet refuses `.json` files**, so a backup is **downloaded into Downloads**, readable by anyone holding the phone. **The cloud is this phone's backup** (§8): while sync is on and nothing is waiting to go, the backup is current and nobody is nagged. A file saved here gets a warning first (§6.7).
 

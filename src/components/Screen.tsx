@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { Button } from './Button.tsx';
+import { useBackGesture } from '../nav/back-gesture.ts';
 
 /**
  * The chrome every screen shares, so the operator always knows two things
@@ -94,6 +95,10 @@ export function ScreenFooter({
   primary?: FooterAction | undefined;
   children?: ReactNode;
 }) {
+  // Android's back gesture is this button, whatever it does — one level up,
+  // home, or asking first about unsaved changes — never leaving the app.
+  useBackGesture(back?.onClick);
+
   return (
     <footer className="safe-bottom border-line border-t px-4 pt-3">
       {children}

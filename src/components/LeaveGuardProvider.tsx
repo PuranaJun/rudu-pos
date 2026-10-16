@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { Button } from './Button.tsx';
 import { LeaveGuardContext, type LeaveGuard, type OpenEditor } from './leave-guard.ts';
+import { useBackGesture } from '../nav/back-gesture.ts';
 
 /**
  * Holds the open editor and, when leaving it would drop changes, asks.
@@ -60,6 +61,7 @@ export default function LeaveGuardProvider({ children }: { children: ReactNode }
             aria-label="มีการแก้ที่ยังไม่บันทึก"
             className="safe-bottom safe-x rounded-t-2xl bg-white"
           >
+            <BackKeepsEditing onBack={() => setPending(null)} />
             <div className="px-4 pt-4">
               <p className="text-2xl font-bold">มีการแก้ที่ยังไม่บันทึก</p>
               <p className="text-lg font-bold">บันทึกก่อนไปไหม?</p>
@@ -86,4 +88,10 @@ export default function LeaveGuardProvider({ children }: { children: ReactNode }
       ) : null}
     </LeaveGuardContext.Provider>
   );
+}
+
+/** Android's back gesture on the question is แก้ต่อ: the safe answer, never throwing work away. */
+function BackKeepsEditing({ onBack }: { onBack: () => void }) {
+  useBackGesture(onBack);
+  return null;
 }

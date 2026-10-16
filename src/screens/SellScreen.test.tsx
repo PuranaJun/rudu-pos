@@ -533,7 +533,7 @@ describe('giving a cup away', () => {
       [1, 'LOYALTY_REDEEM'],
     ]);
     // The free line cannot be stepped up into a second free cup.
-    const freeRow = screen.getByRole('button', { name: /ฟรี — แลกแสตมป์/ }).closest('li')!;
+    const freeRow = (await screen.findByRole('button', { name: /ฟรี — แลกแสตมป์/ })).closest('li')!;
     expect(within(freeRow).getByRole('button', { name: 'เพิ่มจำนวน' })).toBeDisabled();
   });
 
