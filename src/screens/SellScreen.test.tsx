@@ -156,6 +156,34 @@ describe('ringing a sale', () => {
     expect(screen.queryByRole('button', { name: 'พอดี' })).not.toBeInTheDocument();
   });
 
+  it('closes on Android’s back gesture, adding nothing, instead of leaving the app', async () => {
+    const user = userEvent.setup();
+    render(<SellScreen session={SESSION} />);
+
+    const page = await openDrink(user, /^มะขามแดง/);
+    await user.click(within(page).getByRole('button', { name: /บ๊วยเค็ม/ }));
+    window.history.back();
+
+    await waitFor(() => expect(page).not.toBeInTheDocument());
+    expect(await loadCart(db)).toHaveLength(0);
+    // Still selling: the menu is there to tap.
+    expect(await tamarindButton()).toBeInTheDocument();
+  });
+
+  it('adds at most one step of history, however many cups are rung', async () => {
+    const user = userEvent.setup();
+    render(<SellScreen session={SESSION} />);
+    await tamarindButton();
+    const before = window.history.length;
+
+    await addCup(user, /^มะขามแดง/);
+    await addCup(user, /^มะขามแดง/);
+    await openDrink(user, /^สาลี่ขาว/);
+    await user.click(screen.getByRole('button', { name: 'ยกเลิก' }));
+
+    expect(window.history.length).toBeLessThanOrEqual(before + 1);
+  });
+
   it('puts a second identical cup on the same line', async () => {
     const user = userEvent.setup();
     render(<SellScreen session={SESSION} />);
@@ -242,7 +270,10 @@ describe('changing a line in the basket', () => {
 
     await addCup(user, /^มะขามแดง/);
     await addCup(user, /^มะขามแดง/);
-    await user.click(await screen.findByRole('button', { name: /^แก้ มะขามแดง/ }));
+    // The line as drawn is the line the page opens: wait for the second cup.
+    const line = await screen.findByRole('button', { name: /^แก้ มะขามแดง/ });
+    await waitFor(() => expect(line).toHaveTextContent('฿80'));
+    await user.click(line);
 
     const page = (await screen.findByRole('button', { name: /^บันทึก/ })).closest<HTMLElement>(
       '[role="dialog"]',

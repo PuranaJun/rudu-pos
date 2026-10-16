@@ -30,6 +30,7 @@ import {
   type CupDraft,
 } from '../domain/cup.ts';
 import { putCups, removeLine, type CartItem } from '../db/cart-repo.ts';
+import { useBackGesture } from '../nav/back-gesture.ts';
 
 /** The quantity stepper: square, the secondary look, − and + at full size. */
 const STEPPER =
@@ -69,6 +70,8 @@ export default function DrinkPage({ catalog, stock, businessDate, start, onClose
       ? cupOfLine(editing.line, editing.modifierIds)
       : newCup(catalog, (start as { productId: string }).productId),
   );
+  // Android's back gesture is ยกเลิก here, not leaving the app.
+  useBackGesture(onClose);
 
   const variant = cup ? catalog.variants.get(cup.variantId) : undefined;
   const product = variant ? catalog.products.get(variant.product_id) : undefined;
